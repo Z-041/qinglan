@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -194,6 +195,34 @@ class PostFlowIntegrationTest {
         assertThat(likeRows).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("R-15：删除评论后其点赞行同一事务内清理，真库里不留孤儿数据")
+    void shouldPurgeCommentLikesOnDelete() throws Exception {
+        User author = createStudent(AUTHOR_EMAIL, AUTHOR_STUDENT_ID);
+        User reader = createStudent(READER_EMAIL, READER_STUDENT_ID);
+        long postId = publish(author, CONTACT);
+        approve(postId, reader);
+        String readerHeader = bearer(reader, UserRole.STUDENT);
+        String authorHeader = bearer(author, UserRole.STUDENT);
+
+        long rootId = commentId(createComment(postId, readerHeader, "还在吗？", null));
+        long replyId = commentId(createComment(postId, readerHeader, "已经出掉了", rootId));
+
+        mockMvc.perform(post("/api/comments/{id}/like", rootId).header("Authorization", authorHeader))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/comments/{id}/like", replyId).header("Authorization", authorHeader))
+                .andExpect(status().isOk());
+        assertThat(commentLikeRows(rootId)).isEqualTo(1);
+        assertThat(commentLikeRows(replyId)).isEqualTo(1);
+
+        // 删一级评论会连带移除其回复，两条的点赞行都必须同事务消失
+        mockMvc.perform(delete("/api/comments/{id}", rootId).header("Authorization", readerHeader))
+                .andExpect(status().isOk());
+
+        assertThat(commentLikeRows(rootId)).isZero();
+        assertThat(commentLikeRows(replyId)).isZero();
+    }
+
     // ------------------------------------------------------------------ 辅助
 
     private long publish(User author, String contact) throws Exception {
@@ -240,6 +269,13 @@ class PostFlowIntegrationTest {
 
     private long commentId(String body) throws Exception {
         return readJson(body).path("data").path("id").asLong();
+    }
+
+    private int commentLikeRows(long commentId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM like_record WHERE target_type = 'COMMENT' AND target_id = ?",
+                Integer.class, commentId);
+        return count == null ? 0 : count;
     }
 
     private int auditLogCount(long postId, String action) {

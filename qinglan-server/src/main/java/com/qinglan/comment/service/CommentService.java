@@ -109,6 +109,9 @@ public class CommentService {
      *
      * <p>删除一级评论时，其下的回复会一并移除并同步扣减计数——否则列表里挂着的回复仍在库里
      * 标着 PUBLISHED，{@code post.comment_count} 也会与可见评论数长期对不上。</p>
+     *
+     * <p>评论删除没有恢复入口，所以被移除的评论（含连带移除的回复）的点赞行在**同一事务内硬删**，
+     * 不留再也读不到、也不会被回收的孤儿行（R-15）。帖子侧不同：下架可申诉恢复，点赞行不能这样删。</p>
      */
     @Transactional
     public void delete(Long commentId, Long userId) {
@@ -121,23 +124,24 @@ public class CommentService {
             return;
         }
         comment.remove();
-        int removed = 1;
+        List<Long> removedIds = new ArrayList<>();
+        removedIds.add(comment.getId());
         if (!comment.isReply()) {
             List<Comment> replies = commentRepository
                     .findByParentIdInAndStatusOrderByCreatedAtAsc(List.of(comment.getId()), CommentStatus.PUBLISHED);
             for (Comment reply : replies) {
                 reply.remove();
-                removed++;
+                removedIds.add(reply.getId());
             }
         }
-        int removedCount = removed;
         postRepository.findById(comment.getPostId())
                 .ifPresent(post -> {
-                    for (int index = 0; index < removedCount; index++) {
+                    for (int index = 0; index < removedIds.size(); index++) {
                         post.decreaseCommentCount();
                     }
                 });
-        log.info("删除评论 commentId={} 连同回复共 {} 条", commentId, removedCount);
+        likeRepository.deleteByTargets(LikeTargetType.COMMENT, removedIds);
+        log.info("删除评论 commentId={} 连同回复共 {} 条", commentId, removedIds.size());
     }
 
     /** 给评论点赞，幂等 */

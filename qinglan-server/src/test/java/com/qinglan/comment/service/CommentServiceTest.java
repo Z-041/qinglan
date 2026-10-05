@@ -155,6 +155,20 @@ class CommentServiceTest {
     }
 
     @Test
+    @DisplayName("R-15：删除评论时把该评论（含连带移除的回复）的点赞行一并清掉")
+    void shouldPurgeLikesOfRemovedComments() {
+        when(commentRepository.findById(ROOT_ID))
+                .thenReturn(Optional.of(comment(ROOT_ID, POST_ID, null, AUTHOR_ID)));
+        when(commentRepository.findByParentIdInAndStatusOrderByCreatedAtAsc(List.of(ROOT_ID), CommentStatus.PUBLISHED))
+                .thenReturn(List.of(comment(REPLY_ID, POST_ID, ROOT_ID, 8L)));
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
+
+        commentService.delete(ROOT_ID, AUTHOR_ID);
+
+        verify(likeRepository).deleteByTargets(LikeTargetType.COMMENT, List.of(ROOT_ID, REPLY_ID));
+    }
+
+    @Test
     @DisplayName("不能删除他人的评论")
     void shouldRejectDeletingOthersComment() {
         when(commentRepository.findById(ROOT_ID))
