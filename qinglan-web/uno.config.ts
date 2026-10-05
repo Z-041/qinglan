@@ -18,6 +18,7 @@ import {
  * - 小字号文字与对比度：浅色底（primary-soft / primary-tint）上的文字统一用 `text-primary-deep`；
  *   「填充底 + 白字」的组件一律用 `bg-primary-deep`（悬停 `bg-primary-strong`）。
  *   `bg-primary` / `text-primary` 只用于装饰、大色块与大字号（详见 styles/main.css 的色值注释）
+ * - 危险色同此分档：`text-danger-deep` 压 `bg-danger-soft`，`bg-danger` 承载白字（悬停 `bg-danger-deep`）
  */
 export default defineConfig({
   presets: [presetWind3()],
@@ -37,6 +38,7 @@ export default defineConfig({
       ink: 'var(--ql-ink)',
       muted: 'var(--ql-muted)',
       danger: 'var(--ql-danger)',
+      'danger-deep': 'var(--ql-danger-deep)',
       'danger-soft': 'var(--ql-danger-soft)',
       warning: 'var(--ql-warning)',
       'warning-soft': 'var(--ql-warning-soft)',

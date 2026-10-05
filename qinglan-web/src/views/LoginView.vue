@@ -99,7 +99,7 @@ async function handleBind(): Promise<void> {
       <li v-for="(label, index) in STEP_LABELS" :key="label" class="flex items-center gap-2">
         <span
           class="flex size-5 items-center justify-center rounded-full text-xs font-semibold transition"
-          :class="index <= stepIndex ? 'bg-primary-deep text-white' : 'bg-primary-soft text-muted'"
+          :class="index <= stepIndex ? 'bg-primary-deep text-white' : 'bg-primary-tint text-muted'"
         >
           {{ index + 1 }}
         </span>

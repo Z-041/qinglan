@@ -23,7 +23,8 @@ const VARIANT_CLASS: Record<Variant, string> = {
   // 填充底用 deep 而非 primary：白字对比度 6.0:1，达标（见 styles/main.css）
   primary: 'bg-primary-deep text-white shadow-sm hover:bg-primary-strong hover:shadow-md',
   ghost: 'border border-line bg-transparent text-muted hover:border-primary hover:bg-primary-tint hover:text-primary-deep',
-  danger: 'bg-danger text-white shadow-sm hover:opacity-90',
+  // 悬停用 danger-deep 而非透明度：降低不透明度会同时淡掉白字，反而拉低对比度（见 styles/main.css）
+  danger: 'bg-danger text-white shadow-sm hover:bg-danger-deep hover:shadow-md',
 }
 
 const SIZE_CLASS: Record<Size, string> = {

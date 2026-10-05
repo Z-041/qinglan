@@ -25,7 +25,11 @@
   --ql-ink: #1f2430;
   --ql-muted: #666f80;
 
-  --ql-danger: #d7463c;
+  /* 危险色梯度，分档逻辑同主色
+   * danger 承载「填充底 + 白字」与白底上的错误文字（4.9:1）；
+   * 浅色底 danger-soft 上的文字必须用 danger-deep（5.3:1），直接用 danger 只有 3.7:1 */
+  --ql-danger: #cf3b31;
+  --ql-danger-deep: #b3312a;
   --ql-danger-soft: #fbeae9;
 
   --ql-warning: #a05b00;

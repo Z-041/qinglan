@@ -13,7 +13,7 @@ const { toasts, dismissToast } = useToast()
         type="button"
         role="alert"
         class="pointer-events-auto max-w-[92vw] cursor-pointer rounded-lg px-4 py-2.5 text-sm shadow-lg sm:max-w-sm"
-        :class="toast.type === 'error' ? 'bg-danger-soft text-danger' : 'bg-surface text-ink'"
+        :class="toast.type === 'error' ? 'bg-danger-soft text-danger-deep' : 'bg-surface text-ink'"
         @click="dismissToast(toast.id)"
       >
         {{ toast.message }}
