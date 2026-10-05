@@ -1,0 +1,79 @@
+import axios, { type AxiosError } from 'axios'
+
+import { pushToast } from '@/composables/useToast'
+import { SUCCESS_CODE, type ApiResponse } from '@/types/api'
+
+/** 访问令牌在 localStorage 中的键名 */
+export const TOKEN_STORAGE_KEY = 'qinglan.access-token'
+
+/**
+ * 承载后端错误码的异常，便于调用方按 code 分支处理。
+ *
+ * 约定：所有请求错误都已由拦截器统一 toast 提示，调用方**不要再内联渲染错误文案**，
+ * 只需据此结束 loading 态、决定是否推进流程即可（见 AGENTS.md 第七章）。
+ */
+export class ApiError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+const instance = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
+  timeout: 10000,
+})
+
+instance.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+instance.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError<ApiResponse<unknown>>) => {
+    const status = error.response?.status
+    const code = error.response?.data?.code ?? 'QL-500-001'
+    const message = error.response?.data?.message ?? '网络异常，请稍后重试'
+
+    if (status === 401) {
+      localStorage.removeItem(TOKEN_STORAGE_KEY)
+      // 拦截器不依赖 router，避免与 store 形成循环引用；401 直接回认证页
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login')
+      }
+    }
+
+    pushToast(message, 'error')
+
+    return Promise.reject(new ApiError(code, message, status))
+  },
+)
+
+async function unwrap<T>(request: Promise<{ data: ApiResponse<T> }>): Promise<T> {
+  const response = await request
+  const body = response.data
+  if (body.code !== SUCCESS_CODE) {
+    pushToast(body.message, 'error')
+    throw new ApiError(body.code, body.message, 200)
+  }
+  return body.data
+}
+
+/** 仅 src/api 内部使用：所有 HTTP 请求都必须经由此处 */
+export function httpGet<T>(url: string): Promise<T> {
+  return unwrap(instance.get<ApiResponse<T>>(url))
+}
+
+export function httpPost<T>(url: string, body?: unknown): Promise<T> {
+  return unwrap(instance.post<ApiResponse<T>>(url, body))
+}
+
+export default instance

@@ -1,0 +1,35 @@
+/**
+ * 主题变量：全站唯一色值来源（设计文档第十二章指定主色为青色系 #2E8B7A）。
+ *
+ * 用 CSS 变量而非 UnoCSS 内联色值，是为了让后续管理端 Element Plus 直接复用同一套主题
+ * （例如 `--el-color-primary: var(--ql-primary)`）。
+ */
+:root {
+  /* 主色梯度
+   * primary 只用于装饰、大色块与描边，不承载小字号文字（#2e8b7a 配白字仅 4.1:1）；
+   * 凡是「填充底 + 白字」的组件（按钮、步骤激活态）一律用 deep 起步，
+   * 保证白字对比度 ≥ 4.5:1：deep #1f6f60 为 6.0:1，作其悬停态的 strong #1b5648 为 8.5:1；
+   * 浅色底 soft/tint 上承载文字时统一用 deep（5.2:1 / 5.6:1） */
+  --ql-primary: #2e8b7a;
+  --ql-primary-deep: #1f6f60;
+  --ql-primary-strong: #1b5648;
+  --ql-primary-soft: #e6f2ef;
+  --ql-primary-tint: #f1f8f6;
+
+  --ql-canvas: #f5f6f8;
+  --ql-surface: #ffffff;
+  --ql-surface-glass: rgb(255 255 255 / 0.85); /* 吸顶栏半透明底，配合 backdrop-blur */
+  --ql-line: #e3e6ec;
+  --ql-line-strong: #d7dce6;
+
+  --ql-ink: #1f2430;
+  --ql-muted: #666f80;
+
+  --ql-danger: #d7463c;
+  --ql-danger-soft: #fbeae9;
+
+  --ql-warning: #a05b00;
+  --ql-warning-soft: #fff7e6;
+
+  color-scheme: light;
+}
