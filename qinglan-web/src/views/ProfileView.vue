@@ -80,8 +80,14 @@ onMounted(async () => {
       </BaseCard>
 
       <div class="mt-4 rounded-xl border border-dashed border-line-strong px-5 py-6 text-center">
-        <p class="text-sm font-medium text-ink">你的动态</p>
-        <p class="mt-1 text-xs text-muted">发帖功能上线后，你发布的帖子与草稿会汇总到这里</p>
+        <p class="text-sm font-medium text-ink">还没有「我的帖子」列表</p>
+        <p class="mt-1 text-xs text-muted">当前版本仅提供发布入口，个人帖子聚合在后续版本上线</p>
+        <RouterLink
+          class="ql-btn ql-btn-sm mt-4 bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
+          to="/publish"
+        >
+          去发布
+        </RouterLink>
       </div>
     </template>
   </section>

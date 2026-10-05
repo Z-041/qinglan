@@ -16,6 +16,17 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
     {
+      path: '/posts/:id',
+      name: 'post-detail',
+      component: () => import('@/views/PostDetailView.vue'),
+    },
+    {
+      path: '/publish',
+      name: 'publish',
+      component: () => import('@/views/PublishView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),

@@ -32,6 +32,7 @@ const emit = defineEmits<{ 'sign-out': [] }>()
 
       <nav class="flex items-center gap-0.5">
         <RouterLink class="ql-nav-link" to="/">首页</RouterLink>
+        <RouterLink v-if="authenticated" class="ql-nav-link" to="/publish">发布</RouterLink>
         <RouterLink v-if="authenticated" class="ql-nav-link" to="/profile">我的</RouterLink>
       </nav>
 

@@ -76,4 +76,16 @@ export function httpPost<T>(url: string, body?: unknown): Promise<T> {
   return unwrap(instance.post<ApiResponse<T>>(url, body))
 }
 
+export function httpDelete<T>(url: string): Promise<T> {
+  return unwrap(instance.delete<ApiResponse<T>>(url))
+}
+
+/**
+ * multipart 上传。不手动设 Content-Type，交给浏览器补上含 boundary 的头部，
+ * 手写会导致 boundary 与请求体不匹配、后端解析失败。
+ */
+export function httpPostForm<T>(url: string, form: FormData): Promise<T> {
+  return unwrap(instance.post<ApiResponse<T>>(url, form))
+}
+
 export default instance

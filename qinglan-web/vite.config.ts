@@ -19,6 +19,11 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
+      // 上传的图片由后端静态资源映射直接返回，路径不带 /api 前缀，需单独透传
+      '/uploads': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
     },
   },
   test: {
