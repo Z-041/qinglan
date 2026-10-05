@@ -75,6 +75,7 @@ Controller  →  Service  →  Repository  →  DB
   - `post → review`：写审计日志（不变量 #2 要求：查看联系方式必须留痕；下架、放行等审核动作同样落日志）
   - `comment → post`：发表/删除评论时维护 `post.comment_count`（与 `report_count` 同为冗余计数，避免列表 N+1）
 - 上述方向**不得反向**（禁止 `user → auth`、`review → user`、`post → comment` 等），以保证依赖图无环；确需新增方向先提 issue 并同步本节
+- 本节白名单由 `ModuleBoundaryTest`（ArchUnit）自动校验：新增模块或新增跨模块方向必须同步该测试，否则 CI 的 `backend-static-analysis` 必红。测试对未登记模块按「只允许依赖 `common`」处理，因此**漏写白名单会失败，而不是静默通过**
 - Repository 不得返回 Entity 给 Controller；Entity → DTO 转换必须在 Service 层完成
 - `common/` 不得反向依赖任何业务模块
 
@@ -189,6 +190,7 @@ Skill 位于 `coding-skills/`，本项目实际加载 `java-springboot` 与 `vue
 1. **先读再改**：改前读完目标文件及其测试、调用方
 2. **不越界**：只改任务范围内的代码；范围外问题先报告，不擅自修
 3. **验证必须真跑**：`./mvnw test` 与 `pnpm vitest run && pnpm vue-tsc --noEmit`，贴实际输出
+   - 后端编译已开 `-Xlint:all,-processing -Werror`：**任何 javac 警告都会让构建失败**，请正面修掉而不是压制（`processing` 一档因 Lombok 噪音而关闭，其余全开）
 4. **提交**：Conventional Commits，`feat|fix|refactor|test|docs|chore(post|review|announcement|web): 说明`，正文写"为什么"
 5. **PR**：说明改了什么、为什么、如何验证、是否影响第四章不变量、是否破坏性变更
 

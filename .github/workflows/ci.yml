@@ -6,6 +6,27 @@ on:
   pull_request:
 
 jobs:
+  backend-static-analysis:
+    name: Backend static analysis (ArchUnit + javac lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: qinglan-server
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: maven
+      # 独立成 job 的理由：不依赖 MySQL，最快失败、归因清晰。
+      # 两道门禁都在编译/测试阶段生效，不需要额外插件：
+      #   1) maven-compiler-plugin 的 -Xlint:all,-processing -Werror（编译期警告即错误）
+      #   2) ModuleBoundaryTest 用 ArchUnit 校验 AGENTS.md 第三章的跨模块白名单与 Controller 分层
+      - name: Architecture & compiler lint
+        run: ./mvnw -B -ntp -Dtest=ModuleBoundaryTest -DfailIfNoTests=false test
+
   backend:
     name: Backend (Java 21 + MySQL 8)
     runs-on: ubuntu-latest

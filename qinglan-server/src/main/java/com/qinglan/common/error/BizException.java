@@ -5,6 +5,8 @@ package com.qinglan.common.error;
  */
 public class BizException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     private final ErrorCode errorCode;
 
     public BizException(ErrorCode errorCode) {
