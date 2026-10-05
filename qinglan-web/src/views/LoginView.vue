@@ -97,9 +97,11 @@ async function handleBind(): Promise<void> {
 
     <ol class="mt-6 flex items-center gap-2">
       <li v-for="(label, index) in STEP_LABELS" :key="label" class="flex items-center gap-2">
+        <!-- 圆圈是「已完成 / 当前」步骤的专属样式：未激活态不画圆，只留灰色数字。
+             浅色圆对白底只有 1.08:1，低于非文本组件 3:1 的门槛，画了也等于没画（T-06） -->
         <span
           class="flex size-5 items-center justify-center rounded-full text-xs font-semibold transition"
-          :class="index <= stepIndex ? 'bg-primary-deep text-white' : 'bg-primary-tint text-muted'"
+          :class="index <= stepIndex ? 'bg-primary-deep text-white' : 'text-muted'"
         >
           {{ index + 1 }}
         </span>
