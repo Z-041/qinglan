@@ -11,23 +11,33 @@ public enum ErrorCode {
     EMAIL_DOMAIN_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "QL-400-002", "仅支持校园邮箱认证"),
     VERIFICATION_CODE_INVALID(HttpStatus.BAD_REQUEST, "QL-400-003", "验证码不正确"),
     VERIFICATION_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "QL-400-004", "验证码已失效，请重新获取"),
+    CONTACT_REQUIRED(HttpStatus.BAD_REQUEST, "QL-400-005", "该话题要求留下联系方式，便于对方联系到你"),
+    UPLOAD_INVALID(HttpStatus.BAD_REQUEST, "QL-400-006", "仅支持 JPG / PNG / WebP，单张不超过 5MB"),
+    CURSOR_INVALID(HttpStatus.BAD_REQUEST, "QL-400-007", "分页游标不合法"),
 
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "QL-401-001", "请先完成认证"),
     EMAIL_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "QL-401-002", "邮箱认证凭证无效或已过期"),
 
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "QL-403-001", "无权执行该操作"),
     USER_BANNED(HttpStatus.FORBIDDEN, "QL-403-002", "账号已被限制，暂时无法使用该功能"),
+    NOT_CONTENT_OWNER(HttpStatus.FORBIDDEN, "QL-403-003", "只能操作自己发布的内容"),
+    CREDIT_TOO_LOW(HttpStatus.FORBIDDEN, "QL-403-004", "信用分不足，暂时无法发帖"),
 
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-001", "用户不存在"),
+    POST_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-002", "帖子不存在或已被删除"),
+    TOPIC_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-003", "话题不存在"),
+    COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-004", "评论不存在或已被删除"),
 
     EMAIL_ALREADY_BOUND(HttpStatus.CONFLICT, "QL-409-001", "该校园邮箱已完成认证，请直接登录"),
     STUDENT_ID_ALREADY_BOUND(HttpStatus.CONFLICT, "QL-409-002", "该学号已被绑定，不可重复认证"),
     REGISTRATION_CONFLICT(HttpStatus.CONFLICT, "QL-409-003", "该邮箱或学号已完成认证"),
+    ILLEGAL_REVIEW_TRANSITION(HttpStatus.CONFLICT, "QL-409-004", "当前审核状态不允许该操作"),
 
     CODE_SEND_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "QL-429-001", "验证码发送过于频繁，请稍后再试"),
     VERIFY_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "QL-429-002", "验证失败次数过多，请重新获取验证码"),
 
-    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "QL-500-001", "服务暂时不可用");
+    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "QL-500-001", "服务暂时不可用"),
+    STORAGE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "QL-500-002", "文件存储暂时不可用，请稍后重试");
 
     private final HttpStatus status;
     private final String code;

@@ -1,4 +1,4 @@
-package com.qinglan.auth.service;
+package com.qinglan.common.anonymous;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

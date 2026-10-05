@@ -17,6 +17,9 @@ dist-ssr/
 .vite/
 coverage/
 
+# ---- 本地存储实现的上传目录（生产走对象存储，不进仓库）----
+qinglan-server/data/
+
 # ---- IDE / OS ----
 .idea/
 *.iml

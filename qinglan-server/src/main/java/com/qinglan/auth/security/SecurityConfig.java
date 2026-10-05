@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -46,6 +47,15 @@ public class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/error").permitAll()
+                        // 游客是只读角色（设计方案第二章），首页信息流与帖子详情需对未登录开放。
+                        // 只放行这几个具体的 GET 路径，不用 /api/posts/** 通配，避免误放行写操作或管理接口
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/topics",
+                                "/api/posts",
+                                "/api/posts/*",
+                                "/api/posts/*/comments").permitAll()
+                        // 上传后的图片由静态资源映射直接返回，浏览器取图不带令牌
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(authenticationEntryPoint())

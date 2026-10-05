@@ -1,4 +1,4 @@
-package com.qinglan.auth.service;
+package com.qinglan.common.anonymous;
 
 import org.springframework.stereotype.Service;
 
@@ -13,6 +13,10 @@ import java.util.HexFormat;
  * <p>不变量 #1（AGENTS.md）：{@code anonymous_code = hash(post_id + author_id + salt)}，
  * 同一用户在不同帖子下代号必然不同，且对外接口不得同时返回代号与 author_id。
  * 本类保持无状态纯函数，调用方自行提供用户级 salt（存于 user.anonymous_salt）。</p>
+ *
+ * <p>归属说明：P0 时放在 auth 模块，P1 起 post 与 comment 都要用它。若留在 auth，
+ * post 就得新增一条 post → auth 的横向依赖；而它本身不含业务规则、只做哈希，
+ * 故下沉到 common 供各模块共用，依赖图保持无环。</p>
  */
 @Service
 public class AnonymousCodeService {

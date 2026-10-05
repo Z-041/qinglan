@@ -37,6 +37,11 @@ spring:
     redis:
       host: ${QINGLAN_REDIS_HOST:localhost}
       port: ${QINGLAN_REDIS_PORT:6379}
+  servlet:
+    multipart:
+      # 与 post 模块的单张图片上限保持一致，超出直接拒绝，不让请求进到业务层
+      max-file-size: 5MB
+      max-request-size: 10MB
 
 qinglan:
   crypto:
@@ -60,3 +65,11 @@ qinglan:
     allowed-email-domains: ${QINGLAN_AUTH_EMAIL_DOMAINS:}
     # 仅限本地联调：为 true 时响应体回显验证码。生产必须保持 false
     expose-code: false
+  post:
+    # 信用分低于该值不允许发帖（设计方案：违规扣分，低于阈值限制发帖）
+    min-credit-to-post: 60
+    # 单个帖子的图片数量上限（设计方案：≤9 图）
+    max-images-per-post: 9
+  storage:
+    # 本地开发用磁盘目录；生产切对象存储后本项不再生效
+    local-root: ${QINGLAN_STORAGE_ROOT:./data/uploads}

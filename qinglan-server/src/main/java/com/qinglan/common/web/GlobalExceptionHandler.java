@@ -12,6 +12,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * 全局异常处理。对外只返回错误码与安全文案，堆栈仅落服务端日志。
@@ -48,6 +49,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleUnreadableBody(HttpMessageNotReadableException ex) {
         return ResponseEntity.status(ErrorCode.INVALID_REQUEST.status())
                 .body(ApiResponse.error(ErrorCode.INVALID_REQUEST.code(), ErrorCode.INVALID_REQUEST.message()));
+    }
+
+    /**
+     * 上传文件超出 multipart 上限时由容器层抛出，早于 Controller 的参数校验，
+     * 必须在此兜底，否则会落到通用分支返回 500。
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(ErrorCode.UPLOAD_INVALID.status())
+                .body(ApiResponse.error(ErrorCode.UPLOAD_INVALID.code(), ErrorCode.UPLOAD_INVALID.message()));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

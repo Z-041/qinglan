@@ -71,7 +71,9 @@ Controller  →  Service  →  Repository  →  DB
   - `post → user`：查信用分 / 封禁态
   - `auth → user`：认证所需的身份查询与创建。身份字段的加解密集中在 `user` 内，明文身份不外流
   - `user → review`：写审计日志（不变量 #7 要求：下架、封禁、发公告必须留痕）
-- 上述方向**不得反向**（禁止 `user → auth`、`review → user` 等），以保证依赖图无环；确需新增方向先提 issue 并同步本节
+  - `post → review`：写审计日志（不变量 #2 要求：查看联系方式必须留痕；下架、放行等审核动作同样落日志）
+  - `comment → post`：发表/删除评论时维护 `post.comment_count`（与 `report_count` 同为冗余计数，避免列表 N+1）
+- 上述方向**不得反向**（禁止 `user → auth`、`review → user`、`post → comment` 等），以保证依赖图无环；确需新增方向先提 issue 并同步本节
 - Repository 不得返回 Entity 给 Controller；Entity → DTO 转换必须在 Service 层完成
 - `common/` 不得反向依赖任何业务模块
 
