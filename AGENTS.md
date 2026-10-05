@@ -69,6 +69,7 @@ Controller  →  Service  →  Repository  →  DB
 - Controller 只做参数校验与 DTO 装配，**不得**写业务判断
 - Service 之间横向调用：**仅允许**下列方向，其余跨模块调用先提 issue
   - `post → user`：查信用分 / 封禁态
+  - `comment → user`：取匿名 salt 派生评论代号（不变量 #1）。salt 属身份字段，只允许用于派生，不得外流
   - `auth → user`：认证所需的身份查询与创建。身份字段的加解密集中在 `user` 内，明文身份不外流
   - `user → review`：写审计日志（不变量 #7 要求：下架、封禁、发公告必须留痕）
   - `post → review`：写审计日志（不变量 #2 要求：查看联系方式必须留痕；下架、放行等审核动作同样落日志）
