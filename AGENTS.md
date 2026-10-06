@@ -148,8 +148,8 @@ Skill 位于 `coding-skills/`，本项目实际加载 `java-springboot` 与 `vue
 - **派生用 `computed`**，副作用放 `watch`；`computed` getter 内禁止修改状态、发请求
 - **列表**：`v-for` 必带稳定 `:key`（用 id，不用 index）；禁止 `v-if` 与 `v-for` 同元素
 - **样式**：一律用 **UnoCSS** 原子类（`presetWind3`）；主题语义色（`primary`/`surface`/`line`/`ink`/`muted`/`danger`…）在 `uno.config.ts` 映射到 `styles/main.css` 的 CSS 变量，禁止硬编码色值。`<style>` 仅用于原子类难以表达的少量逻辑（过渡动画、`@keyframes`），且必须 `scoped`、用 class 选择器
-- **组件库**：学生端一律用 `components/base/` 自研基础组件（移动优先、兼容 PC）；管理端（P3 起）用 Element Plus + UnoCSS，**仅支持 PC**
-- **布局**：移动优先；内容用 `ql-container` 限宽居中；断点从 `sm:`（≥640px）起，不写死像素宽度；列表/卡片流用 flex/grid 原子类
+- **组件库**：学生端一律用 `components/base/` 自研基础组件（PC 为主、兼容移动端）；管理端（P3 起）用 Element Plus + UnoCSS，**仅支持 PC**
+- **布局**：PC 为主、兼容移动端；**基线样式即 PC 版**（≥1024px），窄屏用 `max-sm:` / `max-lg:` 收窄，不用 `sm:` / `lg:` 逐级增强；首页内容宽 1200px、用 `ql-shell` 限宽居中，其余学生端页面沿用 `ql-container`（720px）；分界断点 `lg:`（1024px）；不写死像素宽度；列表/卡片流用 flex/grid 原子类
 - **XSS**：禁止 `v-html` 渲染用户输入；必须渲染富文本时先 DOMPurify
 - **请求**：统一走 `src/api/`；401 由拦截器统一处理（清 token + 跳认证）
 - **请求错误统一走全局弹窗**：所有请求错误（提交失败、加载失败等）一律由 `src/api/http.ts` 的拦截器 toast 提示，**页面不得再内联渲染请求错误文案**，不要「弹窗 + 容器内」提示两遍；页面只负责结束 loading 态、决定成功后的流程推进。提示由 `useToast` 统一在数秒后自动消失
