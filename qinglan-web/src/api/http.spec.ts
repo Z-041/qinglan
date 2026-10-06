@@ -75,3 +75,29 @@ describe('http 全局错误提示', () => {
     expect(handler).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('httpGet 查询参数', () => {
+  const originalAdapter = instance.defaults.adapter
+
+  afterEach(() => {
+    instance.defaults.adapter = originalAdapter
+  })
+
+  it('把 params 原样交给 axios（null / undefined 由 axios 忽略）', async () => {
+    let captured: unknown
+    instance.defaults.adapter = async (config) => {
+      captured = config.params
+      return {
+        status: 200,
+        statusText: 'OK',
+        data: { code: 'QL-000-000', message: 'ok', data: null },
+        headers: {},
+        config,
+      } as AxiosResponse
+    }
+
+    await httpGet('/admin/users', { status: 'BANNED', role: null })
+
+    expect(captured).toEqual({ status: 'BANNED', role: null })
+  })
+})

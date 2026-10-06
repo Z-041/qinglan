@@ -38,4 +38,14 @@ describe('useUserLabels', () => {
   it('无处置原因时返回 null，供模板判空', () => {
     expect(reviewReasonText(null)).toBeNull()
   })
+
+  it('目标类型与目标状态转中文，未知码退化为「未知」', () => {
+    const { targetTypeLabel, targetStatusLabel } = useUserLabels()
+
+    expect(targetTypeLabel('POST')).toBe('帖子')
+    expect(targetTypeLabel('COMMENT')).toBe('评论')
+    expect(targetStatusLabel('TAKEN_DOWN')).toBe('已下架')
+    expect(targetStatusLabel('REMOVED')).toBe('已移除')
+    expect(targetStatusLabel('SOMETHING_NEW')).toBe('未知')
+  })
 })

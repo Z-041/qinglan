@@ -1,4 +1,4 @@
-import type { ReportReason } from '@/types/review'
+import type { ReportReason, ReviewTargetType } from '@/types/review'
 import type { UserRole, UserStatus } from '@/types/user'
 
 /** 后端以英文枚举下发角色，界面不得直接展示，统一在此转成中文 */
@@ -38,6 +38,27 @@ const REPORT_REASON_LABELS: Record<ReportReason, string> = {
 const REVIEW_CODE_LABELS: Record<string, string> = {
   AUTO_REPORT_THRESHOLD: '被多次举报，待复核',
   ...REPORT_REASON_LABELS,
+}
+
+/** 举报/申诉目标类型 */
+const TARGET_TYPE_LABELS: Record<ReviewTargetType, string> = {
+  POST: '帖子',
+  COMMENT: '评论',
+}
+
+/**
+ * 目标状态码 → 文案。帖子（PostStatus）与评论（CommentStatus）两套枚举取值不冲突，
+ * 合在一张表里渲染；未知码同样退化为「未知」，与其它枚举一致。
+ */
+const TARGET_STATUS_LABELS: Record<string, string> = {
+  DRAFT: '草稿',
+  PENDING: '待审核',
+  REVIEWING: '审核中',
+  APPROVED: '已通过',
+  REJECTED: '已驳回',
+  TAKEN_DOWN: '已下架',
+  PUBLISHED: '已发布',
+  REMOVED: '已移除',
 }
 
 /** 枚举由后端下发，前端可能先于版本拿到未知值，必须有兜底，不能渲染出 undefined */
@@ -80,5 +101,20 @@ export function useUserLabels() {
     return detail || '因违规被处理'
   }
 
-  return { roleLabel, statusLabel, reportReasonLabel, reviewReasonText }
+  function targetTypeLabel(targetType: ReviewTargetType): string {
+    return TARGET_TYPE_LABELS[targetType] ?? UNKNOWN_LABEL
+  }
+
+  function targetStatusLabel(status: string): string {
+    return TARGET_STATUS_LABELS[status] ?? UNKNOWN_LABEL
+  }
+
+  return {
+    roleLabel,
+    statusLabel,
+    reportReasonLabel,
+    reviewReasonText,
+    targetTypeLabel,
+    targetStatusLabel,
+  }
 }

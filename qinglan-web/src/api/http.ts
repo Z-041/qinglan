@@ -80,9 +80,12 @@ async function unwrap<T>(request: Promise<{ data: ApiResponse<T> }>): Promise<T>
   return body.data
 }
 
-/** 仅 src/api 内部使用：所有 HTTP 请求都必须经由此处 */
-export function httpGet<T>(url: string): Promise<T> {
-  return unwrap(instance.get<ApiResponse<T>>(url))
+/**
+ * 仅 src/api 内部使用：所有 HTTP 请求都必须经由此处。
+ * params 里的 null / undefined 由 axios 序列化时自动忽略，调用方不必先过滤。
+ */
+export function httpGet<T>(url: string, params?: Record<string, unknown>): Promise<T> {
+  return unwrap(instance.get<ApiResponse<T>>(url, { params }))
 }
 
 export function httpPost<T>(url: string, body?: unknown): Promise<T> {
