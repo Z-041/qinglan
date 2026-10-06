@@ -72,6 +72,7 @@ Controller  →  Service  →  Repository  →  DB
   - `comment → user`：取匿名 salt 派生评论代号（不变量 #1）。salt 属身份字段，只允许用于派生，不得外流
   - `auth → user`：认证所需的身份查询与创建。身份字段的加解密集中在 `user` 内，明文身份不外流
   - `comment → post`：发表/删除评论时维护 `post.comment_count`（与 `report_count` 同为冗余计数，避免列表 N+1）
+  - `post → announcement`：发帖前检查是否存在未读的紧急公告（P4 强制阅读的**服务端兜底**，设计方案 5.4）。前端倒计时只是体验层、禁用 JS 即可绕，真正拦得住用户的是发帖这一动作，故只能由 `post` 发起查询
   - `review → user`、`review → post`、`review → comment`：`review` 是审核体系（P2）的**编排者**——举报聚合、审核队列、下架/恢复/隐藏联系方式、申诉复审都需要读改帖子与评论、封禁用户。这些是审核动作本身，只能由 `review` 单向发起，业务模块不得反向依赖 `review`
 - **审计日志改走 `common`**：`AuditLog` / `AuditAction` / `AuditTargetType` / `AuditLogService` 位于 `common/audit`（表仍是 `review_log`）。需要留痕的业务模块（`post` 查看联系方式、`user` 封禁/调信用分、`review` 各类处置）直接依赖 `common.audit`，**不再有 `post → review` / `user → review`**。这样做的原因：`review` 编排业务模块、业务模块又需要写审计，若审计留在 `review` 依赖图必然成环（本节要求无环）；下沉到 `common` 后依赖图为 `业务模块 → common`、`review → 业务模块 → common`，无环且不变量 #7 行为不变
 - 上述方向**不得反向**（禁止 `user → auth`、`post → review`、`user → review`、`post → comment` 等），以保证依赖图无环；确需新增方向先提 issue 并同步本节

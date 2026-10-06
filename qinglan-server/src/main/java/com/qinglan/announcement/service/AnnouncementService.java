@@ -26,7 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -54,6 +54,8 @@ public class AnnouncementService {
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_DEVICE_ID_LENGTH = 64;
     private static final long MILLIS_PER_SECOND = 1000L;
+    /** 日界线时区：与管理员直觉一致，与 AdminStatsService 的看板口径保持一致 */
+    private static final ZoneId DAY_ZONE = ZoneId.of("Asia/Shanghai");
 
     private final AnnouncementRepository announcementRepository;
     private final AnnouncementReadRepository announcementReadRepository;
@@ -144,8 +146,9 @@ public class AnnouncementService {
     /**
      * 标记已读——不变量 #6 的核心。
      *
-     * <p>先确认公告存在（否则 404）；停留时长不足要求即抛 400 且<b>不落库</b>，因此不存在
-     * 「打开弹窗即已读」的路径；时长足够时按维度更新或新增已读记录（唯一键幂等）。</p>
+     * <p>先确认公告存在（否则 404）；三个强制条件（设计方案 5.2 的 AND）任一不满足即抛 400 且
+     * <b>不落库</b>，因此不存在「打开弹窗即已读」的路径；条件齐备时按维度更新或新增已读记录
+     * （唯一键幂等）。</p>
      *
      * @param deviceIdQuery 查询参数里的 deviceId；请求体里的 deviceId 优先
      */
@@ -154,6 +157,13 @@ public class AnnouncementService {
         Announcement announcement = requireAnnouncement(id);
         if (request.durationMs() < announcement.getMinReadSeconds() * MILLIS_PER_SECOND) {
             throw new BizException(ErrorCode.ANNOUNCEMENT_READ_TOO_EARLY);
+        }
+        // 另外两个条件：需滚动到底、需勾选已了解。二者由客户端观测，服务端只能做声明式校验，
+        // 所以「真强制」仍靠 428 兜底（设计方案 5.4、计划 D6）；但既然拿到了信号就必须校验，
+        // 否则前端一旦实现有误，服务端会把「没读完」也记成已读。
+        if ((announcement.isRequireScrollToEnd() && !request.scrolledToEnd())
+                || (announcement.isRequireConfirm() && !request.confirmed())) {
+            throw new BizException(ErrorCode.ANNOUNCEMENT_READ_UNCONFIRMED);
         }
         String deviceId = resolveDeviceId(request.deviceId(), deviceIdQuery);
         if (userId == null && deviceId == null) {
@@ -221,10 +231,9 @@ public class AnnouncementService {
                 .orElseThrow(() -> new BizException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
     }
 
-    /** 当日（UTC）已发布数，与全库时间口径一致（第六章：时间统一 Instant/UTC） */
+    /** 当日已发布数。日界线用 Asia/Shanghai，与 {@code AdminStatsService} 的看板口径一致 */
     private long publishedToday(Instant now) {
-        Instant dayStart = now.atZone(ZoneOffset.UTC).toLocalDate()
-                .atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant dayStart = now.atZone(DAY_ZONE).toLocalDate().atStartOfDay(DAY_ZONE).toInstant();
         return announcementRepository.countByStatusAndPublishedAtGreaterThanEqual(
                 AnnouncementStatus.PUBLISHED, dayStart);
     }

@@ -21,6 +21,8 @@ public enum ErrorCode {
     SELF_REPORT_FORBIDDEN(HttpStatus.BAD_REQUEST, "QL-400-010", "不能举报自己发布的内容"),
     // 不变量 #6：停留时长未达到公告要求，服务端拒绝标记已读（有效期证据不足）
     ANNOUNCEMENT_READ_TOO_EARLY(HttpStatus.BAD_REQUEST, "QL-400-011", "阅读时长不足，暂不能标记为已读"),
+    // 不变量 #6 的另外两个条件（设计方案 5.2 的 AND）：需滚动到底、需勾选已了解
+    ANNOUNCEMENT_READ_UNCONFIRMED(HttpStatus.BAD_REQUEST, "QL-400-012", "尚未完成强制阅读：需滚动到底并勾选已了解"),
 
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "QL-401-001", "请先完成认证"),
     EMAIL_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "QL-401-002", "邮箱认证凭证无效或已过期"),

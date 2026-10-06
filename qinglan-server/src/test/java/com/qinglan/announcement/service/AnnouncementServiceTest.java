@@ -107,10 +107,53 @@ class AnnouncementServiceTest {
     }
 
     @Test
+    @DisplayName("不变量 #6-c：要求滚动到底但未到底时拒绝标已读，且不落库")
+    void shouldRejectMarkReadWhenScrollNotFinished() {
+        when(announcementRepository.findById(ANNOUNCEMENT_ID))
+                .thenReturn(Optional.of(published(ANNOUNCEMENT_ID, 5, true, false)));
+
+        // 时长够 6 秒，但没有滚动到底
+        assertThatThrownBy(() -> service.markRead(
+                ANNOUNCEMENT_ID, USER_ID, null, new MarkReadRequest(null, 6_000L, false, true)))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.ANNOUNCEMENT_READ_UNCONFIRMED);
+
+        verify(announcementReadRepository, never()).save(any(AnnouncementRead.class));
+    }
+
+    @Test
+    @DisplayName("不变量 #6-d：要求勾选已了解但未勾选时拒绝标已读，且不落库")
+    void shouldRejectMarkReadWhenNotConfirmed() {
+        when(announcementRepository.findById(ANNOUNCEMENT_ID))
+                .thenReturn(Optional.of(published(ANNOUNCEMENT_ID, 5, false, true)));
+
+        assertThatThrownBy(() -> service.markRead(
+                ANNOUNCEMENT_ID, USER_ID, null, new MarkReadRequest(null, 6_000L, true, false)))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.ANNOUNCEMENT_READ_UNCONFIRMED);
+
+        verify(announcementReadRepository, never()).save(any(AnnouncementRead.class));
+    }
+
+    @Test
+    @DisplayName("不变量 #6-e：要求滚动且需勾选时，两者都满足才落库")
+    void shouldPersistReadWhenAllConditionsMet() {
+        when(announcementRepository.findById(ANNOUNCEMENT_ID))
+                .thenReturn(Optional.of(published(ANNOUNCEMENT_ID, 5, true, true)));
+        when(announcementReadRepository.findByAnnouncementIdAndUserId(ANNOUNCEMENT_ID, USER_ID))
+                .thenReturn(Optional.empty());
+
+        service.markRead(ANNOUNCEMENT_ID, USER_ID, null, new MarkReadRequest(null, 6_000L, true, true));
+
+        verify(announcementReadRepository).save(any(AnnouncementRead.class));
+    }
+
+    @Test
     @DisplayName("时长足够但公告不存在时返回 404，不落库")
     void shouldRejectWhenAnnouncementMissing() {
         when(announcementRepository.findById(ANNOUNCEMENT_ID)).thenReturn(Optional.empty());
-
         assertThatThrownBy(() -> service.markRead(
                 ANNOUNCEMENT_ID, USER_ID, null, new MarkReadRequest(null, 6_000L, false, false)))
                 .isInstanceOf(BizException.class)
@@ -281,15 +324,26 @@ class AnnouncementServiceTest {
     // ------------------------------------------------------------------ 辅助
 
     private static Announcement draft(long id, int minReadSeconds) {
+        return draft(id, minReadSeconds, false, false);
+    }
+
+    private static Announcement draft(long id, int minReadSeconds, boolean requireScrollToEnd,
+                                      boolean requireConfirm) {
         Announcement announcement = Announcement.draft("标题", "正文", AnnouncementLevel.URGENT,
-                BASE.minusSeconds(60), null, minReadSeconds, false, false, null, OPERATOR_ID);
+                BASE.minusSeconds(60), null, minReadSeconds, requireScrollToEnd, requireConfirm,
+                null, OPERATOR_ID);
         TestFixtures.setId(announcement, id);
         TestFixtures.setCreatedAt(announcement, BASE);
         return announcement;
     }
 
     private static Announcement published(long id, int minReadSeconds) {
-        Announcement announcement = draft(id, minReadSeconds);
+        return published(id, minReadSeconds, false, false);
+    }
+
+    private static Announcement published(long id, int minReadSeconds, boolean requireScrollToEnd,
+                                          boolean requireConfirm) {
+        Announcement announcement = draft(id, minReadSeconds, requireScrollToEnd, requireConfirm);
         announcement.publish(BASE);
         return announcement;
     }
