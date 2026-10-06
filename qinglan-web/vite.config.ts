@@ -2,6 +2,9 @@ import { fileURLToPath, URL } from 'node:url'
 
 import vue from '@vitejs/plugin-vue'
 import UnoCSS from 'unocss/vite'
+import AutoImport from 'unplugin-auto-import/vite'
+import Components from 'unplugin-vue-components/vite'
+import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
 
@@ -45,7 +48,25 @@ function contentSecurityPolicy(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [UnoCSS(), vue(), contentSecurityPolicy()],
+  plugins: [
+    UnoCSS(),
+    vue(),
+    // Element Plus 按需自动导入：只有 admin 视图实际用到的组件与样式会进 admin 懒加载
+    // chunk，学生端首屏 bundle 不受影响（spec D4）。
+    // dts 必须落在 src/ 下，才能被 tsconfig 的 include（src/**/*.ts）覆盖；
+    // 落到项目根目录会让 vue-tsc 找不到 ElMessage / ElMessageBox 这些自动导入符号。
+    AutoImport({
+      // 只为 ElMessage / ElMessageBox 这类「函数式调用」的组件提供导入与样式注入；
+      // vue / vue-router 仍显式 import，与既有代码风格保持一致
+      resolvers: [ElementPlusResolver()],
+      dts: 'src/auto-imports.d.ts',
+    }),
+    Components({
+      resolvers: [ElementPlusResolver()],
+      dts: 'src/components.d.ts',
+    }),
+    contentSecurityPolicy(),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
