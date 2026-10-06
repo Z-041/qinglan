@@ -75,4 +75,32 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
             @Param("cursorTargetId") long cursorTargetId,
             @Param("cursorTypeRank") int cursorTypeRank,
             Pageable limit);
+
+    /**
+     * 某目标的全部举报人 id（去重、不限举报状态）。
+     *
+     * <p><b>只用于聚合计数，绝不把名单返回给前端</b>——举报人身份不出审核队列
+     * （不变量 #1 的引申，与 {@code ReviewQueueItemResponse} 的约束同源）。</p>
+     */
+    @Query("""
+            select distinct r.reporterId from Report r
+            where r.targetType = :targetType and r.targetId = :targetId
+            """)
+    List<Long> findDistinctReporterIds(
+            @Param("targetType") ReviewTargetType targetType, @Param("targetId") Long targetId);
+
+    /**
+     * 给定举报人中，除本目标外还举报过其他目标的人数。
+     *
+     * <p>等价于「举报过 ≥2 个目标的人数」：本目标算一个，另有任意其他目标即满足。</p>
+     */
+    @Query("""
+            select count(distinct r.reporterId) from Report r
+            where r.reporterId in :reporterIds
+              and (r.targetType <> :targetType or r.targetId <> :targetId)
+            """)
+    long countReportersWithOtherReports(
+            @Param("reporterIds") Collection<Long> reporterIds,
+            @Param("targetType") ReviewTargetType targetType,
+            @Param("targetId") Long targetId);
 }
