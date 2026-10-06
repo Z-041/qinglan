@@ -5,10 +5,18 @@ import BaseButton from '@/components/base/BaseButton.vue'
 import { useUserLabels } from '@/composables/useUserLabels'
 import type { UserRole } from '@/types/user'
 
-const props = defineProps<{
-  authenticated: boolean
-  role: UserRole | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    authenticated: boolean
+    role: UserRole | null
+    /**
+     * 页面容器是否放宽（首页 1200px）。头部容器必须与 main 的容器一致，
+     * 否则两者左边缘会错开——1440px 视口下 1200 与 720 的差是 232px。
+     */
+    wide?: boolean
+  }>(),
+  { wide: false },
+)
 
 const { roleLabel } = useUserLabels()
 
@@ -20,7 +28,10 @@ const emit = defineEmits<{ 'sign-out': [] }>()
 
 <template>
   <header class="sticky top-0 z-50 border-b border-line bg-surface-glass backdrop-blur">
-    <div class="ql-shell flex h-16 items-center gap-3 max-sm:h-14">
+    <div
+      class="flex h-16 items-center gap-3 max-sm:h-14"
+      :class="props.wide ? 'ql-shell' : 'ql-container'"
+    >
       <RouterLink class="flex shrink-0 items-center gap-2.5" to="/">
         <span
           class="inline-flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-deep text-lg font-bold text-white max-sm:size-9 max-sm:text-base"

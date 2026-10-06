@@ -29,4 +29,19 @@ describe('AppHeader', () => {
     await wrapper.get('button').trigger('click')
     expect(wrapper.emitted('sign-out')).toHaveLength(1)
   })
+
+  it('头部容器宽度跟随页面：默认 720px，wide 时 1200px', () => {
+    // 头部与 main 的容器必须一致，否则 1440px 视口下两者左边缘会错开 232px
+    const narrow = mount(AppHeader, {
+      props: { authenticated: false, role: null },
+      global: { stubs: { RouterLink: routerLinkStub } },
+    })
+    expect(narrow.get('header > div').classes()).toContain('ql-container')
+
+    const wide = mount(AppHeader, {
+      props: { authenticated: false, role: null, wide: true },
+      global: { stubs: { RouterLink: routerLinkStub } },
+    })
+    expect(wide.get('header > div').classes()).toContain('ql-shell')
+  })
 })
