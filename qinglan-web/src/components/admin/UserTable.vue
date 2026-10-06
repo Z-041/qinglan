@@ -1,0 +1,79 @@
+<script setup lang="ts">
+import { useUserLabels } from '@/composables/useUserLabels'
+import type { AdminUserItem } from '@/types/admin'
+
+const props = defineProps<{ items: AdminUserItem[]; loading?: boolean }>()
+
+const emit = defineEmits<{
+  ban: [item: AdminUserItem]
+  unban: [item: AdminUserItem]
+  credit: [item: AdminUserItem]
+}>()
+
+const { roleLabel, statusLabel } = useUserLabels()
+
+function dateText(value: string | null): string {
+  return value ? new Date(value).toLocaleString() : '—'
+}
+</script>
+
+<template>
+  <!-- 不渲染 id 列（决策 6 / 不变量 #3）：行定位靠注册时间 + 角色 + 状态 + 信用分，
+       操作按钮隐式携带 id -->
+  <table class="w-full border-collapse text-sm">
+    <thead>
+      <tr class="border-b border-line text-left text-xs text-muted">
+        <th class="px-3 py-2.5 font-medium">注册时间</th>
+        <th class="px-3 py-2.5 font-medium">角色</th>
+        <th class="px-3 py-2.5 font-medium">状态</th>
+        <th class="px-3 py-2.5 font-medium">信用分</th>
+        <th class="px-3 py-2.5 font-medium">封禁至</th>
+        <th class="px-3 py-2.5 font-medium">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- key 用 id 只为稳定复用 DOM，该数字不渲染到界面上 -->
+      <tr v-for="row in props.items" :key="row.id" class="border-b border-line last:border-0">
+        <td class="px-3 py-3">{{ dateText(row.createdAt) }}</td>
+        <td class="px-3 py-3">{{ roleLabel(row.role) }}</td>
+        <td class="px-3 py-3" :class="row.status === 'ACTIVE' ? '' : 'font-medium text-danger-deep'">
+          {{ statusLabel(row.status) }}
+        </td>
+        <td class="px-3 py-3">{{ row.creditScore }}</td>
+        <td class="px-3 py-3">{{ dateText(row.bannedUntil) }}</td>
+        <td class="px-3 py-3">
+          <div class="flex gap-2">
+            <button
+              v-if="row.status === 'ACTIVE'"
+              type="button"
+              class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-danger hover:text-danger-deep"
+              @click="emit('ban', row)"
+            >
+              封禁
+            </button>
+            <button
+              v-else
+              type="button"
+              class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-primary hover:text-primary-deep"
+              @click="emit('unban', row)"
+            >
+              解封
+            </button>
+            <button
+              type="button"
+              class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-primary hover:text-primary-deep"
+              @click="emit('credit', row)"
+            >
+              调分
+            </button>
+          </div>
+        </td>
+      </tr>
+      <tr v-if="!props.items.length">
+        <td colspan="6" class="px-3 py-10 text-center text-sm text-muted">
+          {{ props.loading ? '加载中…' : '没有符合条件的用户' }}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</template>

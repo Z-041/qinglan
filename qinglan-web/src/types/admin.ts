@@ -54,3 +54,22 @@ export interface CreditAdjustPayload {
 
 /** 用户列表的一行就是既有 UserProfileResponse，不另造同字段类型 */
 export type AdminUserItem = UserProfile
+
+/**
+ * 用户管理筛选表单的状态。
+ *
+ * 表单控件绑的是字符串：空串统一表示「不限」。规范化集中交给
+ * `useUserManage` 的 `toQuery`，视图与 composable 不各转一遍。
+ */
+export interface UserFilterState {
+  /** 空串 = 不限 */
+  status: UserStatus | ''
+  /** 空串 = 不限 */
+  role: UserRole | ''
+  /** 空串 = 不限；输入为字符串，提交时转数字 */
+  minCredit: string
+  maxCredit: string
+  /** datetime-local 的值（本地时间，形如 2026-10-01T08:00），空串 = 不限 */
+  createdFrom: string
+  createdTo: string
+}

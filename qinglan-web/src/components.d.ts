@@ -11,12 +11,16 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AppealReviewDialog: typeof import('./components/admin/AppealReviewDialog.vue')['default']
+    AppealTable: typeof import('./components/admin/AppealTable.vue')['default']
     AppHeader: typeof import('./components/AppHeader.vue')['default']
+    BanUserDialog: typeof import('./components/admin/BanUserDialog.vue')['default']
     BaseButton: typeof import('./components/base/BaseButton.vue')['default']
     BaseCard: typeof import('./components/base/BaseCard.vue')['default']
     BaseInput: typeof import('./components/base/BaseInput.vue')['default']
     BaseTextarea: typeof import('./components/base/BaseTextarea.vue')['default']
     CommentItem: typeof import('./components/CommentItem.vue')['default']
+    CreditAdjustDialog: typeof import('./components/admin/CreditAdjustDialog.vue')['default']
     DismissReportsDialog: typeof import('./components/admin/DismissReportsDialog.vue')['default']
     ElConfigProvider: typeof import('element-plus/es')['ElConfigProvider']
     ElDialog: typeof import('element-plus/es')['ElDialog']
@@ -33,5 +37,6 @@ declare module 'vue' {
     TakeDownDialog: typeof import('./components/admin/TakeDownDialog.vue')['default']
     ToastHost: typeof import('./components/ToastHost.vue')['default']
     TopicFilter: typeof import('./components/TopicFilter.vue')['default']
+    UserTable: typeof import('./components/admin/UserTable.vue')['default']
   }
 }
