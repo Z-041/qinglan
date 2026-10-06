@@ -70,10 +70,10 @@ describe('toQuery', () => {
   })
 
   it('筛选值由输入事件写入（恒为 string）时仍解析为数字，不因绑定被改回 v-model 而失灵', () => {
-    const query = toQuery({ ...createEmptyFilters(), minCredit: '110', maxCredit: '200' }, null)
+    const query = toQuery({ ...createEmptyFilters(), minCredit: '60', maxCredit: '100' }, null)
 
-    expect(query.minCredit).toBe(110)
-    expect(query.maxCredit).toBe(200)
+    expect(query.minCredit).toBe(60)
+    expect(query.maxCredit).toBe(100)
   })
 })
 
