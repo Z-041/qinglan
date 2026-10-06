@@ -11,6 +11,9 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AnnouncementFormDialog: typeof import('./components/admin/AnnouncementFormDialog.vue')['default']
+    AnnouncementModal: typeof import('./components/AnnouncementModal.vue')['default']
+    AnnouncementTable: typeof import('./components/admin/AnnouncementTable.vue')['default']
     AppealReviewDialog: typeof import('./components/admin/AppealReviewDialog.vue')['default']
     AppealTable: typeof import('./components/admin/AppealTable.vue')['default']
     AppHeader: typeof import('./components/AppHeader.vue')['default']
@@ -28,6 +31,7 @@ declare module 'vue' {
     FormField: typeof import('./components/base/FormField.vue')['default']
     HomeSidebar: typeof import('./components/HomeSidebar.vue')['default']
     ImagePicker: typeof import('./components/ImagePicker.vue')['default']
+    NotificationBell: typeof import('./components/NotificationBell.vue')['default']
     PostCard: typeof import('./components/PostCard.vue')['default']
     QueueTable: typeof import('./components/admin/QueueTable.vue')['default']
     ReportDialog: typeof import('./components/ReportDialog.vue')['default']

@@ -1,6 +1,13 @@
 import { httpGet, httpPost } from './http'
 
-import type { AdminStats, AdminUserQuery, BanUserPayload, CreditAdjustPayload } from '@/types/admin'
+import type {
+  AdminAnnouncementItem,
+  AdminStats,
+  AdminUserQuery,
+  BanUserPayload,
+  CreateAnnouncementPayload,
+  CreditAdjustPayload,
+} from '@/types/admin'
 import type { CursorPage } from '@/types/api'
 import type { ReasonPayload } from '@/types/review'
 import type { UserProfile } from '@/types/user'
@@ -42,4 +49,26 @@ export function unbanUser(userId: number, payload: ReasonPayload): Promise<void>
 
 export function adjustCredit(userId: number, payload: CreditAdjustPayload): Promise<void> {
   return httpPost<void>(`/admin/users/${userId}/credit`, payload)
+}
+
+/** 公告列表：游标分页，cursor 为空表示第一页 */
+export function fetchAdminAnnouncements(
+  cursor: string | null = null,
+): Promise<CursorPage<AdminAnnouncementItem>> {
+  return httpGet<CursorPage<AdminAnnouncementItem>>('/admin/announcements', { cursor })
+}
+
+/** 新建公告草稿（ADMIN|SUPER_ADMIN 均可） */
+export function createAnnouncement(payload: CreateAnnouncementPayload): Promise<AdminAnnouncementItem> {
+  return httpPost<AdminAnnouncementItem>('/admin/announcements', payload)
+}
+
+/** 发布公告（仅 SUPER_ADMIN）；面向全员的强制弹窗入口，写审计（不变量 #7） */
+export function publishAnnouncement(id: number): Promise<void> {
+  return httpPost<void>(`/admin/announcements/${id}/publish`)
+}
+
+/** 撤回公告（仅 SUPER_ADMIN）；撤回后不可再发布（决策 D7） */
+export function revokeAnnouncement(id: number): Promise<void> {
+  return httpPost<void>(`/admin/announcements/${id}/revoke`)
 }

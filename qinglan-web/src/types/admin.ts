@@ -1,4 +1,11 @@
+import type { AnnouncementLevel } from './announcement'
 import type { UserProfile, UserRole, UserStatus } from './user'
+
+/**
+ * 公告等级直接复用学生端公告的类型（单一来源），管理端不再另造同枚举。
+ * 决策 D14 相关的 DTO 差异只在字段形态，枚举取值两边一致。
+ */
+export type { AnnouncementLevel }
 
 /** 与后端 user/dto/AdminUserQuery 一一对应：全部可选且可组合，游标原样回传 */
 export interface AdminUserQuery {
@@ -72,4 +79,46 @@ export interface UserFilterState {
   /** datetime-local 的值（本地时间，形如 2026-10-01T08:00），空串 = 不限 */
   createdFrom: string
   createdTo: string
+}
+
+/** 与后端 announcement/entity/AnnouncementStatus 一致（P4 决策 D7：撤回后不可再发布） */
+export type AnnouncementStatus = 'DRAFT' | 'PUBLISHED' | 'REVOKED'
+
+/**
+ * 与后端 announcement/dto/AdminAnnouncementResponse 一一对应。
+ *
+ * 生效区间为 `[startAt, endAt]`，`endAt` 为 null 表示长期有效。
+ * `minReadSeconds` / `requireScrollToEnd` / `requireConfirm` 是强制阅读的三个条件（不变量 #6）。
+ */
+export interface AdminAnnouncementItem {
+  id: number
+  title: string
+  level: AnnouncementLevel
+  status: AnnouncementStatus
+  startAt: string
+  endAt: string | null
+  minReadSeconds: number
+  requireScrollToEnd: boolean
+  requireConfirm: boolean
+  publishedAt: string | null
+  revokedAt: string | null
+  createdAt: string
+}
+
+/**
+ * 与后端 announcement/dto/CreateAnnouncementRequest 一一对应。
+ *
+ * `startAt` / `endAt` 是 ISO-8601 UTC 字符串（datetime-local 在提交前转换）。
+ * `minReadSeconds` 留空即 `null`，由后端使用默认值；`supersedesId` 用于「更正走新建」（决策 D7）。
+ */
+export interface CreateAnnouncementPayload {
+  title: string
+  content: string
+  level: AnnouncementLevel
+  startAt: string
+  endAt?: string | null
+  minReadSeconds?: number | null
+  requireScrollToEnd: boolean
+  requireConfirm: boolean
+  supersedesId?: number | null
 }

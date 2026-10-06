@@ -104,6 +104,11 @@ const router = createRouter({
           name: 'admin-users',
           component: () => import('@/views/admin/UserManageView.vue'),
         },
+        {
+          path: 'announcements',
+          name: 'admin-announcements',
+          component: () => import('@/views/admin/AnnouncementManageView.vue'),
+        },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

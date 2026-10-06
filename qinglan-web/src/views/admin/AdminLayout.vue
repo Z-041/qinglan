@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { name: 'admin-review-queue', label: '审核队列' },
   { name: 'admin-appeals', label: '申诉复审' },
   { name: 'admin-users', label: '用户管理' },
+  { name: 'admin-announcements', label: '公告管理' },
 ] as const
 
 const router = useRouter()
