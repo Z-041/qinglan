@@ -21,6 +21,20 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
   unauthorizedHandler = handler
 }
 
+/** 收到 428（强制阅读前置条件未满足）时的处理回调，由应用入口注入 */
+type PreconditionRequiredHandler = (data: unknown) => void
+
+let preconditionRequiredHandler: PreconditionRequiredHandler | null = null
+
+/**
+ * 注册 428 处理器：由 main.ts 注入「把携带的公告快照开成弹窗」。
+ *
+ * 与 401 同一手法，拦截器不直接 import composable，避免循环依赖（AGENTS.md 第七章）。
+ */
+export function setPreconditionRequiredHandler(handler: PreconditionRequiredHandler | null): void {
+  preconditionRequiredHandler = handler
+}
+
 /**
  * 承载后端错误码的异常，便于调用方按 code 分支处理。
  *
@@ -64,7 +78,13 @@ instance.interceptors.response.use(
       unauthorizedHandler?.()
     }
 
-    pushToast(message, 'error')
+    if (status === 428) {
+      // 强制阅读：把响应体携带的公告快照交给公告弹窗直接渲染，且**不再 toast**——
+      // 弹窗本身就是提示，再 toast 会出现「弹窗 + 提示」两遍（AGENTS.md 第七章）。
+      preconditionRequiredHandler?.(error.response?.data?.data)
+    } else {
+      pushToast(message, 'error')
+    }
 
     return Promise.reject(new ApiError(code, message, status))
   },

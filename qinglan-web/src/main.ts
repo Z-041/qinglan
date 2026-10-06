@@ -6,9 +6,11 @@ import 'virtual:uno.css'
 import './styles/main.css'
 
 import App from './App.vue'
-import { setUnauthorizedHandler } from './api/http'
+import { setPreconditionRequiredHandler, setUnauthorizedHandler } from './api/http'
+import { openFromPrecondition } from './composables/useAnnouncement'
 import router from './router'
 import { useUserStore } from './stores/user'
+import type { PendingAnnouncement } from './types/announcement'
 
 const pinia = createPinia()
 const app = createApp(App).use(pinia).use(router)
@@ -29,6 +31,11 @@ setUnauthorizedHandler(() => {
       query: adminArea ? { redirect: current.fullPath } : {},
     })
   }
+})
+
+// 428（存在未读紧急公告）的唯一出口：直接用手上这条公告开弹窗，不再多发一次请求（计划 D15）。
+setPreconditionRequiredHandler((data) => {
+  openFromPrecondition(data as PendingAnnouncement)
 })
 
 app.mount('#app')
