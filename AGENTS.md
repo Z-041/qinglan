@@ -123,7 +123,7 @@ Controller  →  Service  →  Repository  →  DB
 | `qinglan-web/**/*.vue`、`**/*.ts`、`uno.config.ts` | `vue-best-practices` | `<script setup lang="ts">`、`ref` 优先于 `reactive`、props down / events up、`computed` 派生不做副作用、样式一律走 UnoCSS 原子类 |
 | SQL、Flyway 迁移脚本 | （本项目 MySQL 8，无对应 Skill） | 迁移脚本必须可回滚、不得改写已上线脚本；加索引前先 `EXPLAIN` 验证；大表 DDL 放低峰期执行 |
 
-Skill 位于 `coding-skills/`，本项目实际加载 `java-springboot` 与 `vue-best-practices` 两个。
+Skill 由**全局安装**提供（仓库内不再保留 `coding-skills/` 副本），本项目实际加载 `java-springboot` 与 `vue-best-practices` 两个。
 
 ---
 
