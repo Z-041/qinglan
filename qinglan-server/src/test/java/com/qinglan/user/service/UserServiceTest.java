@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.RecordComponent;
 import java.time.Duration;
@@ -135,6 +136,41 @@ class UserServiceTest {
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.USER_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("B：封禁期内写操作被拒——令牌无状态，封禁必须在每个写入口重查")
+    void shouldRejectBannedUserOnWritePath() {
+        User user = User.register("emailHash", "studentIdHash", "enc", "salt");
+        user.banUntil(Instant.now().plus(Duration.ofDays(3)));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> userService.requireUsableById(1L))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.USER_BANNED);
+    }
+
+    @Test
+    @DisplayName("B：黑名单用户即使封禁已过期也拒绝写操作")
+    void shouldRejectBlacklistedUserOnWritePath() {
+        User user = User.register("emailHash", "studentIdHash", "enc", "salt");
+        ReflectionTestUtils.setField(user, "status", UserStatus.BLACKLISTED);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> userService.requireUsableById(1L))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.USER_BANNED);
+    }
+
+    @Test
+    @DisplayName("B：正常账号通过写入口校验")
+    void shouldAllowActiveUserOnWritePath() {
+        User user = User.register("emailHash", "studentIdHash", "enc", "salt");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThat(userService.requireUsableById(1L)).isSameAs(user);
     }
 
     @Test

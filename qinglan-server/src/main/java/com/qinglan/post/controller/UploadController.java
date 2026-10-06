@@ -1,5 +1,6 @@
 package com.qinglan.post.controller;
 
+import com.qinglan.common.security.CurrentUser;
 import com.qinglan.common.web.ApiResponse;
 import com.qinglan.post.dto.UploadedImageResponse;
 import com.qinglan.post.service.ImageUploadService;
@@ -24,6 +25,6 @@ public class UploadController {
 
     @PostMapping("/images")
     public ApiResponse<UploadedImageResponse> uploadImage(@RequestParam("file") MultipartFile file) {
-        return ApiResponse.ok(imageUploadService.upload(file));
+        return ApiResponse.ok(imageUploadService.upload(CurrentUser.requireUserId(), file));
     }
 }

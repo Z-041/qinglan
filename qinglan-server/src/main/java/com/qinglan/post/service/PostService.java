@@ -8,6 +8,8 @@ import com.qinglan.common.interaction.LikeRecord;
 import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeStateResponse;
 import com.qinglan.common.interaction.LikeTargetType;
+import com.qinglan.common.moderation.ContentModerator;
+import com.qinglan.common.moderation.ModerationResult;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.config.PostProperties;
@@ -74,13 +76,14 @@ public class PostService {
     private final UserService userService;
     private final AuditLogService auditLogService;
     private final PostProperties postProperties;
+    private final ContentModerator contentModerator;
 
     /**
      * 发布。落 Pending 而非直接可见——主帖先审后发，是设计方案第一章的红线 2。
      */
     @Transactional
     public PostDetailResponse create(Long authorId, CreatePostRequest request) {
-        User author = userService.requireById(authorId);
+        User author = userService.requireUsableById(authorId);
         assertCanPost(author);
         Topic topic = requireEnabledTopic(request.topicId());
 
@@ -88,6 +91,7 @@ public class PostService {
         if (topic.isRequiresContact() && contact == null) {
             throw new BizException(ErrorCode.CONTACT_REQUIRED);
         }
+        requireAllowedContent(request.content());
         List<String> images = validateImageUrls(request.images());
 
         Post post = Post.draft(authorId, topic.getId(), request.content().trim(), contact);
@@ -172,6 +176,7 @@ public class PostService {
     /** 点赞，幂等：已点过则不重复写入，直接返回当前状态 */
     @Transactional
     public LikeStateResponse like(Long postId, Long userId) {
+        userService.requireUsableById(userId);
         requireVisiblePost(postId, userId);
         if (likeRepository.findByTargetTypeAndTargetIdAndUserId(LikeTargetType.POST, postId, userId).isEmpty()) {
             // uk_like_target_user 是并发下的最终防线：重复插入会被数据库拒绝，不会产生第二条
@@ -183,6 +188,7 @@ public class PostService {
     /** 取消点赞，幂等 */
     @Transactional
     public LikeStateResponse unlike(Long postId, Long userId) {
+        userService.requireUsableById(userId);
         requireVisiblePost(postId, userId);
         likeRepository.findByTargetTypeAndTargetIdAndUserId(LikeTargetType.POST, postId, userId)
                 .ifPresent(likeRepository::delete);
@@ -218,12 +224,21 @@ public class PostService {
 
     // ---------------------------------------------------------------- 内部方法
 
+    /**
+     * 封禁/黑名单已在 {@link UserService#requireUsableById} 统一拦截，这里只看发布门槛。
+     */
     private void assertCanPost(User author) {
-        if (author.isBannedAt(Instant.now())) {
-            throw new BizException(ErrorCode.USER_BANNED);
-        }
         if (author.getCreditScore() < postProperties.minCreditToPost()) {
             throw new BizException(ErrorCode.CREDIT_TOO_LOW);
+        }
+    }
+
+    /** 内容审核端口：P1 默认放行，接入内容安全服务后此处即为拦截点 */
+    private void requireAllowedContent(String content) {
+        ModerationResult result = contentModerator.moderate(content);
+        if (!result.allowed()) {
+            log.info("内容审核未通过，reason={}", result.reason());
+            throw new BizException(ErrorCode.CONTENT_REJECTED);
         }
     }
 

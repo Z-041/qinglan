@@ -11,6 +11,7 @@ import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.interaction.LikeCount;
 import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeTargetType;
+import com.qinglan.common.moderation.ModerationResult;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
@@ -68,15 +69,15 @@ class CommentServiceTest {
     @BeforeEach
     void setUp() {
         commentService = new CommentService(commentRepository, postRepository, likeRepository,
-                anonymousCodeService, userService);
+                anonymousCodeService, userService, content -> ModerationResult.pass());
     }
 
     @Test
-    @DisplayName("发表一级评论：代号与帖子同源派生，并让 post.comment_count 加一")
+    @DisplayName("发表一级评论：代号与帖子同源派生，并让 post.comment_count 原子加一")
     void shouldCreateRootCommentAndBumpCount() {
         Post post = visiblePost();
         when(postRepository.findById(POST_ID)).thenReturn(Optional.of(post));
-        when(userService.requireById(AUTHOR_ID))
+        when(userService.requireUsableById(AUTHOR_ID))
                 .thenReturn(User.register("emailHash", "studentIdHash", "enc", SALT));
         when(anonymousCodeService.deriveCode(POST_ID, AUTHOR_ID, SALT)).thenReturn("青竹#0f0f");
         when(commentRepository.save(any(Comment.class))).thenAnswer(invocation -> {
@@ -93,7 +94,7 @@ class CommentServiceTest {
         assertThat(response.anonymousCode()).isEqualTo("青竹#0f0f");
         assertThat(response.mine()).isTrue();
         assertThat(response.replies()).isEmpty();
-        assertThat(post.getCommentCount()).isEqualTo(1);
+        verify(postRepository).adjustCommentCount(POST_ID, 1);
     }
 
     @Test
@@ -135,23 +136,19 @@ class CommentServiceTest {
     }
 
     @Test
-    @DisplayName("删除一级评论时连同其回复一并移除，并按实际条数扣减计数")
+    @DisplayName("删除一级评论时连同其回复一并移除，并按实际条数原子扣减计数")
     void shouldCascadeRemoveRepliesAndDecreaseCount() {
-        Post post = visiblePost();
-        post.increaseCommentCount();
-        post.increaseCommentCount();
-        post.increaseCommentCount();
         when(commentRepository.findById(ROOT_ID))
                 .thenReturn(Optional.of(comment(ROOT_ID, POST_ID, null, AUTHOR_ID)));
         when(commentRepository.findByParentIdInAndStatusOrderByCreatedAtAsc(List.of(ROOT_ID), CommentStatus.PUBLISHED))
                 .thenReturn(List.of(
                         comment(REPLY_ID, POST_ID, ROOT_ID, 8L),
                         comment(REPLY_ID + 1, POST_ID, ROOT_ID, 9L)));
-        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(post));
 
         commentService.delete(ROOT_ID, AUTHOR_ID);
 
-        assertThat(post.getCommentCount()).isZero();
+        // 一级评论 + 两条回复，共扣 3
+        verify(postRepository).adjustCommentCount(POST_ID, -3);
     }
 
     @Test
@@ -161,7 +158,6 @@ class CommentServiceTest {
                 .thenReturn(Optional.of(comment(ROOT_ID, POST_ID, null, AUTHOR_ID)));
         when(commentRepository.findByParentIdInAndStatusOrderByCreatedAtAsc(List.of(ROOT_ID), CommentStatus.PUBLISHED))
                 .thenReturn(List.of(comment(REPLY_ID, POST_ID, ROOT_ID, 8L)));
-        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
 
         commentService.delete(ROOT_ID, AUTHOR_ID);
 
@@ -178,12 +174,72 @@ class CommentServiceTest {
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.NOT_CONTENT_OWNER);
-        verify(postRepository, never()).findById(any());
+        verifyNoInteractions(postRepository);
+    }
+
+    @Test
+    @DisplayName("A：帖子不可见时评论列表按「帖子不存在」处理，不泄露下架帖的评论")
+    void shouldRejectListingCommentsOfInvisiblePost() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(pendingPost()));
+
+        assertThatThrownBy(() -> commentService.list(POST_ID, Viewer.anonymous()))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.POST_NOT_FOUND);
+        verifyNoInteractions(commentRepository);
+    }
+
+    @Test
+    @DisplayName("A：点赞不属于可见帖子的评论被拒（越权写）")
+    void shouldRejectLikingCommentOfInvisiblePost() {
+        long strangerId = 8L;
+        when(userService.requireUsableById(strangerId))
+                .thenReturn(User.register("emailHash", "studentIdHash", "enc", SALT));
+        when(commentRepository.findById(ROOT_ID))
+                .thenReturn(Optional.of(comment(ROOT_ID, POST_ID, null, AUTHOR_ID)));
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(pendingPost()));
+
+        assertThatThrownBy(() -> commentService.like(ROOT_ID, strangerId))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.POST_NOT_FOUND);
+        verify(likeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("B：封禁用户不能发表评论")
+    void shouldRejectCommentFromBannedUser() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
+        when(userService.requireUsableById(AUTHOR_ID))
+                .thenThrow(new BizException(ErrorCode.USER_BANNED));
+
+        assertThatThrownBy(() -> commentService.create(POST_ID, AUTHOR_ID, new CreateCommentRequest("评论", null)))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.USER_BANNED);
+        verify(commentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("D：内容审核端口已接入评论链路，判定不通过即拒绝")
+    void shouldRejectCommentWhenModeratorBlocks() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
+        when(userService.requireUsableById(AUTHOR_ID))
+                .thenReturn(User.register("emailHash", "studentIdHash", "enc", SALT));
+        CommentService strict = new CommentService(commentRepository, postRepository, likeRepository,
+                anonymousCodeService, userService, content -> ModerationResult.reject("测试拦截"));
+
+        assertThatThrownBy(() -> strict.create(POST_ID, AUTHOR_ID, new CreateCommentRequest("评论", null)))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.CONTENT_REJECTED);
+        verify(commentRepository, never()).save(any());
     }
 
     @Test
     @DisplayName("评论列表：一级评论带出回复，并批量装配点赞数（游客没有 liked 状态）")
     void shouldAssembleRepliesAndLikes() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
         when(commentRepository.findByPostIdAndParentIdIsNullAndStatusOrderByCreatedAtAsc(
                 POST_ID, CommentStatus.PUBLISHED))
                 .thenReturn(List.of(comment(ROOT_ID, POST_ID, null, AUTHOR_ID)));
@@ -207,6 +263,7 @@ class CommentServiceTest {
     @Test
     @DisplayName("帖子没有评论时不查回复表，直接返回空列表")
     void shouldReturnEmptyWhenNoComments() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
         when(commentRepository.findByPostIdAndParentIdIsNullAndStatusOrderByCreatedAtAsc(
                 POST_ID, CommentStatus.PUBLISHED))
                 .thenReturn(List.of());
@@ -219,6 +276,14 @@ class CommentServiceTest {
 
     private static Post visiblePost() {
         return TestFixtures.approvedPost(POST_ID, AUTHOR_ID, 3L, null);
+    }
+
+    /** 未过审的帖子：除作者外一律不可见 */
+    private static Post pendingPost() {
+        Post pending = Post.draft(AUTHOR_ID, 3L, "待审", null);
+        pending.submit(com.qinglan.post.entity.RiskLevel.LOW);
+        TestFixtures.setId(pending, POST_ID);
+        return pending;
     }
 
     private static Comment comment(long id, long postId, Long parentId, long authorId) {

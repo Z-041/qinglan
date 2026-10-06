@@ -153,16 +153,6 @@ public class Post extends BaseEntity {
         this.riskScore = riskScore;
     }
 
-    /** 由 comment 模块在发布评论时调用 */
-    public void increaseCommentCount() {
-        this.commentCount++;
-    }
-
-    /** 由 comment 模块在删除评论时调用，兜底不低于 0 */
-    public void decreaseCommentCount() {
-        this.commentCount = Math.max(0, this.commentCount - 1);
-    }
-
     /**
      * 帖子的可见性：审核通过后对所有人可见，其余状态只有作者本人能看到
      * （设计方案：下架/驳回后作者可见、他人不可见）。

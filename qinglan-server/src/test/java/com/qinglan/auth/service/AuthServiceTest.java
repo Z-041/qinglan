@@ -26,6 +26,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 /**
@@ -92,9 +93,10 @@ class AuthServiceTest {
     @DisplayName("被封禁用户即使邮箱验证通过也拒绝登录")
     void shouldRejectBannedUser() {
         User user = existingUser(7L);
-        user.banUntil(Instant.now().plus(Duration.ofDays(3)));
         when(emailVerificationService.verifyCode(CAMPUS_EMAIL, "123456")).thenReturn(EMAIL_HASH);
         when(userService.findByEmailHash(EMAIL_HASH)).thenReturn(Optional.of(user));
+        // 判定规则收敛在 UserService（写入口与登录共用同一处），此处只验证编排确实调用了它
+        doThrow(new BizException(ErrorCode.USER_BANNED)).when(userService).assertUsable(user);
 
         assertThatThrownBy(() -> authService.verifyEmail(CAMPUS_EMAIL, "123456"))
                 .isInstanceOf(BizException.class)

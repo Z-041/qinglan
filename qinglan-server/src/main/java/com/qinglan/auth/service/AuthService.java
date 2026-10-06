@@ -7,12 +7,10 @@ import com.qinglan.auth.security.JwtService;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.user.entity.User;
-import com.qinglan.user.entity.UserStatus;
 import com.qinglan.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -39,7 +37,7 @@ public class AuthService {
         Optional<User> existing = userService.findByEmailHash(emailHash);
         if (existing.isPresent()) {
             User user = existing.get();
-            assertUsable(user);
+            userService.assertUsable(user);
             return new VerifyEmailResponse(
                     jwtService.issueAccessToken(user.getId(), user.getRole()),
                     null,
@@ -60,11 +58,5 @@ public class AuthService {
                 jwtService.accessTokenTtlSeconds(),
                 userService.toProfile(user)
         );
-    }
-
-    private void assertUsable(User user) {
-        if (user.getStatus() == UserStatus.BLACKLISTED || user.isBannedAt(Instant.now())) {
-            throw new BizException(ErrorCode.USER_BANNED);
-        }
     }
 }

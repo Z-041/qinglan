@@ -13,9 +13,12 @@ import com.qinglan.common.interaction.LikeRecord;
 import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeStateResponse;
 import com.qinglan.common.interaction.LikeTargetType;
+import com.qinglan.common.moderation.ContentModerator;
+import com.qinglan.common.moderation.ModerationResult;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
+import com.qinglan.user.entity.User;
 import com.qinglan.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -50,12 +53,16 @@ public class CommentService {
     private final LikeRepository likeRepository;
     private final AnonymousCodeService anonymousCodeService;
     private final UserService userService;
+    private final ContentModerator contentModerator;
 
     /**
      * 评论列表：一次取出该帖全部一级评论与其回复，再批量装配点赞，避免评论树的 N+1。
+     *
+     * <p>先校验帖子可见性：否则可以绕过帖子详情、直接读已下架帖子的评论。</p>
      */
     @Transactional(readOnly = true)
     public List<CommentResponse> list(Long postId, Viewer viewer) {
+        requireVisiblePost(postId, viewer.userId());
         List<Comment> roots = commentRepository
                 .findByPostIdAndParentIdIsNullAndStatusOrderByCreatedAtAsc(postId, CommentStatus.PUBLISHED);
         if (roots.isEmpty()) {
@@ -86,19 +93,21 @@ public class CommentService {
 
     @Transactional
     public CommentResponse create(Long postId, Long authorId, CreateCommentRequest request) {
-        Post post = requireVisiblePost(postId, authorId);
+        requireVisiblePost(postId, authorId);
         Long parentId = request.parentId();
         if (parentId != null) {
             requireReplyableRoot(parentId, postId);
         }
-        var author = userService.requireById(authorId);
+        User author = userService.requireUsableById(authorId);
+        requireAllowedContent(request.content());
 
         Comment comment = Comment.create(postId, authorId, parentId, request.content().trim());
         Comment saved = commentRepository.save(comment);
         // 与主帖同源派生：同一作者在同一帖下的评论代号与帖子代号一致（不变量 #1）
         saved.assignAnonymousCode(
                 anonymousCodeService.deriveCode(postId, authorId, author.getAnonymousSalt()));
-        post.increaseCommentCount();
+        // 原子自增：读-改-写会在并发下丢更新（C）
+        postRepository.adjustCommentCount(postId, 1);
 
         log.info("用户发表评论 commentId={} postId={} parentId={}", saved.getId(), postId, parentId);
         return toResponse(saved, List.of(), Map.of(), Set.of(), new Viewer(authorId));
@@ -134,12 +143,7 @@ public class CommentService {
                 removedIds.add(reply.getId());
             }
         }
-        postRepository.findById(comment.getPostId())
-                .ifPresent(post -> {
-                    for (int index = 0; index < removedIds.size(); index++) {
-                        post.decreaseCommentCount();
-                    }
-                });
+        postRepository.adjustCommentCount(comment.getPostId(), -removedIds.size());
         likeRepository.deleteByTargets(LikeTargetType.COMMENT, removedIds);
         log.info("删除评论 commentId={} 连同回复共 {} 条", commentId, removedIds.size());
     }
@@ -147,7 +151,7 @@ public class CommentService {
     /** 给评论点赞，幂等 */
     @Transactional
     public LikeStateResponse like(Long commentId, Long userId) {
-        requirePublishedComment(commentId);
+        requireVisibleComment(commentId, userId);
         if (likeRepository.findByTargetTypeAndTargetIdAndUserId(
                 LikeTargetType.COMMENT, commentId, userId).isEmpty()) {
             likeRepository.save(LikeRecord.of(LikeTargetType.COMMENT, commentId, userId));
@@ -158,7 +162,7 @@ public class CommentService {
     /** 取消评论点赞，幂等 */
     @Transactional
     public LikeStateResponse unlike(Long commentId, Long userId) {
-        requirePublishedComment(commentId);
+        requireVisibleComment(commentId, userId);
         likeRepository.findByTargetTypeAndTargetIdAndUserId(LikeTargetType.COMMENT, commentId, userId)
                 .ifPresent(likeRepository::delete);
         return likeState(commentId, userId);
@@ -185,10 +189,25 @@ public class CommentService {
         }
     }
 
-    private void requirePublishedComment(Long commentId) {
-        commentRepository.findById(commentId)
+    /**
+     * 点赞/取消点赞的前置校验：账号可用、评论存在且未移除、且其所属帖子对当前用户可见。
+     * 缺了最后一条，已下架帖子的评论仍可被点赞（越权写）。
+     */
+    private void requireVisibleComment(Long commentId, Long userId) {
+        userService.requireUsableById(userId);
+        Comment comment = commentRepository.findById(commentId)
                 .filter(candidate -> !candidate.isRemoved())
                 .orElseThrow(() -> new BizException(ErrorCode.COMMENT_NOT_FOUND));
+        requireVisiblePost(comment.getPostId(), userId);
+    }
+
+    /** 内容审核端口：P1 默认放行，接入内容安全服务后此处即为拦截点 */
+    private void requireAllowedContent(String content) {
+        ModerationResult result = contentModerator.moderate(content);
+        if (!result.allowed()) {
+            log.info("评论内容审核未通过，reason={}", result.reason());
+            throw new BizException(ErrorCode.CONTENT_REJECTED);
+        }
     }
 
     private LikeStateResponse likeState(Long commentId, Long userId) {

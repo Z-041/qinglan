@@ -6,6 +6,7 @@ import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeTargetType;
+import com.qinglan.common.moderation.ModerationResult;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.post.config.PostProperties;
 import com.qinglan.post.dto.CreatePostRequest;
@@ -33,8 +34,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.RecordComponent;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -88,7 +87,7 @@ class PostServiceTest {
     void setUp() {
         postService = new PostService(postRepository, postImageRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
-                new PostProperties(60, 9));
+                new PostProperties(60, 9), content -> ModerationResult.pass());
     }
 
     // ------------------------------------------------------------------ 发布
@@ -139,16 +138,32 @@ class PostServiceTest {
     }
 
     @Test
-    @DisplayName("被封禁的账号不允许发帖")
+    @DisplayName("被封禁的账号不允许发帖（写入口统一校验，不依赖令牌是否过期）")
     void shouldRejectWhenBanned() {
-        User author = activeAuthor();
-        author.banUntil(Instant.now().plus(Duration.ofDays(3)));
-        stubAuthor(author);
+        when(userService.requireUsableById(AUTHOR_ID))
+                .thenThrow(new BizException(ErrorCode.USER_BANNED));
 
         assertThatThrownBy(() -> postService.create(AUTHOR_ID, new CreatePostRequest(TOPIC_ID, "正文", null, null)))
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.USER_BANNED);
+    }
+
+    @Test
+    @DisplayName("D：内容审核端口已接入发布链路，判定不通过即拒绝")
+    void shouldRejectWhenModeratorBlocks() {
+        stubAuthor(activeAuthor());
+        when(topicRepository.findById(TOPIC_ID))
+                .thenReturn(Optional.of(TestFixtures.topic(TOPIC_ID, "吐槽", false)));
+        PostService strict = new PostService(postRepository, postImageRepository, topicRepository,
+                likeRepository, anonymousCodeService, userService, auditLogService,
+                new PostProperties(60, 9), content -> ModerationResult.reject("测试拦截"));
+
+        assertThatThrownBy(() -> strict.create(AUTHOR_ID, new CreatePostRequest(TOPIC_ID, "正文", null, null)))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.CONTENT_REJECTED);
+        verifyNoInteractions(postRepository);
     }
 
     @Test
@@ -323,7 +338,7 @@ class PostServiceTest {
     // ------------------------------------------------------------------ 辅助
 
     private void stubAuthor(User author) {
-        when(userService.requireById(AUTHOR_ID)).thenReturn(author);
+        when(userService.requireUsableById(AUTHOR_ID)).thenReturn(author);
     }
 
     private void stubApprovedPost() {

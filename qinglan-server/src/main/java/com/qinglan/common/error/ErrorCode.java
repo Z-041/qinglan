@@ -14,6 +14,7 @@ public enum ErrorCode {
     CONTACT_REQUIRED(HttpStatus.BAD_REQUEST, "QL-400-005", "该话题要求留下联系方式，便于对方联系到你"),
     UPLOAD_INVALID(HttpStatus.BAD_REQUEST, "QL-400-006", "仅支持 JPG / PNG / WebP，单张不超过 5MB"),
     CURSOR_INVALID(HttpStatus.BAD_REQUEST, "QL-400-007", "分页游标不合法"),
+    CONTENT_REJECTED(HttpStatus.BAD_REQUEST, "QL-400-008", "内容暂不符合社区规范，请修改后重试"),
 
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "QL-401-001", "请先完成认证"),
     EMAIL_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "QL-401-002", "邮箱认证凭证无效或已过期"),

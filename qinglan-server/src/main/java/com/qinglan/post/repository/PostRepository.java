@@ -4,6 +4,7 @@ import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -35,4 +36,21 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             @Param("cursor") Long cursor,
             Pageable limit
     );
+
+    /**
+     * 原子调整 {@code comment_count}。
+     *
+     * <p>由 comment 模块在发表/删除评论时调用。不能走实体读-改-写：并发评论时两个事务各自
+     * 读到旧值再写回，会丢更新。{@code case when} 兜住计数不低于 0，与删除时的连带移除对齐。</p>
+     *
+     * <p>{@code clearAutomatically} 是必需的：批量 UPDATE 绕过持久化上下文，同一个事务里
+     * 随后再读帖子（如详情接口）会命中一级缓存拿到旧值。</p>
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update Post p
+            set p.commentCount = case when p.commentCount + :delta < 0 then 0 else p.commentCount + :delta end
+            where p.id = :postId
+            """)
+    int adjustCommentCount(@Param("postId") Long postId, @Param("delta") int delta);
 }

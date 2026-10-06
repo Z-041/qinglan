@@ -5,6 +5,7 @@ import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.storage.ImageType;
 import com.qinglan.common.storage.StorageService;
 import com.qinglan.post.dto.UploadedImageResponse;
+import com.qinglan.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,8 +30,11 @@ public class ImageUploadService {
     private static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
 
     private final StorageService storageService;
+    private final UserService userService;
 
-    public UploadedImageResponse upload(MultipartFile file) {
+    public UploadedImageResponse upload(Long userId, MultipartFile file) {
+        // 上传同样属于写操作：封禁/黑名单期内不得再写入任何内容
+        userService.requireUsableById(userId);
         if (file == null || file.isEmpty()) {
             throw new BizException(ErrorCode.UPLOAD_INVALID);
         }

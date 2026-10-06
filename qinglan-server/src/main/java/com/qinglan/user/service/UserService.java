@@ -8,6 +8,7 @@ import com.qinglan.review.entity.AuditTargetType;
 import com.qinglan.review.service.AuditLogService;
 import com.qinglan.user.dto.UserProfileResponse;
 import com.qinglan.user.entity.User;
+import com.qinglan.user.entity.UserStatus;
 import com.qinglan.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -48,6 +49,26 @@ public class UserService {
     public User requireById(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new BizException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    /**
+     * 写操作入口的统一前置校验：黑名单或封禁期内直接拒绝。
+     *
+     * <p>访问令牌是无状态的（签发后 2 小时内不会失效），封禁不可能靠登录时的检查兜住，
+     * 因此每个写入口（发帖、评论、点赞、上传）都必须重新校验一次。</p>
+     */
+    @Transactional(readOnly = true)
+    public User requireUsableById(Long userId) {
+        User user = requireById(userId);
+        assertUsable(user);
+        return user;
+    }
+
+    /** 判定规则只此一处，供已持有实体的调用方（如登录）复用 */
+    public void assertUsable(User user) {
+        if (user.getStatus() == UserStatus.BLACKLISTED || user.isBannedAt(Instant.now())) {
+            throw new BizException(ErrorCode.USER_BANNED);
+        }
     }
 
     /**

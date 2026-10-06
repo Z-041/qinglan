@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -221,6 +222,33 @@ class PostFlowIntegrationTest {
 
         assertThat(commentLikeRows(rootId)).isZero();
         assertThat(commentLikeRows(replyId)).isZero();
+    }
+
+    @Test
+    @DisplayName("B：封禁即时生效——旧令牌的评论与点赞一律被拒（无状态令牌不会自动失效）")
+    void shouldEnforceBanOnWritePathsImmediately() throws Exception {
+        User author = createStudent(AUTHOR_EMAIL, AUTHOR_STUDENT_ID);
+        User reader = createStudent(READER_EMAIL, READER_STUDENT_ID);
+        long postId = publish(author, CONTACT);
+        approve(postId, reader);
+        // 令牌先签发，随后才封禁：这正是「持旧令牌继续写」的现场
+        String readerHeader = bearer(reader, UserRole.STUDENT);
+        userService.ban(reader.getId(), Duration.ofDays(3), "测试封禁", author.getId());
+
+        mockMvc.perform(post("/api/posts/{id}/comments", postId)
+                        .header("Authorization", readerHeader)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("content", "还能发吗"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-002"));
+
+        mockMvc.perform(post("/api/posts/{id}/like", postId).header("Authorization", readerHeader))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-002"));
+
+        // 只读不受影响：封禁用户仍可浏览
+        mockMvc.perform(get("/api/posts/{id}", postId).header("Authorization", readerHeader))
+                .andExpect(status().isOk());
     }
 
     // ------------------------------------------------------------------ 辅助
