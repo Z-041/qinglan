@@ -85,6 +85,11 @@ qinglan:
     auto-takedown-threshold: 3
     # 申诉期限：自下架时刻起算，超期不再受理（设计方案：7 日内）
     appeal-window: 7d
+  announcement:
+    # 强制阅读最少秒数默认值（服务端校验已读时长不得低于此值，不变量 #6）
+    min-read-seconds: 5
+    # 每日公告发布上限，超限返回 429（风控：公告滥用）
+    max-publishes-per-day: 5
   upload:
     # 单个用户在窗口内的上传次数上限，防止刷爆对象存储
     max-per-window: 30

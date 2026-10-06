@@ -70,6 +70,10 @@ public class SecurityConfig {
                                 "/api/posts/*/comments").permitAll()
                         // 上传后的图片由静态资源映射直接返回，浏览器取图不带令牌
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
+                        // 公告：游客也要能读与记已读（计划 D4/D5）。GET 放行待读与历史；
+                        // POST 仅放行单个已读标记——只写一条已读记录、有唯一键幂等、不落任何身份明文。
+                        .requestMatchers(HttpMethod.GET, "/api/announcements", "/api/announcements/pending").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/announcements/*/read").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(authenticationEntryPoint())
