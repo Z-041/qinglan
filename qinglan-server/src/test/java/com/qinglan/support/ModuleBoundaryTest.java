@@ -43,7 +43,7 @@ class ModuleBoundaryTest {
     private static final Map<String, Set<String>> ALLOWED = Map.of(
             "auth", Set.of("user"),
             "comment", Set.of("user", "post"),
-            "post", Set.of("user"),
+            "post", Set.of("user", "announcement"),
             "review", Set.of("user", "post", "comment"),
             "user", Set.of(),
             COMMON, Set.of()

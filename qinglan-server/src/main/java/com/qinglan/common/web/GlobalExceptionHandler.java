@@ -2,6 +2,7 @@ package com.qinglan.common.web;
 
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.error.PreconditionRequiredException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +30,17 @@ public class GlobalExceptionHandler {
         ErrorCode errorCode = ex.errorCode();
         return ResponseEntity.status(errorCode.status())
                 .body(ApiResponse.error(errorCode.code(), ex.getMessage()));
+    }
+
+    /**
+     * 428：存在未读紧急公告。与 {@link BizException} 分开是因为它必须把业务数据
+     * （公告快照）带回前端以便直接弹窗，故用 {@code ApiResponse.error(code, message, data)}。
+     */
+    @ExceptionHandler(PreconditionRequiredException.class)
+    public ResponseEntity<ApiResponse<Object>> handlePrecondition(PreconditionRequiredException ex) {
+        ErrorCode errorCode = ex.errorCode();
+        return ResponseEntity.status(errorCode.status())
+                .body(ApiResponse.error(errorCode.code(), ex.getMessage(), ex.data()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

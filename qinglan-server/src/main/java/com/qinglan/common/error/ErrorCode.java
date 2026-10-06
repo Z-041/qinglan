@@ -19,6 +19,8 @@ public enum ErrorCode {
     // 隐私信息是「确定不该出现在校园墙」的一类，单独给码以便前端给出更具体的提示
     PRIVACY_CONTENT_BLOCKED(HttpStatus.BAD_REQUEST, "QL-400-009", "请勿填写身份证、银行卡号等敏感信息"),
     SELF_REPORT_FORBIDDEN(HttpStatus.BAD_REQUEST, "QL-400-010", "不能举报自己发布的内容"),
+    // 不变量 #6：停留时长未达到公告要求，服务端拒绝标记已读（有效期证据不足）
+    ANNOUNCEMENT_READ_TOO_EARLY(HttpStatus.BAD_REQUEST, "QL-400-011", "阅读时长不足，暂不能标记为已读"),
 
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "QL-401-001", "请先完成认证"),
     EMAIL_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "QL-401-002", "邮箱认证凭证无效或已过期"),
@@ -36,6 +38,11 @@ public enum ErrorCode {
     COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-004", "评论不存在或已被删除"),
     REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-005", "没有待处理的举报"),
     APPEAL_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-006", "申诉不存在"),
+    ANNOUNCEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-007", "公告不存在"),
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-008", "通知不存在"),
+
+    // 428：存在未读紧急公告，发帖/评论等写操作被前置拦截。响应需携带公告内容（PreconditionRequiredException）
+    PRECONDITION_REQUIRED(HttpStatus.PRECONDITION_REQUIRED, "QL-428-001", "存在未读的紧急公告"),
 
     EMAIL_ALREADY_BOUND(HttpStatus.CONFLICT, "QL-409-001", "该校园邮箱已完成认证，请直接登录"),
     REGISTRATION_CONFLICT(HttpStatus.CONFLICT, "QL-409-003", "该邮箱或学号已完成认证"),
@@ -45,10 +52,13 @@ public enum ErrorCode {
     // 每个目标只受理一次申诉（appeal.uk_appeal_target），重复提交明确回报
     APPEAL_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "QL-409-006", "该内容已提交过申诉，请等待复审"),
     APPEAL_WINDOW_EXPIRED(HttpStatus.CONFLICT, "QL-409-007", "申诉期已过，无法再提交申诉"),
+    // 公告状态机（计划 D7）：仅 DRAFT 可发布、仅 PUBLISHED 可撤回，其余一律拒绝
+    ANNOUNCEMENT_STATE_ILLEGAL(HttpStatus.CONFLICT, "QL-409-008", "公告当前状态不允许该操作"),
 
     CODE_SEND_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "QL-429-001", "验证码发送过于频繁，请稍后再试"),
     VERIFY_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "QL-429-002", "验证失败次数过多，请重新获取验证码"),
     UPLOAD_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "QL-429-003", "上传过于频繁，请稍后再试"),
+    ANNOUNCEMENT_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "QL-429-004", "今日公告发布已达上限"),
 
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "QL-500-001", "服务暂时不可用"),
     STORAGE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "QL-500-002", "文件存储暂时不可用，请稍后重试");

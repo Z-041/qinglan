@@ -30,5 +30,11 @@ public enum AuditAction {
     /** 维持下架：确认举报成立，待处理举报结案、举报数清零（内容已在下架态，无状态迁移） */
     REPORT_UPHOLD,
     /** 复审申诉（通过时另有 POST_RESTORE 记录内容状态变更，本条记录审核决定本身） */
-    APPEAL_REVIEW
+    APPEAL_REVIEW,
+    /** 创建公告草稿（仅 SUPER_ADMIN 可发布，普通管理员只能建草稿） */
+    ANNOUNCEMENT_CREATE,
+    /** 发布公告（仅 SUPER_ADMIN），发布后进入强制阅读 */
+    ANNOUNCEMENT_PUBLISH,
+    /** 撤回公告（仅 SUPER_ADMIN），不删已读记录，更正走 supersedes_id 发新公告 */
+    ANNOUNCEMENT_REVOKE
 }
