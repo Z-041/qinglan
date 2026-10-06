@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { computed, onMounted, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import AnnouncementModal from '@/components/AnnouncementModal.vue'
@@ -16,31 +16,10 @@ const { profile } = storeToRefs(userStore)
 const notificationStore = useNotificationStore()
 const { unreadCount } = storeToRefs(notificationStore)
 const { refreshUnread } = useNotifications()
-const { start: startAnnouncements } = useAnnouncement()
+const { refreshPending, reset: resetAnnouncements, clearSkippedAnnouncements } = useAnnouncement()
 const route = useRoute()
 
-onMounted(() => {
-  // 登录态与游客态都要拉取待读公告（游客也会被强制阅读，计划 D4）
-  void startAnnouncements()
-})
-
 const authenticated = computed(() => userStore.isAuthenticated)
-
-/**
- * 登录后拉一次未读计数，退出登录（令牌清空、authenticated 转 false）后归零，
- * 避免下个身份的旧红点残留。红点只在已认证时展示，故未登录不必请求。
- */
-watch(
-  authenticated,
-  (value) => {
-    if (value) {
-      void refreshUnread()
-    } else {
-      notificationStore.reset()
-    }
-  },
-  { immediate: true },
-)
 
 /**
  * 管理端（/admin 子树）自带 AdminLayout：PC 满宽、自带侧边栏，
@@ -57,6 +36,44 @@ const isAdminArea = computed(() => route.path.startsWith('/admin'))
  * 1440px 视口下头部 logo 左边缘在 x=144、内容左边缘在 x=376，两者错开 232px（改造前同为 720px）。
  */
 const fullWidth = computed(() => isAdminArea.value || route.meta.wide === true)
+
+/**
+ * 登录态变化必须重新拉待读公告。原因：游客按 `device_id` 判已读、账号按 `user_id` 判，
+ * 两者是不同维度——游客在登录页读过的公告，登录后账号维度仍是「未读」，不重拉就会漏掉强制阅读。
+ * 退出时清掉公告状态，避免把上一个身份的弹窗留给下一个人。
+ */
+watch(
+  authenticated,
+  (value) => {
+    if (value) {
+      void refreshUnread()
+    } else {
+      notificationStore.reset()
+      resetAnnouncements()
+    }
+    // 换了身份要重新评估待读公告：上一个身份「本次会话已放行」的记录不适用于新身份
+    clearSkippedAnnouncements()
+    // 游客也要被强制阅读，故两种身份都要拉（refreshPending 内部不会覆盖正在展示的那条）
+    void refreshPending()
+  },
+  { immediate: true },
+)
+
+/**
+ * 进入任意学生端页面都拉一次待读公告（设计方案 5.5「进入任意页面请求 pending」）。
+ * 管理端不渲染公告弹窗（见模板的 `v-if="!isAdminArea"`），故进入管理端时清掉状态，
+ * 离开时由本 watcher 再拉，避免出现「弹窗在管理端后台读秒、回到学生端突然弹出」。
+ */
+watch(
+  () => route.path,
+  () => {
+    if (isAdminArea.value) {
+      resetAnnouncements()
+      return
+    }
+    void refreshPending()
+  },
+)
 </script>
 
 <template>

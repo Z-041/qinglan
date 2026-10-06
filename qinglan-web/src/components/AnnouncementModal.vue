@@ -17,7 +17,9 @@ const {
   confirmed,
   submitting,
   canClose,
+  readFailed,
   closeAndContinue,
+  forceClose,
   noteScrolledToEnd,
 } = useAnnouncement()
 
@@ -142,6 +144,10 @@ function handleClose(): void {
   void closeAndContinue()
 }
 
+function handleForceClose(): void {
+  void forceClose()
+}
+
 watch(
   current,
   async (announcement) => {
@@ -213,9 +219,22 @@ onBeforeUnmount(() => {
             </label>
           </div>
 
-          <BaseButton :disabled="!canClose" :loading="submitting" @click="handleClose">
-            {{ closeLabel }}
-          </BaseButton>
+          <!--
+            标记已读失败时切出「重试 / 关闭」两个出口：只给一个按钮、失败后又关不掉，会把用户
+            永久锁在弹窗里（公告被撤回 → 服务端恒返 404 时必然发生）。这里不渲染任何错误文案
+            ——请求错误统一由 http 拦截器 toast（AGENTS.md 第七章），弹窗只负责给出路。
+          -->
+          <div class="flex shrink-0 items-center gap-2">
+            <template v-if="readFailed">
+              <BaseButton variant="ghost" :disabled="submitting" @click="handleForceClose">
+                关闭
+              </BaseButton>
+              <BaseButton :loading="submitting" @click="handleClose">重试</BaseButton>
+            </template>
+            <BaseButton v-else :disabled="!canClose" :loading="submitting" @click="handleClose">
+              {{ closeLabel }}
+            </BaseButton>
+          </div>
         </div>
       </div>
     </div>
