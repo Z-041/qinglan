@@ -2,11 +2,13 @@ package com.qinglan.review.controller;
 
 import com.qinglan.auth.security.JwtService;
 import com.qinglan.common.web.CursorPage;
+import com.qinglan.review.dto.AdminReviewContextResponse;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
 import com.qinglan.review.dto.TakeDownPostRequest;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReviewTargetType;
 import com.qinglan.review.service.AppealService;
+import com.qinglan.review.service.ReviewContextService;
 import com.qinglan.review.service.ReviewQueueService;
 import com.qinglan.review.service.ReviewService;
 import org.junit.jupiter.api.AfterEach;
@@ -58,6 +60,9 @@ class AdminReviewControllerTest {
     private ReviewQueueService reviewQueueService;
 
     @MockitoBean
+    private ReviewContextService reviewContextService;
+
+    @MockitoBean
     private AppealService appealService;
 
     @MockitoBean
@@ -102,6 +107,32 @@ class AdminReviewControllerTest {
                 .andExpect(jsonPath("$.data.items").isEmpty());
 
         verify(reviewQueueService).queue(null);
+    }
+
+    // ------------------------------------------------------------------ 上下文
+
+    @Test
+    @DisplayName("上下文接口返回信用分与举报聚合，且不含作者身份字段")
+    void shouldReturnReviewContext() throws Exception {
+        when(reviewContextService.context(ReviewTargetType.POST, 5L)).thenReturn(
+                new AdminReviewContextResponse(ReviewTargetType.POST, 5L, "APPROVED", 96, 3L, 2, 3, 2L,
+                        List.of(ReportReason.ABUSE)));
+
+        mockMvc.perform(get("/api/admin/review-context")
+                        .param("targetType", "POST")
+                        .param("targetId", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.authorCreditScore").value(96))
+                .andExpect(jsonPath("$.data.repeatedReporterCount").value(2))
+                .andExpect(jsonPath("$.data.authorId").doesNotExist())
+                .andExpect(jsonPath("$.data.reporterIds").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("缺少 targetId 返回 400")
+    void shouldRejectContextWithoutTargetId() throws Exception {
+        mockMvc.perform(get("/api/admin/review-context").param("targetType", "POST"))
+                .andExpect(status().isBadRequest());
     }
 
     // ------------------------------------------------------------------ 处置

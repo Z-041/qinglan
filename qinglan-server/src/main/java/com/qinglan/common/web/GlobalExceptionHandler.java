@@ -10,6 +10,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -58,6 +59,16 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return ResponseEntity.status(ErrorCode.INVALID_REQUEST.status())
+                .body(ApiResponse.error(ErrorCode.INVALID_REQUEST.code(), ErrorCode.INVALID_REQUEST.message()));
+    }
+
+    /**
+     * 缺少必填查询参数（如未传 {@code targetId}）。不映射会被兜底分支吞成 500，
+     * 把「调用方漏传参数」误报成「服务故障」。
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParam(MissingServletRequestParameterException ex) {
         return ResponseEntity.status(ErrorCode.INVALID_REQUEST.status())
                 .body(ApiResponse.error(ErrorCode.INVALID_REQUEST.code(), ErrorCode.INVALID_REQUEST.message()));
     }

@@ -3,10 +3,13 @@ package com.qinglan.review.controller;
 import com.qinglan.common.security.CurrentUser;
 import com.qinglan.common.web.ApiResponse;
 import com.qinglan.common.web.CursorPage;
+import com.qinglan.review.dto.AdminReviewContextResponse;
 import com.qinglan.review.dto.DismissReportsRequest;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
 import com.qinglan.review.dto.TakeDownPostRequest;
+import com.qinglan.review.entity.ReviewTargetType;
 import com.qinglan.review.service.AppealService;
+import com.qinglan.review.service.ReviewContextService;
 import com.qinglan.review.service.ReviewQueueService;
 import com.qinglan.review.service.ReviewService;
 import com.qinglan.user.dto.ReasonRequest;
@@ -35,6 +38,7 @@ public class AdminReviewController {
 
     private final ReviewService reviewService;
     private final ReviewQueueService reviewQueueService;
+    private final ReviewContextService reviewContextService;
     private final AppealService appealService;
 
     /** 举报队列：按举报数降序 + 等待时长升序，游标分页 */
@@ -42,6 +46,14 @@ public class AdminReviewController {
     public ApiResponse<CursorPage<ReviewQueueItemResponse>> queue(
             @RequestParam(required = false) String cursor) {
         return ApiResponse.ok(reviewQueueService.queue(cursor));
+    }
+
+    /** 上下文面板：作者信用分、历史违规次数、举报聚合。不出作者与举报人身份 */
+    @GetMapping("/review-context")
+    public ApiResponse<AdminReviewContextResponse> reviewContext(
+            @RequestParam ReviewTargetType targetType,
+            @RequestParam Long targetId) {
+        return ApiResponse.ok(reviewContextService.context(targetType, targetId));
     }
 
     @PostMapping("/posts/{postId}/approve")
