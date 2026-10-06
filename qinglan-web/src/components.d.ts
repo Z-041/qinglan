@@ -26,6 +26,7 @@ declare module 'vue' {
     ElDialog: typeof import('element-plus/es')['ElDialog']
     ElDrawer: typeof import('element-plus/es')['ElDrawer']
     FormField: typeof import('./components/base/FormField.vue')['default']
+    HomeSidebar: typeof import('./components/HomeSidebar.vue')['default']
     ImagePicker: typeof import('./components/ImagePicker.vue')['default']
     PostCard: typeof import('./components/PostCard.vue')['default']
     QueueTable: typeof import('./components/admin/QueueTable.vue')['default']

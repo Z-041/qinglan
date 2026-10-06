@@ -24,9 +24,9 @@ function post(overrides: Partial<PostSummary> = {}): PostSummary {
 /** 卡片外层是 RouterLink，单测只关心内容，用桩替换以免引入路由实例 */
 const RouterLinkStub = { template: '<a><slot /></a>' }
 
-function mountCard(postData: PostSummary) {
+function mountCard(postData: PostSummary, variant?: 'feature' | 'compact') {
   return mount(PostCard, {
-    props: { post: postData },
+    props: variant ? { post: postData, variant } : { post: postData },
     global: { stubs: { RouterLink: RouterLinkStub } },
   })
 }
@@ -68,5 +68,24 @@ describe('PostCard', () => {
 
     await wrapper.setProps({ post: post({ liked: true }) })
     expect(wrapper.get('button[aria-pressed]').attributes('aria-pressed')).toBe('true')
+  })
+
+  it('compact 变体去掉卡片外壳，仍展示话题、代号、正文与计数', () => {
+    const wrapper = mountCard(post(), 'compact')
+
+    expect(wrapper.find('article').classes()).not.toContain('ql-card-interactive')
+    expect(wrapper.text()).toContain('问答')
+    expect(wrapper.text()).toContain('银杏#abc')
+    expect(wrapper.text()).toContain('有人在东门捡到校园卡吗')
+    expect(wrapper.text()).toContain('3')
+    expect(wrapper.text()).toContain('2')
+  })
+
+  it('compact 变体点击点赞仍抛出 toggle-like', async () => {
+    const wrapper = mountCard(post(), 'compact')
+
+    await wrapper.get('button[aria-pressed]').trigger('click')
+
+    expect(wrapper.emitted('toggle-like')).toHaveLength(1)
   })
 })

@@ -20,14 +20,17 @@ const emit = defineEmits<{ 'sign-out': [] }>()
 
 <template>
   <header class="sticky top-0 z-50 border-b border-line bg-surface-glass backdrop-blur">
-    <div class="ql-container flex h-14 items-center gap-3">
-      <RouterLink class="flex shrink-0 items-center gap-2" to="/">
+    <div class="ql-shell flex h-16 items-center gap-3 max-sm:h-14">
+      <RouterLink class="flex shrink-0 items-center gap-2.5" to="/">
         <span
-          class="inline-flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-deep text-sm font-bold text-white"
+          class="inline-flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-deep text-lg font-bold text-white max-sm:size-9 max-sm:text-base"
         >
           青
         </span>
-        <span class="text-base font-semibold tracking-tight text-ink">青栏</span>
+        <span class="flex flex-col leading-tight">
+          <span class="text-lg font-bold tracking-tight text-ink">青栏</span>
+          <span class="text-xs text-muted max-sm:hidden">本校认证 · 全程匿名</span>
+        </span>
       </RouterLink>
 
       <nav class="flex items-center gap-0.5">
@@ -41,7 +44,13 @@ const emit = defineEmits<{ 'sign-out': [] }>()
           <span class="ql-badge hidden bg-primary-soft text-primary-deep sm:inline-flex">{{ roleText }}</span>
           <BaseButton variant="ghost" size="sm" @click="emit('sign-out')">退出</BaseButton>
         </template>
-        <RouterLink v-else class="ql-nav-link" to="/login">去认证</RouterLink>
+        <RouterLink
+          v-else
+          class="ql-btn ql-btn-sm bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
+          to="/login"
+        >
+          去认证
+        </RouterLink>
       </div>
     </div>
   </header>

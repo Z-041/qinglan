@@ -45,8 +45,12 @@ export default defineConfig({
     },
   },
   shortcuts: {
-    // 容器：移动端满宽，PC 端居中限宽
+    // 容器：窄屏满宽限宽居中（发布/详情/我的/登录四个页面沿用）
     'ql-container': 'mx-auto w-full max-w-[720px] px-4',
+
+    // PC 为主的学生端首页容器：默认即 1200px 宽（PC 基准），
+    // 窄屏（<1024px）回退到与 ql-container 等价的窄容器，观感与此前一致
+    'ql-shell': 'mx-auto w-full max-w-[1200px] px-6 max-lg:(max-w-[720px] px-4)',
 
     // 卡片
     'ql-card': 'rounded-xl border border-line bg-surface shadow-sm',

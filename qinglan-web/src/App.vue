@@ -19,6 +19,12 @@ const authenticated = computed(() => userStore.isAuthenticated)
  * 否则后台页面会被压成 720px 宽并在上方多出一条学生端导航。
  */
 const isAdminArea = computed(() => route.path.startsWith('/admin'))
+
+/**
+ * 首页自己渲染 ql-shell（PC 双栏需要 1200px），因此外层不再套 ql-container；
+ * 其余学生端页面（发布/详情/我的/登录）行为完全不变。
+ */
+const isHome = computed(() => route.path === '/')
 </script>
 
 <template>
@@ -30,7 +36,7 @@ const isAdminArea = computed(() => route.path.startsWith('/admin'))
       @sign-out="userStore.signOut()"
     />
 
-    <main :class="isAdminArea ? 'flex-1' : 'ql-container flex-1 py-6 sm:py-10'">
+    <main :class="isAdminArea || isHome ? 'flex-1' : 'ql-container flex-1 py-6 sm:py-10'">
       <RouterView />
     </main>
 
