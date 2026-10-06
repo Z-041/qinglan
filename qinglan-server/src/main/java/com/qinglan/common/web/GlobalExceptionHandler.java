@@ -11,6 +11,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
@@ -47,6 +48,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleUnreadableBody(HttpMessageNotReadableException ex) {
+        return ResponseEntity.status(ErrorCode.INVALID_REQUEST.status())
+                .body(ApiResponse.error(ErrorCode.INVALID_REQUEST.code(), ErrorCode.INVALID_REQUEST.message()));
+    }
+
+    /**
+     * 查询参数 / 路径变量类型不匹配（如 {@code ?status=NOT_A_STATUS}）。
+     * 不映射会落到通用分支返回 500，把「参数写错」误报成「服务故障」。
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         return ResponseEntity.status(ErrorCode.INVALID_REQUEST.status())
                 .body(ApiResponse.error(ErrorCode.INVALID_REQUEST.code(), ErrorCode.INVALID_REQUEST.message()));
     }
