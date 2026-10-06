@@ -1,11 +1,13 @@
 package com.qinglan.post.service;
 
+import com.qinglan.announcement.service.AnnouncementService;
 import com.qinglan.common.anonymous.AnonymousCodeService;
 import com.qinglan.common.audit.AuditAction;
 import com.qinglan.common.audit.AuditLogService;
 import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.error.PreconditionRequiredException;
 import com.qinglan.common.interaction.LikeCount;
 import com.qinglan.common.interaction.LikeRecord;
 import com.qinglan.common.interaction.LikeRepository;
@@ -87,6 +89,7 @@ public class PostService {
     private final AuditLogService auditLogService;
     private final PostProperties postProperties;
     private final ContentGuard contentGuard;
+    private final AnnouncementService announcementService;
 
     /**
      * 发布。落 Pending 而非直接可见——主帖先审后发，是设计方案第一章的红线 2。
@@ -94,6 +97,11 @@ public class PostService {
     @Transactional
     public PostDetailResponse create(Long authorId, CreatePostRequest request) {
         User author = userService.requireUsableById(authorId);
+        // 强制阅读的服务端兜底（设计方案 5.4）：存在未读紧急公告时不允许发帖，
+        // 前端禁用只是体验层，绕过 UI 也发不了帖。428 携带公告内容供前端直接弹窗。
+        announcementService.findPending(authorId, null).ifPresent(pending -> {
+            throw new PreconditionRequiredException(ErrorCode.PRECONDITION_REQUIRED, pending);
+        });
         assertCanPost(author);
         Topic topic = requireEnabledTopic(request.topicId());
 

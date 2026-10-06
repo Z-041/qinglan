@@ -1,5 +1,8 @@
 package com.qinglan.post.service;
 
+import com.qinglan.announcement.dto.PendingAnnouncementResponse;
+import com.qinglan.announcement.entity.AnnouncementLevel;
+import com.qinglan.announcement.service.AnnouncementService;
 import com.qinglan.comment.dto.CommentResponse;
 import com.qinglan.common.anonymous.AnonymousCodeService;
 import com.qinglan.common.audit.AuditAction;
@@ -7,6 +10,7 @@ import com.qinglan.common.audit.AuditLogService;
 import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.error.PreconditionRequiredException;
 import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeTargetType;
 import com.qinglan.common.moderation.ContentGuard;
@@ -34,6 +38,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.RecordComponent;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -43,6 +48,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -83,6 +89,9 @@ class PostServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private AnnouncementService announcementService;
+
     private PostService postService;
 
     /** 默认放行的硬拦截桩；需要拦截的用例自行构造一个会抛的守卫 */
@@ -93,7 +102,7 @@ class PostServiceTest {
     void setUp() {
         postService = new PostService(postRepository, postImageRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
-                new PostProperties(60, 9), ALLOW_ALL);
+                new PostProperties(60, 9), ALLOW_ALL, announcementService);
     }
 
     // ------------------------------------------------------------------ 发布
@@ -166,7 +175,7 @@ class PostServiceTest {
         };
         PostService strict = new PostService(postRepository, postImageRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
-                new PostProperties(60, 9), blocking);
+                new PostProperties(60, 9), blocking, announcementService);
 
         assertThatThrownBy(() -> strict.create(AUTHOR_ID, new CreatePostRequest(TOPIC_ID, "正文", null, null)))
                 .isInstanceOf(BizException.class)
@@ -187,6 +196,23 @@ class PostServiceTest {
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.CONTACT_REQUIRED);
+    }
+
+    @Test
+    @DisplayName("存在未读紧急公告时拒绝发帖并返回 428，且完全不落库")
+    void shouldBlockPostWhenUnreadUrgentAnnouncement() {
+        stubAuthor(activeAuthor());
+        when(announcementService.findPending(AUTHOR_ID, null)).thenReturn(Optional.of(
+                new PendingAnnouncementResponse(1L, "紧急公告", "公告正文", AnnouncementLevel.URGENT,
+                        5, false, false, Instant.parse("2026-10-07T00:00:00Z"))));
+
+        assertThatThrownBy(() -> postService.create(AUTHOR_ID, new CreatePostRequest(TOPIC_ID, "正文", null, null)))
+                .isInstanceOf(PreconditionRequiredException.class)
+                .extracting(ex -> ((PreconditionRequiredException) ex).errorCode())
+                .isEqualTo(ErrorCode.PRECONDITION_REQUIRED);
+
+        // 强制阅读真强制：拦截在落库之前
+        verify(postRepository, never()).save(any(Post.class));
     }
 
     @Test
