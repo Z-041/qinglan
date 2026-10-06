@@ -44,4 +44,15 @@ describe('AppHeader', () => {
     })
     expect(wide.get('header > div').classes()).toContain('ql-shell')
   })
+
+  it('已认证时展示未读角标，未读数透传给铃铛', () => {
+    const wrapper = mount(AppHeader, {
+      props: { authenticated: true, role: 'STUDENT', unreadCount: 2 },
+      global: { stubs: { RouterLink: routerLinkStub } },
+    })
+
+    expect(wrapper.text()).toContain('2')
+    // 铃铛入口用 RouterLink，不新增 button：退出仍是唯一 button
+    expect(wrapper.findAll('button')).toHaveLength(1)
+  })
 })

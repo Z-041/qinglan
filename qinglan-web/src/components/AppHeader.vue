@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 
 import BaseButton from '@/components/base/BaseButton.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
 import { useUserLabels } from '@/composables/useUserLabels'
 import type { UserRole } from '@/types/user'
 
@@ -14,8 +15,10 @@ const props = withDefaults(
      * 否则两者左边缘会错开——1440px 视口下 1200 与 720 的差是 232px。
      */
     wide?: boolean
+    /** 未读通知数，透传给铃铛；未认证时铃铛不渲染 */
+    unreadCount?: number
   }>(),
-  { wide: false },
+  { wide: false, unreadCount: 0 },
 )
 
 const { roleLabel } = useUserLabels()
@@ -53,6 +56,7 @@ const emit = defineEmits<{ 'sign-out': [] }>()
       <div class="ml-auto flex items-center gap-3">
         <template v-if="authenticated">
           <span class="ql-badge hidden bg-primary-soft text-primary-deep sm:inline-flex">{{ roleText }}</span>
+          <NotificationBell :unread-count="props.unreadCount" />
           <BaseButton variant="ghost" size="sm" @click="emit('sign-out')">退出</BaseButton>
         </template>
         <RouterLink

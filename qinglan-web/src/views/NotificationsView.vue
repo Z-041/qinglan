@@ -1,0 +1,73 @@
+<script setup lang="ts">
+import { storeToRefs } from 'pinia'
+import { onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
+
+import BaseButton from '@/components/base/BaseButton.vue'
+import { useNotifications } from '@/composables/useNotifications'
+import { useNotificationStore } from '@/stores/notification'
+
+const { items, loading, loadingMore, hasMore, load, loadMore, markRead, markAllRead, refreshUnread } =
+  useNotifications()
+
+const { unreadCount } = storeToRefs(useNotificationStore())
+
+onMounted(() => {
+  void load()
+  void refreshUnread()
+})
+
+function timeText(value: string): string {
+  return new Date(value).toLocaleString()
+}
+</script>
+
+<template>
+  <div class="ql-container py-6">
+    <div class="flex items-center justify-between">
+      <h1 class="text-lg font-semibold text-ink">消息</h1>
+      <BaseButton variant="ghost" size="sm" :disabled="unreadCount === 0" @click="markAllRead">
+        全部已读
+      </BaseButton>
+    </div>
+
+    <p v-if="loading" class="py-8 text-center text-sm text-muted">加载中…</p>
+
+    <div
+      v-else-if="!items.length"
+      class="mt-5 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+    >
+      <p class="text-sm font-medium text-ink">还没有消息</p>
+    </div>
+
+    <ul v-else class="ql-card mt-5 divide-y divide-line overflow-hidden">
+      <li v-for="item in items" :key="item.id">
+        <!-- 有 link 时整条是导航链接；无 link 时退化为普通块，两种都点击即标已读 -->
+        <component
+          :is="item.link ? RouterLink : 'div'"
+          :to="item.link"
+          class="flex items-start gap-3 px-4 py-3.5 transition hover:bg-primary-tint"
+          :class="item.readAt ? '' : 'bg-primary-tint'"
+          @click="markRead(item.id)"
+        >
+          <span
+            class="mt-1.5 size-2 shrink-0 rounded-full"
+            :class="item.readAt ? 'bg-transparent' : 'bg-primary'"
+            aria-hidden="true"
+          />
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-medium text-ink">{{ item.title }}</p>
+            <p v-if="item.body" class="mt-1 text-xs leading-relaxed text-muted">{{ item.body }}</p>
+            <p class="mt-1 text-xs text-muted">{{ timeText(item.createdAt) }}</p>
+          </div>
+        </component>
+      </li>
+    </ul>
+
+    <div v-if="!loading && items.length && hasMore" class="mt-4 flex justify-center">
+      <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">
+        加载更多
+      </BaseButton>
+    </div>
+  </div>
+</template>

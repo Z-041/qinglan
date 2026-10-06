@@ -1,17 +1,46 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { computed } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
+import AnnouncementModal from '@/components/AnnouncementModal.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import ToastHost from '@/components/ToastHost.vue'
+import { useAnnouncement } from '@/composables/useAnnouncement'
+import { useNotifications } from '@/composables/useNotifications'
+import { useNotificationStore } from '@/stores/notification'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 const { profile } = storeToRefs(userStore)
+const notificationStore = useNotificationStore()
+const { unreadCount } = storeToRefs(notificationStore)
+const { refreshUnread } = useNotifications()
+const { start: startAnnouncements } = useAnnouncement()
 const route = useRoute()
 
+onMounted(() => {
+  // 登录态与游客态都要拉取待读公告（游客也会被强制阅读，计划 D4）
+  void startAnnouncements()
+})
+
 const authenticated = computed(() => userStore.isAuthenticated)
+
+/**
+ * 登录后拉一次未读计数，退出登录（令牌清空、authenticated 转 false）后归零，
+ * 避免下个身份的旧红点残留。红点只在已认证时展示，故未登录不必请求。
+ */
+watch(
+  authenticated,
+  (value) => {
+    if (value) {
+      void refreshUnread()
+    } else {
+      notificationStore.reset()
+    }
+  },
+  { immediate: true },
+)
 
 /**
  * 管理端（/admin 子树）自带 AdminLayout：PC 满宽、自带侧边栏，
@@ -37,6 +66,7 @@ const fullWidth = computed(() => isAdminArea.value || route.meta.wide === true)
       :authenticated="authenticated"
       :role="profile?.role ?? null"
       :wide="fullWidth"
+      :unread-count="unreadCount"
       @sign-out="userStore.signOut()"
     />
 
@@ -48,6 +78,7 @@ const fullWidth = computed(() => isAdminArea.value || route.meta.wide === true)
       <p class="ql-container py-5 text-center text-xs text-muted">青栏 · 只面向本校认证学生的匿名社区</p>
     </footer>
 
+    <AnnouncementModal v-if="!isAdminArea" />
     <ToastHost />
   </div>
 </template>

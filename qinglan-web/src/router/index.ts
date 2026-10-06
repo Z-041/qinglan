@@ -66,6 +66,13 @@ const router = createRouter({
       meta: { requiresAuth: true, wide: true },
     },
     {
+      // 消息中心是窄内容页（ql-container），故不设 meta.wide
+      path: '/notifications',
+      name: 'notifications',
+      component: () => import('@/views/NotificationsView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       // 刻意不设 guestOnly：与学生端 /login 同设会让两页互相弹走（spec 5.3 重定向环防护）
       path: '/admin/login',
       name: 'admin-login',
