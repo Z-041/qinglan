@@ -109,7 +109,7 @@ Controller  →  Service  →  Repository  →  DB
 | 3 | **真实身份管理员不可见** | `student_id` 加密存储。除依法配合调查的专用通道外，任何管理员接口、日志、导出功能不得返回明文身份 |
 | 4 | **举报不可刷量** | `UNIQUE(target_type, target_id, reporter_id)`，同一用户对同一目标仅一次。重复举报返回 `409`，不静默吞掉 |
 | 5 | **审核状态迁移合法** | 允许：`Draft→Pending`、`Pending→Reviewing`、`Reviewing→Approved/Rejected`、`Approved→TakenDown`、`TakenDown→Approved`（申诉通过）或维持。禁止跳态，禁止 `TakenDown` 直接回 `Pending`。状态用 `sealed interface ReviewState` 表达，新增状态须改 `permits` 并补测试 |
-| 6 | **强制阅读必须真实计时** | 仅当 `read_duration_ms >= min_read_seconds` 且（需滚动时）已滚到底，才允许标记已读。**禁止**在弹窗打开时立即标记 |
+| 6 | **强制阅读必须真实计时** | 仅当 `read_duration_ms >= min_read_seconds`、且（需滚动时）已滚到底、需确认时已勾选，才允许标记已读；服务端逐项校验上报值，任一不满足即 `400` 且**不落库**。**禁止**在弹窗打开时立即标记。**边界要说清**：`read_duration_ms` 与滚动/勾选信号都由客户端上报，服务端只能拒绝「不合格的上报」，无法证明用户真的读了——所以「真强制」落在 `POST /api/posts` 的 `428` 拦截（存在未读紧急公告时发不了帖，禁用 JS 绕过 UI 也没用，见设计方案 5.4）。引用本条时不要把它读成「时长不可伪造」 |
 | 7 | **审计日志只增不改删** | `review_log` 无 UPDATE、无 DELETE 接口；所有下架/封禁/发布公告操作必须落日志 |
 
 涉及上表任一字段或流程的改动，**必须先写测试证明不变量仍成立**。

@@ -61,6 +61,8 @@ public enum ErrorCode {
     VERIFY_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "QL-429-002", "验证失败次数过多，请重新获取验证码"),
     UPLOAD_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "QL-429-003", "上传过于频繁，请稍后再试"),
     ANNOUNCEMENT_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "QL-429-004", "今日公告发布已达上限"),
+    // 标记已读是匿名开放的写接口（游客也要能被强制阅读），按设备限流防止被刷表
+    ANNOUNCEMENT_READ_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "QL-429-005", "操作过于频繁，请稍后再试"),
 
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "QL-500-001", "服务暂时不可用"),
     STORAGE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "QL-500-002", "文件存储暂时不可用，请稍后重试");

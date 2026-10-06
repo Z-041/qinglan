@@ -14,6 +14,7 @@ import com.qinglan.common.audit.AuditLogService;
 import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.store.EphemeralStore;
 import com.qinglan.support.TestFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -24,6 +25,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +33,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
@@ -58,12 +61,15 @@ class AnnouncementServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private EphemeralStore ephemeralStore;
+
     private AnnouncementService service;
 
     @BeforeEach
     void setUp() {
         service = new AnnouncementService(announcementRepository, announcementReadRepository,
-                auditLogService, new AnnouncementProperties(5, 5));
+                auditLogService, new AnnouncementProperties(5, 5, 30, Duration.ofMinutes(1)), ephemeralStore);
     }
 
     // ---------------------------------------------------------- 不变量 #6
@@ -192,6 +198,82 @@ class AnnouncementServiceTest {
         verify(announcementReadRepository).save(captor.capture());
         assertThat(captor.getValue().getUserId()).isNull();
         assertThat(captor.getValue().getDeviceId()).isEqualTo("dev-1");
+    }
+
+    @Test
+    @DisplayName("草稿公告不可被标记已读：公告 id 可枚举，不做状态校验就是刷表入口")
+    void shouldRejectMarkReadOnDraft() {
+        when(announcementRepository.findById(ANNOUNCEMENT_ID))
+                .thenReturn(Optional.of(draft(ANNOUNCEMENT_ID, 5)));
+
+        assertThatThrownBy(() -> service.markRead(
+                ANNOUNCEMENT_ID, USER_ID, null, new MarkReadRequest(null, 6_000L, true, true)))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.ANNOUNCEMENT_NOT_FOUND);
+
+        verify(announcementReadRepository, never()).save(any(AnnouncementRead.class));
+    }
+
+    @Test
+    @DisplayName("标记已读超过窗口上限时返回 429，且不落库")
+    void shouldRateLimitMarkRead() {
+        when(announcementRepository.findById(ANNOUNCEMENT_ID))
+                .thenReturn(Optional.of(published(ANNOUNCEMENT_ID, 5)));
+        when(ephemeralStore.increment(anyString(), any(Duration.class))).thenReturn(31L);
+
+        assertThatThrownBy(() -> service.markRead(
+                ANNOUNCEMENT_ID, USER_ID, null, new MarkReadRequest(null, 6_000L, true, true)))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.ANNOUNCEMENT_READ_TOO_FREQUENT);
+
+        verify(announcementReadRepository, never()).save(any(AnnouncementRead.class));
+    }
+
+    @Test
+    @DisplayName("deviceId 含非法字符时按 400 拒绝，不落库")
+    void shouldRejectIllegalDeviceId() {
+        when(announcementRepository.findById(ANNOUNCEMENT_ID))
+                .thenReturn(Optional.of(published(ANNOUNCEMENT_ID, 5)));
+
+        assertThatThrownBy(() -> service.markRead(
+                ANNOUNCEMENT_ID, null, "dev 1; drop", new MarkReadRequest(null, 6_000L, true, true)))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+
+        verify(announcementReadRepository, never()).save(any(AnnouncementRead.class));
+    }
+
+    // ---------------------------------------------------------- 已读排除维度
+
+    @Test
+    @DisplayName("共用设备：登录用户只按账号排除已读，不被同设备上他人的游客记录挡掉")
+    void shouldNotLetGuestReadsSuppressLoggedInUser() {
+        when(announcementRepository.findPending(
+                any(), any(), any(), any(), eq(USER_ID), isNull(), any(Pageable.class)))
+                .thenReturn(List.of());
+
+        service.findPending(USER_ID, "dev-1");
+
+        // 关键断言：deviceId 必须以 null 传给仓储。若把设备维度也传下去，
+        // 同一台电脑上甲以游客身份读过的公告会把乙也挡掉——漏看强制阅读公告比多看一次危险
+        verify(announcementRepository).findPending(
+                any(), any(), any(), any(), eq(USER_ID), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("游客只按设备排除已读，账号维度为空")
+    void shouldGateGuestByDevice() {
+        when(announcementRepository.findPending(
+                any(), any(), any(), any(), isNull(), eq("dev-1"), any(Pageable.class)))
+                .thenReturn(List.of());
+
+        service.findPending(null, "dev-1");
+
+        verify(announcementRepository).findPending(
+                any(), any(), any(), any(), isNull(), eq("dev-1"), any(Pageable.class));
     }
 
     // ---------------------------------------------------------- 发布状态机

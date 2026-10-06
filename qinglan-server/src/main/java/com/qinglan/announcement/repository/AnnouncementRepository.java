@@ -16,9 +16,10 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
     /**
      * 待读一条：取「生效中且未被该 viewer 读过」的公告，按级别优先级（URGENT 最高）再按发布时间倒序。
      *
-     * <p>用 {@code not exists} 一次排除已读，<b>同时按 {@code userId} 与 {@code deviceId} 排除</b>——
-     * 任一命中即视为已读（计划 D5）。两个参数都可为空：纯游客（两者皆空）因无任何已读记录，若能命中则取到，
-     * 判定与既有语义一致。</p>
+     * <p>用 {@code not exists} 一次排除已读。两个参数都是「排除维度」且**由调用方决定只传其一**：
+     * 登录用户只按 {@code userId} 排除、游客只按 {@code deviceId} 排除——若两个都传，共用设备上
+     * 他人的游客已读记录会把登录用户也挡掉（漏看强制阅读公告比多看一次危险）。两侧逻辑写在
+     * {@code AnnouncementService#findPending}。</p>
      *
      * <p>排序用显式 {@code case level when ... then ...}：枚举声明顺序即优先级顺序，但数据库里存的是名称字符串，
      * 直接按列排序会变成字母序（ACTIVITY &lt; NORMAL &lt; URGENT），与优先级相反，故必须显式指定。

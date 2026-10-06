@@ -90,6 +90,9 @@ qinglan:
     min-read-seconds: 5
     # 每日公告发布上限，超限返回 429（风控：公告滥用）
     max-publishes-per-day: 5
+    # 标记已读按设备限流：这是匿名开放的写接口，没有上限就能被反复调用刷表
+    max-reads-per-window: 30
+    read-rate-window: 1m
   upload:
     # 单个用户在窗口内的上传次数上限，防止刷爆对象存储
     max-per-window: 30

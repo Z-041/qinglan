@@ -16,6 +16,7 @@ import com.qinglan.common.audit.AuditLogService;
 import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.store.EphemeralStore;
 import com.qinglan.common.web.CursorPage;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -32,6 +33,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 公告：草稿 / 发布 / 撤回 / 待读一条 / 标记已读 / 历史列表。
@@ -52,15 +54,19 @@ public class AnnouncementService {
     private static final Logger log = LoggerFactory.getLogger(AnnouncementService.class);
 
     private static final int DEFAULT_PAGE_SIZE = 20;
-    private static final int MAX_DEVICE_ID_LENGTH = 64;
     private static final long MILLIS_PER_SECOND = 1000L;
     /** 日界线时区：与管理员直觉一致，与 AdminStatsService 的看板口径保持一致 */
     private static final ZoneId DAY_ZONE = ZoneId.of("Asia/Shanghai");
+    /** 标记已读的限流键（AGENTS.md 约定 ql:{domain}:{id}）。该接口匿名开放，必须限流 */
+    private static final String READ_RATE_KEY_PREFIX = "ql:announcement:read-rate:";
+    /** 设备标识只允许这几种字符，避免把任意字符串写进列与日志 */
+    private static final Pattern DEVICE_ID_PATTERN = Pattern.compile("[A-Za-z0-9_-]{1,64}");
 
     private final AnnouncementRepository announcementRepository;
     private final AnnouncementReadRepository announcementReadRepository;
     private final AuditLogService auditLogService;
     private final AnnouncementProperties properties;
+    private final EphemeralStore ephemeralStore;
 
     /** 建草稿。发布权限在 Controller 收口（仅 SUPER_ADMIN 可发布，见计划 D8）。 */
     @Transactional
@@ -130,13 +136,17 @@ public class AnnouncementService {
      */
     @Transactional(readOnly = true)
     public Optional<PendingAnnouncementResponse> findPending(Long userId, String deviceId) {
+        // 已读排除维度只取其一：登录用户按账号判，只有游客才按设备判。
+        // 若对登录用户也按设备排除，同一台电脑上会出现「甲以游客身份读过 → 乙登录后被甲的记录挡掉」，
+        // 而强制阅读里「漏看」远比「多看一次」危险，故登录态一律忽略设备维度（计划 D5 修订）。
+        String gateDeviceId = userId == null ? normalizeDeviceId(deviceId) : null;
         return announcementRepository.findPending(
                         AnnouncementStatus.PUBLISHED,
                         AnnouncementLevel.URGENT,
                         AnnouncementLevel.NORMAL,
                         Instant.now(),
                         userId,
-                        normalizeDeviceId(deviceId),
+                        gateDeviceId,
                         PageRequest.of(0, 1))
                 .stream()
                 .findFirst()
@@ -155,6 +165,22 @@ public class AnnouncementService {
     @Transactional
     public void markRead(Long id, Long userId, String deviceIdQuery, MarkReadRequest request) {
         Announcement announcement = requireAnnouncement(id);
+        // 只允许对「已发布」的公告标记已读。公告 id 自增可枚举，少了这道校验就能对草稿/已撤回/不存在的 id
+        // 任意写入已读行，把一个匿名写接口变成刷表入口
+        if (announcement.getStatus() != AnnouncementStatus.PUBLISHED) {
+            throw new BizException(ErrorCode.ANNOUNCEMENT_NOT_FOUND);
+        }
+        String deviceId = resolveDeviceId(request.deviceId(), deviceIdQuery);
+        if (userId == null && deviceId == null) {
+            // 登录用户与游客至少要能标识一个，否则记录无意义且会撞唯一键
+            throw new BizException(ErrorCode.INVALID_REQUEST);
+        }
+        // 限流放在业务校验之前：非法请求同样消耗配额，否则可以用「时长不足但格式合法」的请求反复打这个接口
+        String rateSubject = userId != null ? "u" + userId : "d" + deviceId;
+        long attempts = ephemeralStore.increment(READ_RATE_KEY_PREFIX + rateSubject, properties.readRateWindow());
+        if (attempts > properties.maxReadsPerWindow()) {
+            throw new BizException(ErrorCode.ANNOUNCEMENT_READ_TOO_FREQUENT);
+        }
         if (request.durationMs() < announcement.getMinReadSeconds() * MILLIS_PER_SECOND) {
             throw new BizException(ErrorCode.ANNOUNCEMENT_READ_TOO_EARLY);
         }
@@ -164,11 +190,6 @@ public class AnnouncementService {
         if ((announcement.isRequireScrollToEnd() && !request.scrolledToEnd())
                 || (announcement.isRequireConfirm() && !request.confirmed())) {
             throw new BizException(ErrorCode.ANNOUNCEMENT_READ_UNCONFIRMED);
-        }
-        String deviceId = resolveDeviceId(request.deviceId(), deviceIdQuery);
-        if (userId == null && deviceId == null) {
-            // 登录用户与游客至少要能标识一个，否则记录无意义且会撞唯一键
-            throw new BizException(ErrorCode.INVALID_REQUEST);
         }
         Instant now = Instant.now();
         Optional<AnnouncementRead> existing = userId != null
@@ -249,18 +270,22 @@ public class AnnouncementService {
             return null;
         }
         String trimmed = deviceId.trim();
-        if (trimmed.length() > MAX_DEVICE_ID_LENGTH) {
+        if (!DEVICE_ID_PATTERN.matcher(trimmed).matches()) {
             throw new BizException(ErrorCode.INVALID_REQUEST);
         }
         return trimmed;
     }
 
-    /** 按 userId 与 deviceId 两个维度批量取已读公告 id，任一命中即已读（计划 D5） */
+    /**
+     * 批量取已读公告 id。与 {@link #findPending} 同一口径：**登录用户只看账号维度，只有游客才看设备维度**
+     * ——若两者都看，共用设备上他人的游客记录会把自己的已读状态污染，出现「公告已读但本人从没看过」。
+     */
     private Set<Long> loadReadAnnouncementIds(Collection<Long> announcementIds, Long userId, String deviceId) {
         Set<Long> readIds = new HashSet<>();
         if (userId != null) {
             announcementReadRepository.findByAnnouncementIdInAndUserId(announcementIds, userId)
                     .forEach(read -> readIds.add(read.getAnnouncementId()));
+            return readIds;
         }
         if (deviceId != null) {
             announcementReadRepository.findByAnnouncementIdInAndDeviceId(announcementIds, deviceId)
