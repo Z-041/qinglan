@@ -23,7 +23,9 @@ function timeText(value: string): string {
 </script>
 
 <template>
-  <div class="ql-container py-6">
+  <!-- 该路由不加 meta.wide，App.vue 的 main 已经套了 ql-container（720px）；这里再加一层会把
+       内容宽压到 ~656px 并叠出 32px 内边距，故视图内只留纵向间距 -->
+  <div>
     <div class="flex items-center justify-between">
       <h1 class="text-lg font-semibold text-ink">消息</h1>
       <BaseButton variant="ghost" size="sm" :disabled="unreadCount === 0" @click="markAllRead">
