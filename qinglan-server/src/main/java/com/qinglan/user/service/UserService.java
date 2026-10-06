@@ -6,6 +6,8 @@ import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.crypto.CryptoService;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.web.CursorPage;
+import com.qinglan.user.dto.AdminUserQuery;
 import com.qinglan.user.dto.UserProfileResponse;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.entity.UserStatus;
@@ -14,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +24,7 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -34,6 +38,10 @@ public class UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
     private static final int ANONYMOUS_SALT_BYTES = 16;
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final String KEY_SEPARATOR = ":";
+    /** 游标段数：注册毫秒 : 用户 id */
+    private static final int CURSOR_SEGMENTS = 2;
 
     private final UserRepository userRepository;
     private final CryptoService cryptoService;
@@ -142,5 +150,52 @@ public class UserService {
         byte[] salt = new byte[ANONYMOUS_SALT_BYTES];
         secureRandom.nextBytes(salt);
         return HexFormat.of().formatHex(salt);
+    }
+
+    /**
+     * 管理端用户列表：键集分页，多取一条判断是否还有下一页，避免额外 count 查询。
+     *
+     * <p>不提供身份维度检索（理由见 {@code UserRepository#findAdminPage}）。</p>
+     */
+    @Transactional(readOnly = true)
+    public CursorPage<UserProfileResponse> listUsers(AdminUserQuery query) {
+        AdminUserCursor cursor = parseCursor(query.cursor());
+        List<User> rows = userRepository.findAdminPage(
+                query.status(), query.role(), query.minCredit(), query.maxCredit(),
+                query.createdFrom(), query.createdTo(),
+                cursor.createdAt(), cursor.id(),
+                PageRequest.of(0, DEFAULT_PAGE_SIZE + 1));
+
+        boolean hasMore = rows.size() > DEFAULT_PAGE_SIZE;
+        List<User> page = hasMore ? List.copyOf(rows.subList(0, DEFAULT_PAGE_SIZE)) : rows;
+        if (page.isEmpty()) {
+            return CursorPage.empty();
+        }
+        List<UserProfileResponse> items = page.stream().map(this::toProfile).toList();
+        String nextCursor = hasMore ? formatCursor(page.get(page.size() - 1)) : null;
+        return CursorPage.of(items, nextCursor);
+    }
+
+    private AdminUserCursor parseCursor(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return new AdminUserCursor(null, null);
+        }
+        String[] parts = raw.split(KEY_SEPARATOR);
+        if (parts.length != CURSOR_SEGMENTS) {
+            throw new BizException(ErrorCode.CURSOR_INVALID);
+        }
+        try {
+            return new AdminUserCursor(Instant.ofEpochMilli(Long.parseLong(parts[0])), Long.parseLong(parts[1]));
+        } catch (NumberFormatException ex) {
+            throw new BizException(ErrorCode.CURSOR_INVALID);
+        }
+    }
+
+    private String formatCursor(User last) {
+        return last.getCreatedAt().toEpochMilli() + KEY_SEPARATOR + last.getId();
+    }
+
+    /** 用户列表游标：与 {@code UserRepository#findAdminPage} 的排序键逐一对应 */
+    private record AdminUserCursor(Instant createdAt, Long id) {
     }
 }
