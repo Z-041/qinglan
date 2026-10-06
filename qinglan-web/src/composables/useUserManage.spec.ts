@@ -68,6 +68,13 @@ describe('toQuery', () => {
     expect(toQuery({ ...createEmptyFilters(), minCredit: 'abc' }, null).minCredit).toBeNull()
     expect(toQuery({ ...createEmptyFilters(), maxCredit: '1.5' }, null).maxCredit).toBeNull()
   })
+
+  it('筛选值由输入事件写入（恒为 string）时仍解析为数字，不因绑定被改回 v-model 而失灵', () => {
+    const query = toQuery({ ...createEmptyFilters(), minCredit: '110', maxCredit: '200' }, null)
+
+    expect(query.minCredit).toBe(110)
+    expect(query.maxCredit).toBe(200)
+  })
 })
 
 describe('useUserManage', () => {

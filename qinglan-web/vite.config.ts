@@ -91,5 +91,13 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['src/**/*.spec.ts'],
+    // element-plus 组件（如 el-dialog）经 unplugin-vue-components 自动导入时会连带注入样式入口，
+    // 而 Vitest 默认把 node_modules 依赖外置交给 Node 加载，Node 解析不了 .css，会在收集阶段
+    // 直接抛 Unknown file extension ".css"。把 element-plus 交给 Vite 处理即可正常解析样式。
+    server: {
+      deps: {
+        inline: ['element-plus'],
+      },
+    },
   },
 })

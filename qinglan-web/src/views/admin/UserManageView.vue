@@ -49,6 +49,14 @@ function openCredit(row: AdminUserItem): void {
   creditOpen.value = true
 }
 
+/**
+ * filters 的信用分字段声明为 string，type="number" 上的 v-model 会写入 number，
+ * 使 toNumberOrNull 的 value.trim() 抛错（异常被 refresh 的 catch 吞掉，表现为点查询无反应）。
+ */
+function setCreditFilter(key: 'minCredit' | 'maxCredit', event: Event): void {
+  filters.value[key] = (event.target as HTMLInputElement).value
+}
+
 /** 成功才关对话框；失败保持打开，错误由拦截器提示（同 Task 15） */
 async function handleBan(days: number, reason: string): Promise<void> {
   if (selected.value && (await ban(selected.value.id, { days, reason }))) {
@@ -109,12 +117,24 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
 
       <label class="flex flex-col gap-1">
         <span class="ql-label">信用分下界</span>
-        <input v-model="filters.minCredit" type="number" class="ql-field" placeholder="含" />
+        <input
+          :value="filters.minCredit"
+          type="number"
+          class="ql-field"
+          placeholder="含"
+          @input="setCreditFilter('minCredit', $event)"
+        />
       </label>
 
       <label class="flex flex-col gap-1">
         <span class="ql-label">信用分上界</span>
-        <input v-model="filters.maxCredit" type="number" class="ql-field" placeholder="含" />
+        <input
+          :value="filters.maxCredit"
+          type="number"
+          class="ql-field"
+          placeholder="含"
+          @input="setCreditFilter('maxCredit', $event)"
+        />
       </label>
 
       <label class="flex flex-col gap-1">
