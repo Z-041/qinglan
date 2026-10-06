@@ -103,17 +103,6 @@ onMounted(async () => {
 
       <aside class="sticky top-24 flex flex-col gap-4 self-start max-lg:hidden">
         <div class="ql-card p-4">
-          <p class="text-sm font-semibold text-ink">去发布</p>
-          <p class="mt-1 text-xs text-muted">主帖先审后发，通过后才会出现在首页</p>
-          <RouterLink
-            class="ql-btn ql-btn-sm mt-3 bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
-            to="/publish"
-          >
-            发布新帖
-          </RouterLink>
-        </div>
-
-        <div class="ql-card p-4">
           <p class="text-sm font-semibold text-ink">关于信用分</p>
           <p class="mt-2 text-xs leading-relaxed text-muted">
             信用分低于 60 无法发帖。违规内容被核实后会扣分，正常发帖与互动不扣分。

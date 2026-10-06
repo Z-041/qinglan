@@ -69,7 +69,10 @@ async function handleSubmit(): Promise<void> {
           <div>
             <span class="ql-label">选择话题</span>
             <TopicFilter v-model="topicId" :topics="topics" :allow-all="false" />
-            <p v-if="selectedTopic" class="ql-hint">话题规则：{{ selectedTopic.rules }}</p>
+            <!-- 窄屏右栏隐藏，话题规则在表单内回显；PC 由右栏「话题规则」卡承担，避免同一屏重复 -->
+            <div v-if="selectedTopic" class="hidden max-lg:block">
+              <p class="ql-hint">话题规则：{{ selectedTopic.rules }}</p>
+            </div>
           </div>
 
           <div class="mt-5">
