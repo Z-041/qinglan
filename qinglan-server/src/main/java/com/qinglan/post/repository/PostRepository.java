@@ -53,4 +53,19 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             where p.id = :postId
             """)
     int adjustCommentCount(@Param("postId") Long postId, @Param("delta") int delta);
+
+    /**
+     * 原子调整 {@code report_count}（待处理举报数）。
+     *
+     * <p>由 review 模块在提交举报（+1）与处置举报（归零）时调用，理由同
+     * {@link #adjustCommentCount}：实体读-改-写在并发举报下必丢更新。{@code case when}
+     * 兜住计数不低于 0。</p>
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update Post p
+            set p.reportCount = case when p.reportCount + :delta < 0 then 0 else p.reportCount + :delta end
+            where p.id = :postId
+            """)
+    int adjustReportCount(@Param("postId") Long postId, @Param("delta") int delta);
 }

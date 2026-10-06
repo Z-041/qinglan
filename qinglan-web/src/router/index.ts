@@ -16,7 +16,8 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
     {
-      path: '/posts/:id',
+      // 只接受数字 id：否则 /posts/abc 会被视图 Number() 成 NaN 再拿去请求接口
+      path: '/posts/:id(\\d+)',
       name: 'post-detail',
       component: () => import('@/views/PostDetailView.vue'),
     },

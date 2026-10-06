@@ -9,10 +9,12 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * JWT 签发与校验。访问令牌与邮箱认证令牌使用同一密钥、不同 typ 声明，互不通用。
@@ -56,6 +58,8 @@ public class JwtService {
         return Jwts.builder()
                 .issuer(jwtProperties.issuer())
                 .subject(emailHash)
+                // jti 一次性标识：绑定成功后按 jti 记录已消费，重复提交同一令牌直接拒绝
+                .id(UUID.randomUUID().toString())
                 .claim(CLAIM_TYPE, TYPE_EMAIL_VERIFY)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(jwtProperties.emailTokenTtl())))
@@ -69,14 +73,20 @@ public class JwtService {
                 .flatMap(this::toPayload);
     }
 
-    public Optional<String> parseEmailToken(String token) {
+    public Optional<EmailTokenPayload> parseEmailToken(String token) {
         return parseClaims(token)
                 .filter(claims -> TYPE_EMAIL_VERIFY.equals(claims.get(CLAIM_TYPE, String.class)))
-                .map(Claims::getSubject);
+                .flatMap(claims -> Optional.ofNullable(claims.getId())
+                        .map(jti -> new EmailTokenPayload(claims.getSubject(), jti)));
     }
 
     public long accessTokenTtlSeconds() {
         return jwtProperties.accessTokenTtl().toSeconds();
+    }
+
+    /** 邮箱认证令牌的有效期，用于设定一次性消费记录的存活时长 */
+    public Duration emailTokenTtl() {
+        return jwtProperties.emailTokenTtl();
     }
 
     private Optional<AccessTokenPayload> toPayload(Claims claims) {

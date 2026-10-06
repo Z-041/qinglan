@@ -7,8 +7,7 @@ import type { CreatePostRequest, PostDetail, PostSummary } from '@/types/post'
 /** 信息流查询条件；topic 为空表示全部话题，cursor 为空表示第一页 */
 export interface FetchPostsParams {
   topic?: number | null
-  cursor?: number | null
-  size?: number
+  cursor?: string | null
 }
 
 function buildFeedQuery(params: FetchPostsParams): string {
@@ -18,9 +17,6 @@ function buildFeedQuery(params: FetchPostsParams): string {
   }
   if (params.cursor != null) {
     search.set('cursor', String(params.cursor))
-  }
-  if (params.size != null) {
-    search.set('size', String(params.size))
   }
   const query = search.toString()
   return query ? `/posts?${query}` : '/posts'

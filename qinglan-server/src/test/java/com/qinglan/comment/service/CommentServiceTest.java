@@ -6,12 +6,15 @@ import com.qinglan.comment.entity.Comment;
 import com.qinglan.comment.entity.CommentStatus;
 import com.qinglan.comment.repository.CommentRepository;
 import com.qinglan.common.anonymous.AnonymousCodeService;
+import com.qinglan.common.audit.AuditAction;
+import com.qinglan.common.audit.AuditLogService;
+import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.interaction.LikeCount;
 import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeTargetType;
-import com.qinglan.common.moderation.ModerationResult;
+import com.qinglan.common.moderation.ContentGuard;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
@@ -64,12 +67,19 @@ class CommentServiceTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private AuditLogService auditLogService;
+
     private CommentService commentService;
+
+    /** 默认放行的硬拦截桩；需要拦截的用例自行构造一个会抛的守卫 */
+    private static final ContentGuard ALLOW_ALL = text -> {
+    };
 
     @BeforeEach
     void setUp() {
         commentService = new CommentService(commentRepository, postRepository, likeRepository,
-                anonymousCodeService, userService, content -> ModerationResult.pass());
+                anonymousCodeService, userService, auditLogService, ALLOW_ALL);
     }
 
     @Test
@@ -178,6 +188,47 @@ class CommentServiceTest {
     }
 
     @Test
+    @DisplayName("管理员移除评论：与自删共用同一套清理，并必须写审计（不变量 #7）")
+    void shouldRemoveCommentByAdminWithAudit() {
+        long operatorId = 99L;
+        when(commentRepository.findById(ROOT_ID))
+                .thenReturn(Optional.of(comment(ROOT_ID, POST_ID, null, AUTHOR_ID)));
+        when(commentRepository.findByParentIdInAndStatusOrderByCreatedAtAsc(List.of(ROOT_ID), CommentStatus.PUBLISHED))
+                .thenReturn(List.of(comment(REPLY_ID, POST_ID, ROOT_ID, 8L)));
+
+        commentService.removeByAdmin(ROOT_ID, operatorId, "人身攻击");
+
+        verify(postRepository).adjustCommentCount(POST_ID, -2);
+        verify(likeRepository).deleteByTargets(LikeTargetType.COMMENT, List.of(ROOT_ID, REPLY_ID));
+        verify(auditLogService).record(AuditTargetType.COMMENT, ROOT_ID,
+                AuditAction.COMMENT_REMOVE, operatorId, "人身攻击");
+    }
+
+    @Test
+    @DisplayName("管理员移除不存在的评论按「评论不存在」处理，且不留审计")
+    void shouldRejectRemovingMissingComment() {
+        when(commentRepository.findById(ROOT_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> commentService.removeByAdmin(ROOT_ID, 99L, "违规"))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.COMMENT_NOT_FOUND);
+        verifyNoInteractions(postRepository, auditLogService);
+    }
+
+    @Test
+    @DisplayName("重复移除同一条评论是幂等的：不二次扣减计数，也不重复留痕")
+    void shouldIgnoreRemovingAlreadyRemovedComment() {
+        Comment removed = comment(ROOT_ID, POST_ID, null, AUTHOR_ID);
+        removed.remove();
+        when(commentRepository.findById(ROOT_ID)).thenReturn(Optional.of(removed));
+
+        commentService.removeByAdmin(ROOT_ID, 99L, "违规");
+
+        verifyNoInteractions(postRepository, likeRepository, auditLogService);
+    }
+
+    @Test
     @DisplayName("A：帖子不可见时评论列表按「帖子不存在」处理，不泄露下架帖的评论")
     void shouldRejectListingCommentsOfInvisiblePost() {
         when(postRepository.findById(POST_ID)).thenReturn(Optional.of(pendingPost()));
@@ -221,13 +272,16 @@ class CommentServiceTest {
     }
 
     @Test
-    @DisplayName("D：内容审核端口已接入评论链路，判定不通过即拒绝")
+    @DisplayName("本地硬拦截已接入评论链路，命中即拒绝且不落库")
     void shouldRejectCommentWhenModeratorBlocks() {
         when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
         when(userService.requireUsableById(AUTHOR_ID))
                 .thenReturn(User.register("emailHash", "studentIdHash", "enc", SALT));
+        ContentGuard blocking = text -> {
+            throw new BizException(ErrorCode.CONTENT_REJECTED);
+        };
         CommentService strict = new CommentService(commentRepository, postRepository, likeRepository,
-                anonymousCodeService, userService, content -> ModerationResult.reject("测试拦截"));
+                anonymousCodeService, userService, auditLogService, blocking);
 
         assertThatThrownBy(() -> strict.create(POST_ID, AUTHOR_ID, new CreateCommentRequest("评论", null)))
                 .isInstanceOf(BizException.class)

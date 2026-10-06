@@ -25,6 +25,9 @@ qinglan:
     issuer: qinglan
     access-token-ttl: 2h
     email-token-ttl: 10m
+  review:
+    auto-takedown-threshold: 3
+    appeal-window: 7d
   auth:
     code-store: memory
     code-ttl: 5m

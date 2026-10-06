@@ -13,9 +13,6 @@ export const useUserStore = defineStore('user', () => {
   const profile = ref<UserProfile | null>(null)
 
   const isAuthenticated = computed(() => Boolean(accessToken.value))
-  const isAdmin = computed(
-    () => profile.value?.role === 'ADMIN' || profile.value?.role === 'SUPER_ADMIN',
-  )
 
   function setAccessToken(token: string | null): void {
     accessToken.value = token
@@ -35,5 +32,5 @@ export const useUserStore = defineStore('user', () => {
     setProfile(null)
   }
 
-  return { accessToken, profile, isAuthenticated, isAdmin, setAccessToken, setProfile, signOut }
+  return { accessToken, profile, isAuthenticated, setAccessToken, setProfile, signOut }
 })

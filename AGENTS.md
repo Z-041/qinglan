@@ -16,11 +16,11 @@ qinglan-server/          后端 Java 21 + Spring Boot 3.x，Maven
     ├── auth/            校园邮箱认证、学号绑定、匿名代号
     ├── post/            帖子、图片、话题
     ├── comment/         二级评论
-    ├── review/          举报、下架、申诉、审计日志
+    ├── review/          举报、审核队列、处置（下架/恢复/隐藏联系方式）、申诉复审
     ├── announcement/    公告与强制阅读
     ├── notification/    个人通知聚合
     ├── user/            信用分、封禁
-    └── common/          异常、响应封装、工具
+    └── common/          异常、响应封装、审计日志底座（common/audit）、工具
 
 包名一律 `com.qinglan.<module>`，如 `com.qinglan.post`、`com.qinglan.review`。
 新文件必须落在上述模块之一；不属于任何模块的先讨论，不要新建包。
@@ -71,10 +71,10 @@ Controller  →  Service  →  Repository  →  DB
   - `post → user`：查信用分 / 封禁态
   - `comment → user`：取匿名 salt 派生评论代号（不变量 #1）。salt 属身份字段，只允许用于派生，不得外流
   - `auth → user`：认证所需的身份查询与创建。身份字段的加解密集中在 `user` 内，明文身份不外流
-  - `user → review`：写审计日志（不变量 #7 要求：下架、封禁、发公告必须留痕）
-  - `post → review`：写审计日志（不变量 #2 要求：查看联系方式必须留痕；下架、放行等审核动作同样落日志）
   - `comment → post`：发表/删除评论时维护 `post.comment_count`（与 `report_count` 同为冗余计数，避免列表 N+1）
-- 上述方向**不得反向**（禁止 `user → auth`、`review → user`、`post → comment` 等），以保证依赖图无环；确需新增方向先提 issue 并同步本节
+  - `review → user`、`review → post`、`review → comment`：`review` 是审核体系（P2）的**编排者**——举报聚合、审核队列、下架/恢复/隐藏联系方式、申诉复审都需要读改帖子与评论、封禁用户。这些是审核动作本身，只能由 `review` 单向发起，业务模块不得反向依赖 `review`
+- **审计日志改走 `common`**：`AuditLog` / `AuditAction` / `AuditTargetType` / `AuditLogService` 位于 `common/audit`（表仍是 `review_log`）。需要留痕的业务模块（`post` 查看联系方式、`user` 封禁/调信用分、`review` 各类处置）直接依赖 `common.audit`，**不再有 `post → review` / `user → review`**。这样做的原因：`review` 编排业务模块、业务模块又需要写审计，若审计留在 `review` 依赖图必然成环（本节要求无环）；下沉到 `common` 后依赖图为 `业务模块 → common`、`review → 业务模块 → common`，无环且不变量 #7 行为不变
+- 上述方向**不得反向**（禁止 `user → auth`、`post → review`、`user → review`、`post → comment` 等），以保证依赖图无环；确需新增方向先提 issue 并同步本节
 - 本节白名单由 `ModuleBoundaryTest`（ArchUnit）自动校验：新增模块或新增跨模块方向必须同步该测试，否则 CI 的 `backend-static-analysis` 必红。测试对未登记模块按「只允许依赖 `common`」处理，因此**漏写白名单会失败，而不是静默通过**
 - Repository 不得返回 Entity 给 Controller；Entity → DTO 转换必须在 Service 层完成
 - `common/` 不得反向依赖任何业务模块
@@ -182,6 +182,8 @@ Skill 位于 `coding-skills/`，本项目实际加载 `java-springboot` 与 `vue
 - 接口必须有权限注解；管理员接口单独角色，且默认拒绝
 - 导出、批量查询接口必须分页 + 权限校验，禁止无限制全表扫描
 - 不得在错误信息中回显内部堆栈、SQL、手机号、学号
+- **安全响应头不得回退**：后端 API 响应必须带 CSP（`default-src 'none'`）、`X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Permissions-Policy`，由 `SecurityConfig.headers` 统一下发，测试见 `SecuritySkeletonTest`；前端 SPA 由 `vite.config.ts` 插件在**构建期**注入 CSP `meta`（dev 不注入，否则与 Vite HMR 冲突）。**后端 CSP 取 `'none'` 的前提是「后端只返回 JSON 与图片、不托管 SPA 页面」——若将来改由后端直接托管静态页面，必须同步放宽该策略，否则页面自身的脚本与样式会被自身响应头拦死。** `frame-ancestors` 写在 `meta` 里会被浏览器忽略，SPA 的防嵌套响应头须由托管服务器补（见 `修复记录.txt` T-14）。
+- 安全头是纵深防御的第二道墙，**不得**因此放松输出编码：禁止 `v-html` 渲染用户输入、禁止拼接 `innerHTML`，必须渲染富文本时先 DOMPurify
 
 ---
 

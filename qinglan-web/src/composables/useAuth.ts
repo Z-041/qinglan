@@ -74,17 +74,6 @@ export function useAuth() {
     return profile
   }
 
-  function reset(): void {
-    devCode.value = null
-    needsStudentBinding.value = false
-    emailToken = null
-  }
-
-  function signOut(): void {
-    userStore.signOut()
-    reset()
-  }
-
   return {
     sending,
     verifying,
@@ -95,7 +84,5 @@ export function useAuth() {
     verify,
     bind,
     loadProfile,
-    signOut,
-    reset,
   }
 }

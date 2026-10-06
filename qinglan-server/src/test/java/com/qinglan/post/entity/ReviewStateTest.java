@@ -76,4 +76,19 @@ class ReviewStateTest {
         assertThat(post.getStatus()).isEqualTo(PostStatus.REJECTED);
         assertThat(post.getReviewReason()).isEqualTo("含个人隐私信息");
     }
+
+    @Test
+    @DisplayName("恢复（申诉通过）清空下架理由，避免作者看到已失效的处罚说明")
+    void shouldClearReasonWhenRestored() {
+        Post post = Post.draft(1L, 1L, "正文", null);
+        post.submit(RiskLevel.LOW);
+        post.transitionTo(new ReviewState.Reviewing(9L, Instant.now()));
+        post.transitionTo(new ReviewState.Approved(9L, Instant.now()));
+        post.transitionTo(new ReviewState.TakenDown(9L, "ABUSE: 人身攻击", Instant.now()));
+
+        post.transitionTo(new ReviewState.Approved(8L, Instant.now()));
+
+        assertThat(post.getReviewReason()).isNull();
+        assertThat(post.getTakenDownAt()).isNull();
+    }
 }

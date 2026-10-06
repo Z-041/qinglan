@@ -1,6 +1,5 @@
-package com.qinglan.review.repository;
+package com.qinglan.common.audit;
 
-import com.qinglan.review.entity.AuditLog;
 import org.springframework.data.repository.Repository;
 
 /**

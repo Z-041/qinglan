@@ -6,12 +6,19 @@ import BaseButton from '@/components/base/BaseButton.vue'
 import BaseCard from '@/components/base/BaseCard.vue'
 import BaseTextarea from '@/components/base/BaseTextarea.vue'
 import CommentItem from '@/components/CommentItem.vue'
+import ReportDialog from '@/components/ReportDialog.vue'
 import { usePostDetail } from '@/composables/usePostDetail'
+import { useReport } from '@/composables/useReport'
+import { useToast } from '@/composables/useToast'
+import { useUserLabels } from '@/composables/useUserLabels'
 import { useUserStore } from '@/stores/user'
 import type { Comment } from '@/types/comment'
+import type { ReportReason } from '@/types/review'
 
 const route = useRoute()
 const userStore = useUserStore()
+const { pushToast } = useToast()
+const { reviewReasonText } = useUserLabels()
 
 const postId = Number(route.params.id)
 const {
@@ -19,18 +26,33 @@ const {
   comments,
   loading,
   submitting,
+  appealSubmitting,
+  appealed,
   load,
   toggleLike,
   toggleCommentLike,
   submitComment,
   removeComment,
+  submitAppeal,
 } = usePostDetail(postId)
+
+const {
+  target: reportTarget,
+  submitting: reportSubmitting,
+  open: openReport,
+  close: closeReport,
+  submit: submitReport,
+} = useReport()
 
 const commentText = ref('')
 const replyTo = ref<Comment | null>(null)
+const appealReason = ref('')
 
 /** contact 非空即服务端已判定可见，前端不再自行判断（不变量 #2） */
 const contactText = computed(() => post.value?.contact ?? '')
+
+/** 举报入口只对已认证访问者出现：举报人取自登录态，游客点了也只会被弹去登录 */
+const reportAllowed = computed(() => userStore.isAuthenticated)
 
 onMounted(() => {
   void load()
@@ -38,6 +60,23 @@ onMounted(() => {
 
 function startReply(comment: Comment): void {
   replyTo.value = comment
+}
+
+function openPostReport(): void {
+  if (!post.value) {
+    return
+  }
+  openReport({ targetType: 'POST', targetId: post.value.id, label: '这条帖子' })
+}
+
+function openCommentReport(comment: Comment): void {
+  openReport({ targetType: 'COMMENT', targetId: comment.id, label: '这条评论' })
+}
+
+async function handleReportSubmit(reasonCode: ReportReason, detail: string): Promise<void> {
+  if (await submitReport(reasonCode, detail)) {
+    pushToast('举报已提交，我们会尽快核实', 'info')
+  }
 }
 
 async function handleComment(): Promise<void> {
@@ -60,6 +99,17 @@ async function handleDeleteComment(commentId: number): Promise<void> {
     replyTo.value = null
   }
   await removeComment(commentId)
+}
+
+async function handleAppeal(): Promise<void> {
+  const reason = appealReason.value.trim()
+  if (!reason) {
+    return
+  }
+  if (await submitAppeal(reason)) {
+    pushToast('申诉已提交，将由另一位管理员复审', 'info')
+    appealReason.value = ''
+  }
 }
 </script>
 
@@ -102,7 +152,45 @@ async function handleDeleteComment(commentId: number): Promise<void> {
           />
         </div>
 
-        <p v-if="post.mine && post.reviewReason" class="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-deep">
+        <!--
+          下架：他人已看不到本页，只有作者能打开，故这里是作者唯一的申诉入口。
+          每帖限一次、限下架后 7 日内，越界由后端回 409 并由拦截器提示。
+        -->
+        <div v-if="post.mine && post.takenDown" class="mt-3 rounded-lg bg-danger-soft px-3 py-2.5">
+          <p class="text-xs font-medium text-danger-deep">内容已下架，他人不可见</p>
+          <p v-if="reviewReasonText(post.reviewReason)" class="mt-1 text-xs text-danger-deep">
+            处置原因：{{ reviewReasonText(post.reviewReason) }}
+          </p>
+
+          <p v-if="appealed" class="mt-2 text-xs text-danger-deep">
+            申诉已提交，将由另一位管理员复审
+          </p>
+          <template v-else>
+            <BaseTextarea
+              v-model="appealReason"
+              class="mt-2"
+              :rows="3"
+              :maxlength="500"
+              placeholder="说明申诉理由，最多 500 字"
+            />
+            <div class="mt-2 flex justify-end">
+              <BaseButton
+                size="sm"
+                :loading="appealSubmitting"
+                :disabled="!appealReason.trim()"
+                @click="handleAppeal"
+              >
+                提交申诉
+              </BaseButton>
+            </div>
+          </template>
+        </div>
+
+        <!-- 驳回：内容从未上线，没有申诉入口，只有作者看得到本页 -->
+        <p
+          v-else-if="post.mine && post.reviewReason"
+          class="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-deep"
+        >
           审核未通过：{{ post.reviewReason }}
         </p>
 
@@ -140,6 +228,14 @@ async function handleDeleteComment(commentId: number): Promise<void> {
             <span>{{ post.likeCount }}</span>
           </button>
           <span class="text-xs text-muted">评论 {{ post.commentCount }}</span>
+          <button
+            v-if="reportAllowed && !post.mine"
+            type="button"
+            class="ml-auto cursor-pointer text-xs text-muted transition hover:text-danger"
+            @click="openPostReport"
+          >
+            举报
+          </button>
         </div>
       </BaseCard>
 
@@ -151,9 +247,11 @@ async function handleDeleteComment(commentId: number): Promise<void> {
             v-for="comment in comments"
             :key="comment.id"
             :comment="comment"
+            :reportable="reportAllowed"
             @toggle-like="toggleCommentLike"
             @reply="startReply"
             @delete="handleDeleteComment"
+            @report="openCommentReport"
           />
         </ul>
         <p v-else class="mt-3 text-xs text-muted">还没有评论，说点什么吧</p>
@@ -190,6 +288,14 @@ async function handleDeleteComment(commentId: number): Promise<void> {
           <RouterLink class="text-primary-deep" to="/login">认证后</RouterLink>可参与评论
         </p>
       </BaseCard>
+
+      <ReportDialog
+        :open="reportTarget !== null"
+        :label="reportTarget?.label ?? ''"
+        :submitting="reportSubmitting"
+        @close="closeReport"
+        @submit="handleReportSubmit"
+      />
     </template>
   </section>
 </template>

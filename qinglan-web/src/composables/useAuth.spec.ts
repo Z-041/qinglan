@@ -113,22 +113,4 @@ describe('useAuth', () => {
     await expect(auth.bind('20230001')).rejects.toThrow('邮箱认证凭证缺失')
     expect(mockedBindStudentId).not.toHaveBeenCalled()
   })
-
-  it('退出登录清空令牌、档案与本地存储', async () => {
-    mockedVerifyEmail.mockResolvedValue({
-      accessToken: 'access-token',
-      emailToken: null,
-      needsStudentBinding: false,
-      user: studentProfile,
-    })
-
-    const auth = useAuth()
-    const store = useUserStore()
-    await auth.verify('stu@qinglan.edu.cn', '135790')
-    auth.signOut()
-
-    expect(store.accessToken).toBeNull()
-    expect(store.profile).toBeNull()
-    expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull()
-  })
 })

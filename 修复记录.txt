@@ -1,0 +1,1144 @@
+青栏 Qinglan · 修复记录
+================================================================================
+
+记录项目自开发以来发现并处理过的全部问题，用于避免跨会话丢失上下文。
+
+  排列方式：倒序，最新的在最上面（编号 R-01 最早、编号越大越新）
+  每条包含四要素：现象 / 根因 / 处理 / 验证。只记事实，不写推测
+  与代码相关的条目以 AGENTS.md 为准；凡涉及第四章七条不变量的，必须附测试
+  新增条目的做法：在「一、问题清单」最上方插入新编号，并同步更新文末「待办」与「经验」
+
+本文件为纯文本，不使用 Markdown 语法。
+
+
+================================================================================
+一、问题清单（倒序）
+================================================================================
+
+
+--------------------------------------------------------------------------------
+R-23 P2 审核体系复审（6 处缺陷：幂等 / 终态 / 可逆性 / 游标 / 写入口 / 并发）
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：缺陷修复（P2 复审）  状态：已交付
+来源：对 P2 审核体系做代码审查（两个子代理交叉验证），6 条全部成立、无一误报；
+      经用户批准「全部修复」。
+
+现象（6 条）
+  1 ReviewService.restore 缺幂等：帖子已是 Approved（他人已手工恢复）时，复审通过走
+    Approved → Approved，状态机判为非法迁移抛 ILLEGAL_REVIEW_TRANSITION，整个复审事务
+    回滚，连申诉状态也一并退回。
+  2 自动降级后举报无合法结案入口：举报数达阈值自动下架时，举报刻意保持 PENDING 以留在队列，
+    但管理员认同下架时既不能走 takeDown（TakenDown → TakenDown 非法），走 dismissReports 又
+    把它记成「内容不违规」（DISMISSED），与事实矛盾。举报永远挂在队列里。
+  3 「隐藏联系方式」不可逆：Post.showContact() 是死代码，没有任何处置能恢复可见性，一次
+    误判即永久生效。
+  4 审核队列游标缺 target_type：target_id 只在各自类型内唯一（帖子 #7 与评论 #7 撞号），
+    若两者举报数与首报时间并列，仅凭 target_id 无法区分，翻页会漏行或重复。
+  5 AppealService.submit 未校验账号可用：与 ReportService.report 口径不一致，被封禁账号
+    仍可提交申诉。
+  6 并发重复申诉抛 DataIntegrityViolationException：uk_appeal_target 挡住后落到全局
+    catch-all 500，而非约定的 409。
+
+根因
+  1 状态机 APPROVED 的合法后继只有 TAKEN_DOWN（不含自身），restore 未对「已经是目标态」做
+    短路，把「无需迁移」当成了「非法迁移」。
+  2 自动降级刻意保留 PENDING，却只补了下架动作，没补「人工确认举报成立」这个终态动作。
+  3 hideContact 落了处置但漏了撤销路径（同类处置 restore 有、showContact 无）。
+  4 队列排序键当时只考虑单类型，未意识到 target_id 跨类型会撞号。
+  5/6 申诉写入口比举报写入口少做了一步账号校验与一次唯一键冲突映射。
+
+处理
+  A restore 幂等短路（ReviewService.restore）：进方法先判 post.status == APPROVED，是则记
+    日志直接返回，不迁移、不写审计。消除「作者申诉后、复审前他人已手工恢复」的窗口，避免
+    复审因非法迁移整体回滚。
+  B 新增「维持下架」处置（ReviewService.upholdReports + 端点
+    POST /api/admin/posts/{postId}/uphold-reports + 审计码 REPORT_UPHOLD）：前置校验帖子必须
+    处于 TAKEN_DOWN（否则抛 ILLEGAL_REVIEW_TRANSITION），取该帖全部 PENDING 举报置 UPHELD，
+    按结案条数原子回退 report_count（不直接写 0，避免覆盖并发新增）；无待处理举报抛
+    REPORT_NOT_FOUND。只结案举报、不动内容状态。
+  C 新增「恢复联系方式可见」处置（ReviewService.showContact + 端点
+    POST /api/admin/posts/{postId}/show-contact + 审计码 POST_SHOW_CONTACT）：调
+    Post.showContact() 把 contactVisibility 改回 VISIBLE，写审计。补上隐藏的撤销路径。
+  D 队列游标纳入目标类型（ReportRepository.findQueueAggregates + ReviewQueueService）：排序键
+    与 having 增加第四段「目标类型序」，case 表达式 POST=0 / COMMENT=1；游标格式由三段扩为
+    四段「举报数:首报毫秒:目标 id:类型序」，首页哨兵类型序取 Integer.MAX_VALUE。新增目标类型
+    时 case 表达式与 ReviewQueueService.typeRank 两处都要补档。
+  E AppealService.submit 首行加 userService.requireUsableById(appellantId)，与举报同口径。
+  F 申诉落库改 saveAndFlush 并捕获 DataIntegrityViolationException → 抛
+    BizException(APPEAL_ALREADY_SUBMITTED)（409-006），把并发唯一键冲突映射为 409 而非 500。
+
+过程中撞到的一个坎
+  G 游标的类型序参数是 int 不是 long：JPQL 里 case ... then 0 else 1 end 的 0/1 字面量被
+    Hibernate 推断为 Integer，仓储方法参数声明为 long 时，首页哨兵 Long.MAX_VALUE 会以
+    InvalidDataAccessApiUsageException 失败（表现为队列接口 500）。改 int 后必须同步调用方
+    （ReviewQueueService 的常量 / typeRank / record 字段，以及测试里的 eq / any 匹配器）。
+
+文件
+  review/service/ReviewService.java（restore 幂等 + upholdReports + showContact）
+  review/service/ReviewQueueService.java（四段游标 + typeRank 为 int）
+  review/service/AppealService.java（requireUsableById + saveAndFlush 捕获唯一键）
+  review/repository/ReportRepository.java（findQueueAggregates 四段键集 + 参数 int）
+  review/controller/AdminReviewController.java（+show-contact / +uphold-reports）
+  common/audit/AuditAction.java（+POST_SHOW_CONTACT / +REPORT_UPHOLD）
+
+验证
+  单测：ReviewServiceTest（restore 幂等短路、restore 从 Pending 仍拒绝、showContact 恢复、
+        upholdReports 成功 / 内容仍可见拒绝 / 无待处理拒绝）
+        AppealServiceTest（不可用账号拒绝、唯一键冲突映射 409）
+        ReviewQueueServiceTest（四段游标解析 / 缺段 / 非正目标 id / 负类型序一律拒绝 / 透传）
+  持久层：ReportRepositoryTest.shouldPageAcrossTargetTypesWithSameTargetId——用 JdbcTemplate
+        把两类型举报的 created_at 抹平，构造「跨类型同 target_id 且两键并列」，验证翻页不跳行
+        （缺 target_type 时该行会被判为「不在游标之后」而丢）
+  集成：ReviewFlowIntegrationTest 新增 shouldUpholdReportsOfAutoTakenDownPost、
+        shouldAcceptAppealWhenPostAlreadyRestoredManually
+  全量：.\mvnw.cmd -q -B -ntp test 退出码 0，30 类 / 197 例，0 失败 0 错误
+
+
+--------------------------------------------------------------------------------
+R-22 安全响应头加固（CSP / X-Frame-Options / nosniff / Referrer / Permissions）
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：安全加固  状态：已交付（后端 API + 前端 SPA 构建产物）
+来源：R-22 之前的安全质询——「接口是否都带 token、URL 是否暴露 token、逆向能否击穿后端」
+      逐项查证后如实列出 6 项残余风险，其中「无 CSP / 无安全响应头」经用户批准先行加固。
+
+现象
+  前后端均未下发任何安全响应头：无 Content-Security-Policy，无 X-Frame-Options，
+  无 X-Content-Type-Options，无 Referrer-Policy，无 Permissions-Policy。一旦出现 XSS
+  注入点，浏览器没有任何第二道防线；页面也可被任意站点以 iframe 嵌套（点击劫持）。
+
+根因
+  Spring Security 默认头策略未显式配置；前端为纯静态产物，托管服务器也不发头。
+
+处理（两层，因为后端 API 与前端 SPA 是两套策略）
+  A 后端 API 响应（只返回 JSON 与图片，不托管 SPA 页面）
+    SecurityConfig.headers：
+      Content-Security-Policy: default-src 'none'; base-uri 'none';
+                               frame-ancestors 'none'; form-action 'none'
+      X-Frame-Options: DENY（CSP 的 frame-ancestors 在旧浏览器不生效，做双保险）
+      X-Content-Type-Options: nosniff
+      Referrer-Policy: no-referrer
+      Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+    取最严格 'none' 的前提：已查证 src/main/resources/static/ 无 index.html，
+    后端不托管任何页面（仅有 StorageWebConfig 的 /uploads/** 资源映射）。若将来改由
+    后端直接托管 SPA，必须放宽此策略，否则页面自身的脚本与样式会被自身头拦死。
+
+  B 前端 SPA 页面（由独立静态服务器托管）
+    在 vite.config.ts 增加插件 contentSecurityPolicy()，transformIndexHtml + apply: 'build'，
+    生产构建时往 index.html 的 head 顶部注入 meta：
+      default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+      img-src 'self' data: blob:; font-src 'self'; connect-src 'self';
+      base-uri 'none'; object-src 'none'; form-action 'self'
+    只在构建期注入：开发期 Vite 以 JS 动态插入 <style> 并建立 HMR WebSocket，与严格策略冲突。
+    style-src 保留 'unsafe-inline' 兼容运行时注入的少量 <style>；connect-src 'self' 依据
+    「接口默认同源（/api 由反向代理转发）」，若部署为跨域 API 必须补上其 origin。
+    img-src 的 data: blob: 当前未被用到（图片恒为 /uploads 同源地址），**经用户裁决保留**，
+    留给客户端本地预览（将来用 FileReader / URL.createObjectURL 做上传前预览时必需）——
+    不按死配置清理，vite.config.ts 已留注释说明。
+    注意：frame-ancestors 写在 <meta> 里会被浏览器忽略，防嵌套需由托管 index.html 的
+    服务器补 X-Frame-Options / frame-ancestors 响应头，前端插件覆盖不到。
+
+过程中处理的一个问题
+  C（Spring Security 6.5 API 废弃，与项目 -Werror 冲突）
+    SecurityConfig 首次编译失败：
+      HeadersConfigurer 中的 permissionsPolicy(Customizer<...PermissionsPolicyConfig>)
+      已过时, 且标记为待删除  → ERROR: 发现警告, 而且指定了 -Werror
+    用 javap -v 逐类比对确认：permissionsPolicy(Customizer) 带 Deprecated 标记，
+    非废弃等价 API 为 permissionsPolicyHeader(Customizer)（无标记）。
+    处理：改用 .permissionsPolicyHeader(...)。这是编译期 -Werror 门禁（R-17）第二次
+    拦下废弃 API 调用，说明门禁有效。javap 需用全路径 $env:JAVA_HOME\bin\javap.exe。
+
+验证
+  后端：SecuritySkeletonTest 新增 1 例 shouldWriteSecurityHeaders，断言 6 个头逐个存在
+  （CSP 含 default-src 'none' 与 frame-ancestors 'none'、XFO=DENY、nosniff、
+  Referrer-Policy=no-referrer、Permissions-Policy 全文），与既有 5 例合计 6 例全通过；
+  随后全量 .\mvnw.cmd -q -B -ntp test 退出码 0（30 类 / 186 例）。
+  前端：pnpm build 成功，dist/index.html 已含 Content-Security-Policy meta
+  （属性值中的单引号被 HTML 转义为 &#39;，浏览器解析后还原）；pnpm vitest run 17 文件 /
+  81 例通过；pnpm vue-tsc --noEmit 与 pnpm lint 退出码 0。
+  浏览器实测：vite preview --port 4173 + 浏览器子代理，控制台无任何 CSP 违规
+  （无 Refused to load/execute/apply style），页面正常渲染，document.styleSheets.length=16
+  证明 CSS 生效，资源全部同源加载成功；仅 /api/posts、/api/topics 请求失败（preview 无
+  后端代理，预期，与 CSP 无关）。
+
+文件
+  auth/security/SecurityConfig.java（+headers 块）                qinglan-server/.../auth/security
+  auth/security/SecuritySkeletonTest.java（+shouldWriteSecurityHeaders）  qinglan-server/src/test
+  vite.config.ts（+contentSecurityPolicy 插件）                   qinglan-web
+  AGENTS.md（第九章安全红线：登记响应头与 CSP 前提约束）           qinglan 仓库根
+
+
+--------------------------------------------------------------------------------
+R-21 P2 审核体系（举报 / 处置 / 申诉 / 本地硬拦截）
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：新功能（P2）  状态：已交付（后端 + 学生端；管理端 UI 属 P3）
+来源：按《青栏项目设计方案》第十节实施，决策点由用户逐项裁决
+
+范围与裁决
+  交付设计书五项（本地内容拦截 / 举报 / 审核队列 / 处置 / 复审）+ 申诉。机审只做①本地
+  硬拦截（词库 + 隐私正则），不做外部内容安全 API 调用——按用户裁决，真实拦截留给后续
+  Python 生态的独立服务，P2 只把端口与调用点接好（承接 R-19 D）。
+  自动降级：待处理举报达 N=3 自动下架并转人工复核（qinglan.review.auto-take-down-threshold）。
+  复审权限：复审人 ≠ 原处置人（回溯 post.review_by），否则 403 QL-403-005。
+  模块拓扑：审计底座由 review 下沉到 common/audit（消掉 R-19 遗留的 user→review /
+  post→review 两条依赖），使依赖图无环——业务模块只依赖 common，review 单向编排业务模块。
+  前端：只做学生端（举报入口 + 作者申诉入口）；管理端审核工作台按设计书第 309 / 398 行属
+  P3，本次不做。
+
+交付内容
+  后端
+    数据：V3 迁移新增 report（含不变量 #4 的 uk_report_target_reporter 三联唯一）与 appeal
+    （uk_appeal_target 每帖限一次）；report_count 与 review_by 复用 V2 既有列，未新增。
+    review 模块：ReportService（举报去重 + 聚合 + 自动降级）、ReviewService（放行 / 驳回 /
+    下架 / 恢复 / 隐藏联系方式 / 移除评论 / 驳回举报）、ReviewQueueService（游标分页队列，
+    按举报数降序 + 等待时长升序）、AppealService（申诉四关校验 + 复审）。
+    common/audit：AuditLog / AuditAction / AuditTargetType / AuditLogService 由原 review 下沉；
+    AuditAction 新增 POST_AUTO_TAKEDOWN / POST_TAKEDOWN / POST_RESTORE / POST_HIDE_CONTACT /
+    COMMENT_REMOVE / REPORT_DISMISS / APPEAL_REVIEW。
+    common/moderation：ContentGuard + LocalContentGuard（违禁词库 + 隐私正则）接入发帖与
+    评论链路，未通过抛 QL-400-008 / QL-400-009。
+    接口：POST /api/reports、POST /api/appeals（学生端）；GET /api/admin/review-queue、
+    POST /api/admin/posts/{id}/approve|reject|take-down|restore|hide-contact、
+    POST /api/admin/comments/{id}/remove、POST /api/admin/reports/dismiss、
+    POST /api/admin/appeals/{id}/accept|reject（管理端，类级 @PreAuthorize ADMIN/SUPER_ADMIN，
+    默认拒绝）。
+  前端
+    学生端举报：ReportDialog（8 个预设理由 + 补充说明）挂在帖子详情与二级评论上，未登录或
+    自己的内容不显示入口；请求编排收敛进 composable useReport。
+    学生端申诉：仅当 post.mine && post.takenDown 时出现申诉表单，每帖限一次、限下架后 7 日内。
+
+过程中处理的三个问题
+  A（post.review_reason 一列两用导致前端渲染歧义）
+    该列在下架时存「违规类型码[: 说明]」，在驳回时存审核员填的自由文本；再加上申诉通过恢复
+    后该列仍残留旧值，前端三种状态（驳回 / 下架 / 已恢复）无法凭「是否非空」区分。
+    处理：① PostDetailResponse 新增 takenDown 布尔字段，作为「申诉入口」的唯一判据——不能用
+      reviewReason 非空代替；② Post.transitionTo(Approved)（放行 / 恢复）清空 reviewReason，
+      历史仍完整留在 review_log（不变量 #7 只增不改删）；③ 前端 reviewReasonText 契约收窄为
+      「仅用于下架原因」，驳回路径原样渲染自由文本，REVIEW_CODE_LABELS 不登记 MANUAL_REJECT；
+      ④ 未知码退化为「因违规被处理」，不把裸码渲染给用户（原因码不回收，见 R-20 I）。
+
+  B（前端弹层与页头 z 轴同值）
+    ReportDialog 初版用 z-50，与 AppHeader 的 sticky z-50 同值，胜负取决于 DOM 顺序，弹层
+    一旦被挪到页头之前就会被盖住。
+    处理：确立分层约定「页头 z-50 < 弹层 z-[900] < 全局提示 z-[1000]」，弹层改 z-[900] 并在
+    组件里留注释固化；构建产物已确认生成 z-\[900\]{z-index:900}。
+
+  C（集成测试读到事务内的旧值）
+    ReviewFlowIntegrationTest 用 JdbcTemplate 直查库校验状态迁移，而 JPA 把 flush 推迟到事务
+    提交、JdbcTemplate 又完全绕过持久化上下文，于是拿到事务开始时的旧值（3 例假失败：
+    expected TAKEN_DOWN but was APPROVED 等）。
+    处理：测试内注入 EntityManager，查库前显式 flushPending()。这是测试写法问题，非产品缺陷。
+
+验证
+  后端 30 类 / 186 例 / 0 失败 / 0 错误 / 0 跳过（真实 MySQL，.\mvnw.cmd -q -B -ntp test，
+  退出码 0）。较 P1 的 18 类 / 103 例 +12 类 / +83 例；其中 R-21 的端到端用例
+  ReviewFlowIntegrationTest 覆盖：举报达阈值自动下架 → 队列聚合 3 条且不含举报人字段 →
+  重复举报 409 → 作者申诉 → 复审通过恢复；另含复审人=原处置人 403、复审驳回维持下架、
+  非作者 / 未下架 / 超期申诉被拒。
+  前端 17 文件 / 81 例通过（pnpm vitest run），pnpm vue-tsc --noEmit 与 pnpm lint 均退出码 0，
+  pnpm build 成功。
+
+文件
+  review/**（service/controller/dto/entity/repository/config 全套）  qinglan-server/.../review
+  common/audit/**（由 review 下沉）                                  qinglan-server/.../common/audit
+  common/moderation/ContentGuard.java + LocalContentGuard.java（新） qinglan-server/.../common/moderation
+  PostDetailResponse.java / PostService.java / Post.java            qinglan-server/.../post
+  ReviewStateTest.java（+恢复清空理由）/ ReviewFlowIntegrationTest.java（新）  qinglan-server/src/test
+  V3__report_and_appeal.sql（新）                                    qinglan-server/src/main/resources/db/migration
+  types/review.ts、api/review.ts、composables/useReport.ts（新）      qinglan-web/src
+  components/ReportDialog.vue（新）、CommentItem.vue                 qinglan-web/src/components
+  views/PostDetailView.vue、composables/usePostDetail.ts             qinglan-web/src
+  composables/useUserLabels.ts、types/post.ts                        qinglan-web/src
+  AGENTS.md（第三章白名单：audit 下沉 common、review 编排方向）        qinglan 仓库根
+
+
+--------------------------------------------------------------------------------
+R-20 P0/P1 复核遗留的轻微问题（原待办 T-12，E–O 共 10 项）
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：前后端轻微缺陷 / 工程卫生  状态：已修复（E–O 全部结项）
+发现方式：R-19 复核（E–O 11 项，其中 M 已随 R-19 B 修复）
+
+争议点由用户裁决：G 只收紧引用校验（归属绑定与孤儿回收留 P2）；H 抽存储抽象 + 内存/Redis
+双实现；J 给 emailToken 加 jti 一次性消费。
+
+  E（401 只清持久化、不清内存态）
+    http.ts 拦截器收到 401 时只 removeItem(localStorage)，Pinia 里的 accessToken / profile
+    仍是登录态，路由守卫与页面继续按「已登录」放行。
+    处理：新增注入式回调 setUnauthorizedHandler，由 main.ts 在 createPinia 之后注入
+    「userStore.signOut() + replace 到登录页」。不用「在 http.ts 里直接 useUserStore」是因为
+    store 反向依赖 http.ts 的 TOKEN_STORAGE_KEY，直接引用会形成循环依赖。
+
+  F（ImagePicker 直接 import @/api）
+    ImagePicker.vue 自己调 uploadImage，展示组件越过分层直接发请求（AGENTS.md 第七章）。
+    处理：新建 composable useImageUpload（上限常量 + 逐个上传 + 按 url 去重），组件改为
+    props/emit 纯展示（emit('select', files)），上传编排由 PublishView 接线。
+
+  G（发帖可引用任意 /uploads/ 路径）
+    原先只判前缀 startsWith("/uploads/")，/uploads/anything 这类伪造路径照样通过。
+    处理：改为与 LocalStorageService 返回值严格同构的正则
+    ^/uploads/\d{4}/\d{2}/[0-9a-f]{32}\.(jpg|png|webp)$；换存储实现时必须同步改该模式。
+    未使用图片的孤儿回收与归属绑定经用户裁决留到 P2。
+
+  H（上传无频次上限）
+    单账号可无限次上传，刷爆存储。
+    处理：新增 common.store.EphemeralStore（increment + markUsedOnce）作为短时效存储抽象，
+    提供 InMemory（默认，matchIfMissing）与 Redis 两套实现，开关 qinglan.store.type；
+    ImageUploadService 在格式校验之前按 ql:upload:rate:{userId} 计数，超 UploadProperties
+    上限抛 QL-429-003。限流先于校验是刻意的——坏文件同样消耗配额，否则可用非法请求绕过。
+
+  I（验证码错误可区分、学号占用可探测）
+    「验证码已失效」与「验证码不正确」返回不同错误码，等于把「该邮箱是否请求过验证码」
+    变成可探测信息；学号绑定时 STUDENT_ID_ALREADY_BOUND 可被用来逐个试探学号是否已注册。
+    处理：删 VERIFICATION_CODE_INVALID / VERIFICATION_CODE_EXPIRED 两码，统一为
+    QL-400-003「验证码不正确或已失效」；学号占用改回与并发兜底同一个通用码
+    REGISTRATION_CONFLICT（QL-409-003），并删掉 STUDENT_ID_ALREADY_BOUND。
+    副作用：400 段留下 004 空号，属正常现象（错误码不回收、不复用）。
+
+  J（emailToken 10 分钟内可重放）
+    邮箱认证凭证在有效期内可无限次拿去绑学号。
+    处理：issueEmailToken 写入随机 jti，parseEmailToken 返回 EmailTokenPayload(emailHash,
+    jti)；AuthService.bindStudentId 在创建用户之前用 markUsedOnce 抢占
+    ql:auth:emailtoken:{jti}，抢不到即抛 EMAIL_TOKEN_INVALID。抢占式（而非成功后再记）
+    保证并发请求里只有一个能进入创建流程。客户端契约零改动。
+
+  K（前端三处收窄无兜底）
+    role/status 白名单查表无兜底会渲染出 undefined；/posts/abc 被 Number() 成 NaN 后仍去
+    请求接口；图片列表 :key 用 url 可能重复。
+    处理：useUserLabels 对未知枚举值返回「未知」；路由改为 /posts/:id(\\d+)，非法 id 落回
+    首页；useImageUpload 按 url 去重，保证 :key 唯一。
+
+  L（死代码）
+    stores/user.ts 的 isAdmin、usePublish 的 loadingTopics、useAuth 的 signOut/reset 均无
+    生产引用（仅测试引用）。处理：连同对应测试用例一并删除。stores/user.ts 的 signOut 被
+    App.vue 使用，保留并成为 E 项注入回调的执行体。
+
+  N（application-local.yml 会被打进 jar）
+    本地配置（含 AES key / email pepper / JWT secret）放在 src/main/resources 下，
+    构建时会进 target/classes 与产物 jar。
+    处理：移至 qinglan-server/config/application-local.yml（Spring Boot 默认加载
+    file:./config/，从 qinglan-server 目录启动即生效，命令不变），并删除 target 下的陈旧
+    副本。.gitignore 的 **/application-local.yml 已覆盖新位置，已用 git check-ignore 确认。
+
+  O（列表 size 参数字面冲突）
+    信息流接口暴露 size 参数，与 AGENTS.md 第三章「列表一律游标分页、不得用 page/size」
+    冲突。处理：前后端一并删除 size，页大小由服务端固定（DEFAULT_PAGE_SIZE = 20）。
+
+  验证
+    后端 18 类 / 103 例 / 0 失败 / 0 跳过（R-19 的 94 + 本次新增 9：AuthServiceTest 的
+    「凭证只能消费一次」「jti 互不相同」2 例、ImageUploadServiceTest 4 例、
+    InMemoryEphemeralStoreTest 3 例；真实 MySQL）。前端 14 spec / 61 例 + vue-tsc + lint
+    全绿。因 ErrorCode 删除而失败的 3 处断言（UserServiceTest / EmailVerificationServiceTest
+    / AuthControllerTest）与因图片正则收紧而失效的 PostServiceTest、PostFlowIntegrationTest
+    的 size 参数已同步修正。
+
+  文件
+    http.ts / main.ts / http.spec.ts                   qinglan-web/src
+    useUserLabels.ts / router/index.ts / stores/user.ts qinglan-web/src
+    useImageUpload.ts（新）/ ImagePicker.vue / PublishView.vue  qinglan-web/src
+    usePublish.ts / useAuth.ts / api/post.ts           qinglan-web/src
+    EphemeralStore.java（新）/ InMemoryEphemeralStore.java（新）
+    RedisEphemeralStore.java（新）                     qinglan-server/.../common/store
+    EmailTokenPayload.java（新）/ JwtService.java / AuthService.java  qinglan-server/.../auth
+    UploadProperties.java（新）/ ImageUploadService.java  qinglan-server/.../post
+    PostService.java / PostController.java             qinglan-server/.../post
+    ErrorCode.java / UserService.java                  qinglan-server/.../common|user
+    application.yml                                    qinglan-server/src/main/resources
+    application-local.yml（移动）                       qinglan-server/config
+
+
+--------------------------------------------------------------------------------
+R-19 P0/P1 复核：越权读写、封禁不即时生效、计数丢更新、服务端无内容拦截
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：后端缺陷（权限 / 一致性 / 风控）  状态：A/B/C 已修复、D 已预留接入点
+发现方式：P0/P1 全量复核（对七条不变量、第三章模块边界、第九章安全红线逐条比对）
+
+复核共发现 15 项，其中 4 项需要处理（下面 A–D），其余 11 项为轻微问题（E–O，见待办
+T-12）。用户裁决：修 A+B、修 C，D 只预留接口，后续用 Python 生态对接。
+
+  A（越权读写）
+    CommentService.list 与 like / unlike 只校验评论自身存在，不校验其所属帖子对当前
+    viewer 是否可见。于是待审 / 已下架帖的评论可被任何人直接读取（绕过帖子详情），也可被
+    继续点赞。
+    处理：list 入口补 requireVisiblePost；点赞侧新增 requireVisibleComment，先查评论再
+    校验其 postId 的可见性，不可见一律按 POST_NOT_FOUND 返回，不泄露存在性。
+
+  B（封禁不即时生效）
+    账号可用性此前只在登录时校验（AuthService.assertUsable），而访问令牌是无状态的、
+    签发后 2 小时内不会失效——被封禁的用户持旧令牌仍可继续发帖 / 评论 / 点赞 / 上传。
+    处理：判定规则收敛到 UserService.assertUsable(User) 单一出处，新增
+    requireUsableById(userId)；发布、评论、评论点赞、帖子点赞、图片上传五处写入口统一调用，
+    登录流程改为复用同一方法。只读接口不受影响（封禁用户仍可浏览）。
+
+  C（计数丢更新）
+    post.comment_count 走实体读-改-写（Post.increaseCommentCount /
+    decreaseCommentCount，实体无 @Version），并发评论时两个事务各读到旧值再写回，会丢
+    更新，列表上的评论数与实际长期不符。
+    处理：新增 PostRepository.adjustCommentCount(postId, delta)，用一条 UPDATE post SET
+    comment_count = case when ... < 0 then 0 else ... end WHERE id = ? 原子调整；删掉
+    实体上的两个内存改法。@Modifying 必须带 flushAutomatically（先落定评论的写入）与
+    clearAutomatically（批量 UPDATE 绕过持久化上下文，同一事务内随后再读帖子会命中一级
+    缓存拿到旧值）。
+
+  D（服务端无内容拦截）
+    手机号检测只在前端 usePublish.ts 的正则里，服务端不设防，直接调接口即可绕过；设计
+    方案把内容拦截划在 P2。
+    处理（按用户要求只预留）：新增端口 common.moderation.ContentModerator +
+    ModerationResult + 默认实现 AllowAllContentModerator（一律放行），发布与评论链路已
+    接入调用点，未通过即 QL-400-008。真实拦截待接入独立内容安全服务（Python 生态，
+    HTTP / gRPC）后替换实现 Bean，链路无需改动。
+
+  顺带
+    原 PostService.assertCanPost 只覆盖 BANNED 不覆盖 BLACKLISTED（复核项 M），已由 B 的
+    requireUsableById 一并覆盖。
+
+  验证
+    后端 16 类 / 94 例 / 0 失败 / 0 跳过（原 85 + A/B/D 单测 6 + B 单测（用户）3 + B
+    集成 1——含 UserServiceTest 的封禁/黑名单/正常三态、CommentServiceTest 的不可见帖
+    列表与点赞、封禁评论、审核端口拦截、PostServiceTest 的审核端口拦截，以及
+    PostFlowIntegrationTest.shouldEnforceBanOnWritePathsImmediately 用真库真令牌复现
+    「先签发、后封禁」）；前端未改动，回归 14 spec / 61 例 + vue-tsc + lint 全绿。
+
+  文件
+    CommentService.java          qinglan-server/src/main/java/com/qinglan/comment/service/CommentService.java
+    PostService.java             qinglan-server/src/main/java/com/qinglan/post/service/PostService.java
+    ImageUploadService.java      qinglan-server/src/main/java/com/qinglan/post/service/ImageUploadService.java
+    UploadController.java        qinglan-server/src/main/java/com/qinglan/post/controller/UploadController.java
+    UserService.java             qinglan-server/src/main/java/com/qinglan/user/service/UserService.java
+    AuthService.java             qinglan-server/src/main/java/com/qinglan/auth/service/AuthService.java
+    PostRepository.java          qinglan-server/src/main/java/com/qinglan/post/repository/PostRepository.java
+    Post.java                    qinglan-server/src/main/java/com/qinglan/post/entity/Post.java
+    ContentModerator.java        qinglan-server/src/main/java/com/qinglan/common/moderation/ContentModerator.java
+    AllowAllContentModerator.java qinglan-server/src/main/java/com/qinglan/common/moderation/AllowAllContentModerator.java
+    ErrorCode.java               qinglan-server/src/main/java/com/qinglan/common/error/ErrorCode.java
+
+
+--------------------------------------------------------------------------------
+R-18 认证步骤未激活徽标的圆对白底仅 1.08:1（非文本组件不达标）
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：前端缺陷（可访问性）  状态：已修复  来源：R-11 的遗留（原待办 T-06）
+
+  现象
+    R-11 为了让未激活步骤徽标的数字达标，把徽标底色从 primary-soft 调浅为 primary-tint，
+    数字对比 4.41 → 4.70；但徽标圆本身对白卡片的对比同时从 1.15 掉到 1.08，低于 WCAG
+    1.4.11 对非文本组件的 3:1，20px 圆的边界几乎看不见，数字像是悬空的。
+
+  候选方案
+    1) 给圆加深色描边（需 ≥ #949494 才够 3:1，观感偏重）
+    2) 未激活态不画圆、只留灰色数字，把圆圈作为激活态专属样式
+    3) 判定为装饰元素、维持现状
+
+  处理
+    （2026-10-06，用户授权「你选就行了」）选方案 2——未激活态去掉 bg-primary-tint，只留
+    text-muted，圆圈成为「已完成 / 当前」步骤的专属语言，与常见步骤条一致。不选 1 是描边
+    会把未激活态画得比激活态还重；不选 3 是这个圆确实在传递进度信息，不算纯装饰。
+
+  验证
+    浏览器实测 http://localhost:5173/login，getComputedStyle 取值——徽标 1 为
+    rgb(31,111,96) 底 + 白字（6.0:1）；徽标 2/3 为 rgba(0,0,0,0) 底 + 数字
+    rgb(102,111,128)，对卡片白底 5.06:1。三者仍为 20×20、y 坐标同为 228、单行不换行，
+    无布局位移。
+
+  文件
+    LoginView.vue                qinglan-web/src/views/LoginView.vue
+
+
+--------------------------------------------------------------------------------
+R-17 静态检查没有门禁，R-16 那类「规则与实现不一致」只能靠人工发现
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：工程门禁缺失  状态：已修复（已接入 CI）  发现方式：R-16 复盘
+
+  现象
+    项目此前只有单元/集成测试门禁，没有任何静态检查进构建或 CI——pom.xml 既无 checkstyle /
+    spotbugs / pmd，编译器也没开 -Xlint。于是 R-05、R-16 两次「AGENTS.md 写了白名单、代码
+    却越了界」都只能靠人工比对才浮出来；人工扫描是一次性的，改完即失效。
+
+  处理
+    （2026-10-06，用户选定「写进 CI」）
+    1. 编译期门禁：maven-compiler-plugin 加 -Xlint:all,-processing -Werror，javac 警告即
+       构建失败。processing 一档必须关掉——Lombok 之外的注解（JUnit / Spring / ArchUnit）
+       没有处理器认领，javac 会对每一个逐条报「没有处理程序要使用这些注解」，纯噪音。
+    2. 架构门禁：新增 ModuleBoundaryTest（ArchUnit 1.5.1），把 AGENTS.md 第三章白名单变成
+       断言。规则动态发现模块：从被分析的类里现取顶层包名，凡未在 ALLOWED 登记的模块一律按
+       「只允许依赖 common」处理，因此漏写白名单是失败，而不是静默通过；另断言 controller
+       不得依赖 repository。
+    3. CI：新增独立 job backend-static-analysis（不依赖 MySQL，最快失败、归因清晰），只跑
+       -Dtest=ModuleBoundaryTest；其余 job 不变。
+
+  顺带被门禁抓出的真实问题
+    BizException.java 作为 RuntimeException 子类缺 serialVersionUID，触发 -Xlint:serial，
+    已补 private static final long serialVersionUID = 1L。这条正说明一次性人工扫描代替不了
+    常驻门禁。
+
+  验证
+    正向：./mvnw -Dtest=ModuleBoundaryTest test → Tests run: 2, Failures: 0, Errors: 0，
+      BUILD SUCCESS
+    反向（关键，门禁不能只证明自己永远为真）：临时去掉白名单里 comment 的 post，测试立刻报
+      8 处 Architecture Violation + BUILD FAILURE；恢复后转绿
+    全量：后端 85 例 0 失败（原 81 + 边界 2 + R-15 单元 1 + R-15 集成 1）
+
+  文件
+    pom.xml                      qinglan-server/pom.xml
+    ModuleBoundaryTest.java      qinglan-server/src/test/java/com/qinglan/support/ModuleBoundaryTest.java
+    ci.yml                       .github/workflows/ci.yml
+    BizException.java            qinglan-server/src/main/java/com/qinglan/common/error/BizException.java
+
+
+--------------------------------------------------------------------------------
+R-16 comment → user 跨模块依赖不在白名单内（规则与实现不一致）
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：架构一致性  状态：已解决（方案 1，纯文档改动）  发现方式：静态工具扫描
+
+  现象
+    CommentService 注入 UserService（第 19、52 行），在 create 里用
+    userService.requireById(authorId) 取 anonymousSalt 派生匿名代号（第 94、100 行）。而
+    AGENTS.md 第三章的白名单只有 post → user、auth → user、user → review、post → review、
+    comment → post，没有 comment → user。
+
+  性质
+    方向本身合理，不是写错——salt 属身份字段，必须留在 user 内不外流；同款依赖在
+    post → user 已被允许，评论侧是白名单漏写。
+
+  候选方案
+    1) 白名单补上 comment → user，用途注明「取匿名 salt 派生代号」——与 post 侧对称，改动最小
+    2) 把派生职责收进 user，对外提供 deriveAnonymousCode(postId, authorId)，两个模块都不再
+       直连 UserService
+
+  倾向
+    方案 1 本阶段做，方案 2 留到 P2 复核匿名代号时一并落地。
+
+  处理
+    （2026-10-06）按方案 1 在 AGENTS.md 第三章白名单补上 comment → user，用途注明「取匿名
+    salt 派生评论代号」，并声明 salt 只允许用于派生、不得外流。实现本来就正确，本次仅让文档
+    与实现对齐，无任何代码改动；方案 2（把派生职责收进 user 模块，对外提供
+    deriveAnonymousCode）留到 P2 复核匿名代号时再评估。
+
+  为什么之前没被拦住
+    项目没有自动化边界检查（无 ArchUnit 之类的依赖测试），这类「文档写了但代码越界」只能靠
+    人工比对，本次是静态扫描时才浮出来。
+
+  附带观察（低危）
+    CommentService 直接依赖 PostRepository（第 18 行）维护 comment_count，方向在白名单内，
+    但越过了 post 的 Service 层；若日后 PostService 给计数加了不变量校验，这里会绕过，先记录
+    不改。
+
+
+--------------------------------------------------------------------------------
+R-15 软删评论残留不可达的 like_record（孤儿点赞行）
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：后端缺陷（数据卫生）  状态：已解决（方案 1 的收紧版：只在不可撤回的删除路径上清理）
+
+  现象
+    清理本地测试数据时点表发现 like_record 有一行 target_type=COMMENT, target_id=1,
+    user_id=7，而该评论 status 已是 REMOVED（软删）。
+
+  根因
+    评论删除是软删（CommentService.delete 把 status 置为 REMOVED），但同事务没有清理该目标
+    上的 like_record。点赞记录用 (target_type, target_id) 定位，目标软删后这些行既不会被读取
+    也不会被回收。
+
+  影响
+    低危——点赞数按 target 现查，不会把已删评论的赞算进任何展示；但垃圾行会随删除量无限累积。
+    同样的隐患将来会出现在帖子下架/删除上（P2 起涉及）。
+
+  候选方案（需人决策，不擅自选）
+    1) 删除/下架时在同一事务内硬删该目标的 like_record——最干净，但下架若可撤销
+       （TakenDown → Approved）就得重建点赞，会丢数据
+    2) 保留点赞行，只在下架态不参与计数；另加低频清理任务回收长期不可达的行
+    3) 维持现状，接受垃圾行累积（需先确认量级上限）
+
+  倾向
+    方案 2 与不变量 #5 的「下架可申诉恢复」相容；方案 1 对评论删除安全、对帖子下架不安全。
+
+  处理
+    （2026-10-06，用户授权「你选就行了」）采纳方案 1 的收紧版——只在不可撤回的删除路径上清理。
+    评论删除是软删且没有恢复入口，因此 CommentService.delete 在同一事务内调用新增的
+    LikeRepository.deleteByTargets(COMMENT, removedIds)，把一级评论与连带移除的回复的点赞行
+    一并硬删；帖子侧不动，因为下架可申诉恢复（TakenDown → Approved），硬删会丢点赞，留到 P2
+    设计下架流程时再定。不选方案 2 的理由：低频清理任务是为一个已被根治的场景引入常驻组件，
+    属过度设计。
+
+  验证
+    单元测 CommentServiceTest.shouldPurgeLikesOfRemovedComments 断言按 [一级, 回复] 批量
+    清理；集成测 PostFlowIntegrationTest.shouldPurgeCommentLikesOnDelete 用真实 MySQL 断言
+    两条点赞行删后均为 0；后端全量 85 例 0 失败。
+
+  文件
+    LikeRepository.java          qinglan-server/src/main/java/com/qinglan/common/interaction/LikeRepository.java
+    CommentService.java          qinglan-server/src/main/java/com/qinglan/comment/service/CommentService.java
+
+
+--------------------------------------------------------------------------------
+R-14 Vite dev 未代理 /uploads，帖子配图在开发环境全部 404
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：前端缺陷（开发环境）  状态：已修复
+
+  现象
+    P1 详情页/首页用 <img src="/uploads/..."> 渲染配图，开发环境取图全部失败。
+
+  根因
+    vite.config.ts 的 dev server 只代理了 /api；而上传图片由后端静态资源映射（/uploads/**）
+    直接返回，路径不带 /api 前缀，请求落回 Vite 自身，返回它的 404。
+
+  处理
+    dev server 增加 '/uploads' → http://localhost:8080 的代理，与 /api 并列；生产环境由网关/
+    对象存储直接对外，不经过本代理。
+
+  验证
+    放探针文件 data/uploads/2026/10/probe.png，经
+    http://localhost:5173/uploads/2026/10/probe.png 取回 200 image/png（70 字节），与直连
+    8080 的结果一致；探针文件已删除。
+
+  文件
+    vite.config.ts               qinglan-web/vite.config.ts
+
+
+--------------------------------------------------------------------------------
+R-13 post/comment 的 anonymous_code 为 NOT NULL，与「代号依赖自增主键」冲突
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：后端缺陷（数据完整性）  状态：已修复
+
+  现象
+    P1 端到端集成测试首次真实发帖/发评论时后端返回 500，日志为
+    DataIntegrityViolationException: Column 'anonymous_code' cannot be null。
+
+  根因
+    不变量 #1 要求 anonymous_code = hash(目标 id + author_id + salt)，其中 id 是自增主键，
+    只能在 INSERT 之后拿到；但该列是 NOT NULL，插入当刻必须已有值。单元测试把
+    repository.save 全部 mock 掉，插入期约束从未真正执行，因此只有走真实 MySQL 的集成测试能
+    暴露。
+
+  处理
+    Post 与 Comment 的静态工厂各写入占位常量 "PENDING"；INSERT 拿到主键后在同一事务内
+    assignAnonymousCode(...) 回填真实代号，中间态不对外可见。
+
+  验证
+    PostFlowIntegrationTest 4 例全绿；后端全量 81 例 0 失败；浏览器实测发帖后代号显示为
+    「石榴#adaf」而非占位值。
+
+  文件
+    Post.java                    qinglan-server/src/main/java/com/qinglan/post/entity/Post.java
+    Comment.java                 qinglan-server/src/main/java/com/qinglan/comment/entity/Comment.java
+
+
+--------------------------------------------------------------------------------
+R-12 FormField.vue 的 error prop 去留未定
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：设计边界  状态：已决（保留）
+
+  现象
+    R-06 定下「请求错误只有唯一出口（http.ts 全局弹窗）」后，FormField 的 error prop 看起来
+    与该约定冲突；且当前没有任何页面传这个 prop。
+
+  结论
+    保留。R-06 约束的是请求错误；FormField.error 是字段级客户端校验文案（如「邮箱格式不
+    正确」），属 components/base/ 自身的展示职责（props down / events up），两者不是一回事。
+    P1 发帖表单的内容长度、图片数量校验必然用到，删了要马上加回来。
+
+  处理
+    在 FormField.vue 的 error prop 上补注释写明这条边界，避免后来者误判为违规而删掉。
+
+  验证
+    FormField.spec.ts 3 例继续通过（含 role="alert" 与 error/hint 互斥断言）。
+
+  文件
+    FormField.vue                qinglan-web/src/components/base/FormField.vue
+
+
+--------------------------------------------------------------------------------
+R-11 R-08 之后仍有三处文字对比度低于 AA
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：前端缺陷（可访问性）  状态：已修复
+
+  现象
+    R-08 修完 7 处后，实测仍有小字号文字低于 4.5:1。
+
+  根因
+    1) --ql-danger #d7463c 本身偏浅，白字只有 4.35:1
+    2) 错误弹窗把 text-danger 压在了 bg-danger-soft 上，仅 3.74:1（R-08 时只量了「白底 +
+       danger 文字」，漏了「danger-soft 底」这一档）
+    3) 认证步骤未激活态把 text-muted 压在了 bg-primary-soft 上，仅 4.41:1
+
+  处理
+    --ql-danger 调为 #cf3b31（白字 4.86:1）
+    新增 --ql-danger-deep: #b3312a，专用于 danger-soft 浅底上的文字（5.33:1），与主色
+      *-deep 的分档逻辑对齐
+    ToastHost 错误弹窗改 text-danger-deep
+    BaseButton danger 悬停由 hover:opacity-90 改为 hover:bg-danger-deep——降不透明度会把
+      白字一起淡掉，反而拉低对比度（原悬停实测约 4.1:1，现 6.20:1）
+    LoginView 未激活步骤底色 bg-primary-soft → bg-primary-tint（4.41 → 4.70:1）
+
+  验证
+    产物 CSS 确认 --ql-danger:#cf3b31 / --ql-danger-deep:#b3312a 已生成、旧值 #d7463c 零残留；
+    浏览器实测未激活徽标数字 rgb(102,111,128) 压 rgb(241,248,246) = 4.70:1、错误弹窗
+    rgb(179,49,42) 压 rgb(251,234,233) = 5.33:1，且弹窗经 elementFromPoint 确认在最上层未被
+    遮挡。
+
+  遗留
+    未激活徽标填充色与白卡片仅 1.08:1（改前 1.15:1），低于非文本组件 3:1 阈值——已由 R-18
+    解决（未激活态不再画圆）。
+
+  文件
+    main.css                     qinglan-web/src/styles/main.css
+    uno.config.ts                qinglan-web/uno.config.ts
+    ToastHost.vue                qinglan-web/src/components/ToastHost.vue
+    BaseButton.vue               qinglan-web/src/components/base/BaseButton.vue
+    LoginView.vue                qinglan-web/src/views/LoginView.vue
+
+
+--------------------------------------------------------------------------------
+R-10 名称与角色标签竖排，导致名称顶进渐变横幅
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：前端缺陷  状态：已修复
+
+  现象
+    卡片里「匿名用户」文字的上沿落在青色渐变横幅内，压着渐变色显示。
+
+  根因
+    名称与角色标签原为竖排，文字块高 44px（名称 20 + 间距 4 + 标签 20）；外层是 items-end
+    底部对齐且带 pb-1，底边钉在 y=278 往上推，上沿落在 y=230，而横幅底边在 y=246，因此有
+    16px 伸进横幅。
+
+  处理
+    名称与标签改为同一水平线横排，文字块降到 20px 高，自然落到横幅下方。
+
+  验证
+    实测名称与标签 y ∈ [254, 274] 完全相同（同一行），横幅底边 246，留 8px 间距；
+    elementFromPoint 三点（名称中心、标签中心、头像贴顶）全部命中预期元素，无一命中横幅。
+
+  文件
+    ProfileView.vue              qinglan-web/src/views/ProfileView.vue
+
+
+--------------------------------------------------------------------------------
+R-09 头像上半截被渐变横幅遮挡
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：前端缺陷（图层）  状态：已修复
+
+  现象
+    头像「匿」字只显示下半截，头像上半部分看不见，只剩一块渐变色。
+
+  根因
+    横幅是 position: relative（为约束内部两个装饰圆），而头像所在行是 position: static。
+    按 CSS 绘制顺序，定位元素绘制在非定位元素之上，且与 DOM 前后顺序无关，横幅正好盖掉重叠
+    的 32px——恰好是 64px 头像的上半截。
+
+  处理
+    给头像所在行加 relative z-10，抬到横幅之上。
+
+  验证
+    elementFromPoint 五点探测（贴顶 2px、左上角、右上角、上半截中心、下半截中心）全部返回
+    头像 span，修复前上半截返回的是横幅。
+
+  漏检说明
+    此前两轮浏览器检查只读 getBoundingClientRect，几何尺寸全部正确，因此完全没发现该问题。
+    几何正确 ≠ 视觉正确，见文末经验。
+
+  文件
+    ProfileView.vue              qinglan-web/src/views/ProfileView.vue
+
+
+--------------------------------------------------------------------------------
+R-08 全站主色对比度不达标（7 处）
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：前端缺陷（可访问性）  状态：已修复
+
+  现象
+    主色 #2E8B7A 配白字仅 4.13:1、浅色底配主色文字仅 3.60:1，均低于小字号文本 WCAG AA 的
+    4.5:1。
+
+  影响范围
+    ql-nav-link 激活态、首页胶囊标签、首页序号方块、BaseButton primary、首页 CTA、认证步骤
+    指示器激活态、BaseButton ghost 悬停（3.83:1）。
+
+  根因
+    品牌主色由设计方案指定为 #2E8B7A 不可改，但该色值本身达不到小字号白字/浅底文字的对比度
+    要求，早期又未区分"装饰用"与"承载文字用"。
+
+  处理
+    新增 --ql-primary-strong: #1b5648（白字 8.5:1）；「填充底 + 白字」统一改用 bg-primary-deep
+    （6.0:1），悬停用 primary-strong；浅色底上的小字统一 text-primary-deep（5.2:1）；删除改完
+    后已无引用的 --ql-primary-hover。
+
+  未改动
+    头像「匿」（20px 粗体，属大字号，3:1 即可，实测 3.6）与认证页信封图标（图形，3:1 即可）
+    保留 text-primary，以免品牌主色在界面上消失。
+
+  验证
+    token 值按 WCAG 公式实算；产物 CSS 已确认生成 --ql-primary-strong 与
+    hover:bg-primary-strong，--ql-primary-hover 零残留。
+
+  文件
+    main.css                     qinglan-web/src/styles/main.css
+    uno.config.ts                qinglan-web/uno.config.ts
+    BaseButton.vue               qinglan-web/src/components/base/BaseButton.vue
+    HomeView.vue                 qinglan-web/src/views/HomeView.vue
+    LoginView.vue                qinglan-web/src/views/LoginView.vue
+
+
+--------------------------------------------------------------------------------
+R-07 「我的」页面暴露内部信息且有可读性问题
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：前端缺陷  状态：已修复
+
+  现象
+    1) 角色直接显示英文枚举 STUDENT（顶栏与卡片各一处）
+    2) 信息列表展示裸数字「用户 ID → 6」
+    3) 角色徽标对比度仅 3.6:1，低于 AA
+    4) 卡片下方约 305px 空白
+
+  根因
+    后端以英文枚举下发角色/状态，前端未做本地化；DTO 里的内部数字 ID 被顺手展示；徽标用
+    text-primary 压 bg-primary-soft 对比度不足；P0 阶段可展示字段太少导致留白。
+
+  处理
+    新增 composables/useUserLabels.ts 集中维护角色/状态的中文映射（顶栏与「我的」共用）；删除
+    「用户 ID」行；徽标改 text-primary-deep；卡片下方补一块虚线空态引导。
+
+  验证
+    useUserLabels.spec.ts 2 例全绿；浏览器实测全页可见文本、隐藏文本、整份渲染 HTML 及常见
+    属性中，STUDENT/REVIEWER/ADMIN/SUPER_ADMIN/ACTIVE/BANNED/BLACKLISTED 全部为无，「用户
+    ID」行不存在。
+
+  文件
+    useUserLabels.ts             qinglan-web/src/composables/useUserLabels.ts
+    ProfileView.vue              qinglan-web/src/views/ProfileView.vue
+    AppHeader.vue                qinglan-web/src/components/AppHeader.vue
+
+
+--------------------------------------------------------------------------------
+R-06 同一错误提示出现两遍（顶部弹窗 + 表单内联红条）
+--------------------------------------------------------------------------------
+[2026-10-06]  类型：前端缺陷  状态：已修复
+
+  现象
+    提交失败时，页面顶部弹出一条提示，表单容器内同时又渲染一条同样的红色错误文案。
+
+  根因
+    api/http.ts 的响应拦截器与 unwrap 都会 pushToast，而页面自己又维护了 errorMessage 并
+    内联渲染，三者叠加。
+
+  处理
+    第一版方案为新增请求级 errorToast: false 开关（含 declare module 'axios' 类型增强），
+      被否决，理由是不该为展示差异在请求层开洞
+    最终方案：删除 LoginView / ProfileView 的全部内联错误渲染，所有请求错误唯一出口是
+      http.ts 拦截器的全局弹窗；同时给 useAuth.bind 补 pushToast（本地凭证校验不经过拦截器，
+      否则会静默失败）
+
+  连带修改
+    http.spec.ts 重写为 2 个全局弹窗契约用例（原有用例断言 errorToast=false 不弹提示，方案
+    反转后已失效）。
+
+  验证
+    http.spec.ts 2 例通过；grep errorMessage|errorToast 零残留；浏览器实测 [role="alert"]
+    数量为 1 且位于顶部 fixed top-4 浮层内，5 秒后归零。
+
+  约束已固化
+    写入 AGENTS.md 第七章「请求错误统一走全局弹窗」。
+
+  文件
+    http.ts                      qinglan-web/src/api/http.ts
+    LoginView.vue                qinglan-web/src/views/LoginView.vue
+    ProfileView.vue              qinglan-web/src/views/ProfileView.vue
+    useAuth.ts                   qinglan-web/src/composables/useAuth.ts
+
+
+--------------------------------------------------------------------------------
+R-05 跨模块调用方向 auth → user 未在 AGENTS.md 白名单内
+--------------------------------------------------------------------------------
+[2026-10-05]  类型：规范遗留  状态：已定案（不改代码）
+
+  现象
+    AuthService 实际调用了 user.UserService，但 AGENTS.md 第三章白名单未列出该方向，属
+    "规则与现实不一致"。
+
+  根因
+    白名单初稿遗漏。核查后确认真实依赖图为 auth → user、user → review，无反向边，依赖图本身
+    无环；且 user → review 绕不开——不变量 #7 要求下架/封禁/发公告必须落审计日志，而日志在
+    review 模块，写日志与封禁在同一事务内完成是必要的。
+
+  处理
+    经用户授权自行定案 → 补白名单，不改代码（纯文档 + 注释变更）。
+
+  验证
+    后端全量测试 11 个测试类 / 50 例 / 0 失败，确认未破坏既有功能。
+
+  文件
+    AGENTS.md                    AGENTS.md
+    AuthService.java             qinglan-server/src/main/java/com/qinglan/auth/service/AuthService.java
+
+
+--------------------------------------------------------------------------------
+R-04 toast 提示永不消失，跨路由常驻页面顶部
+--------------------------------------------------------------------------------
+[2026-10-05]  类型：前端缺陷  状态：已修复
+
+  现象
+    任意接口报错后，顶部提示一直挂在那里不消失，切换路由也还在。
+
+  根因
+    pushToast 只把提示推入数组，没有任何定时器；而 ToastHost 挂在 App.vue 顶层、http.ts
+    每次报错都推一条，于是提示不断累积并长期占用页面顶部。
+
+  处理
+    先写能复现的失败测试（useToast.spec.ts 先出 2 个失败），再在 pushToast 中加入
+    setTimeout(() => dismissToast(toast.id), TOAST_DURATION_MS)，时长定为 4000ms；手动关闭
+    时 dismissToast 因找不到 id 而安全跳过。
+
+  验证
+    useToast.spec.ts 3 例全绿（含 vi.useFakeTimers() 验证 4 秒自动消失、手动关闭不误删后续
+    提示）。
+
+  文件
+    useToast.ts                  qinglan-web/src/composables/useToast.ts
+    useToast.spec.ts             qinglan-web/src/composables/useToast.spec.ts
+
+
+--------------------------------------------------------------------------------
+R-03 接入 UnoCSS 时 CSS 变量改名，6 个 SFC 仍引用旧变量名导致样式破损
+--------------------------------------------------------------------------------
+[2026-10-05]  类型：前端缺陷（重构遗留）  状态：已修复
+
+  现象
+    主题变量改名后（--ql-bg→--ql-canvas、--ql-border→--ql-line、--ql-text→--ql-ink、
+    --ql-text-muted→--ql-muted），仍有 6 个 SFC 在 <style> 里引用旧变量名，相关颜色/边框
+    全部失效。
+
+  根因
+    改名时只改了变量定义与部分引用方，遗漏了手写 <style scoped> 中的引用——手写 CSS 不在
+    UnoCSS 的扫描与校验范围内，改名不会有任何编译期报错。
+
+  处理
+    在原子化重构中把这 6 个 SFC 的手写样式全部改为 UnoCSS 原子类，删除手写 <style scoped>；
+    仅保留过渡动画、@keyframes 这类原子类难以表达的部分。
+
+  验证
+    pnpm build 产物 CSS 中旧变量名零残留；浏览器实测各页面配色正常。
+
+  固化
+    写入 AGENTS.md 第七章与第五章 Skill 路由（样式一律走 UnoCSS 原子类）。
+
+
+--------------------------------------------------------------------------------
+R-02 Redis 未运行，验证码无法落 Redis
+--------------------------------------------------------------------------------
+[2026-10-05]  类型：环境  状态：已处理
+
+  现象
+    本机没有可用的 Redis 实例，验证码存储无法按设计走 Redis。
+
+  处理
+    把验证码存储抽成 VerificationCodeStore 接口，提供 InMemoryVerificationCodeStore 与
+    RedisVerificationCodeStore 两套实现，本地 profile 用内存实现，生产切 Redis。这样本地开发
+    不依赖 Redis，接口不变。
+
+  验证
+    EmailVerificationServiceTest 6 例全绿。
+
+  文件
+    store/                       qinglan-server/src/main/java/com/qinglan/auth/store
+
+
+--------------------------------------------------------------------------------
+R-01 本机无 Docker，Testcontainers 方案不可用
+--------------------------------------------------------------------------------
+[2026-10-05]  类型：环境  状态：已处理（有遗留风险）
+
+  现象
+    AGENTS.md 第八章要求测试用 Testcontainers 起真实 MySQL/Redis，但本机未安装 Docker，容器
+    起不来。
+
+  处理
+    经用户确认，测试策略改为本机 MySQL 8 真实库 + 可替换验证码存储，不 mock 数据库行为（保住
+    "用真实数据库"这一核心意图）。
+
+  验证
+    后端 11 个测试类 / 50 例 / 0 失败 / 0 跳过（真实 MySQL）。
+
+  遗留风险
+    CI 环境若按容器方案执行需另行配置；这条策略与 AGENTS.md 第八章的原文表述不一致，待与文档
+    对齐。
+
+
+================================================================================
+二、待办（尚未处理）
+================================================================================
+
+T-05  P3–P4 未开始
+      P1 发帖闭环、P2 审核体系均已完成（分别见下）；待做 P3 管理后台（Element Plus，仅 PC，
+      含审核工作台队列 / 处置 / 申诉复审 / 用户管理 / 看板）、P4
+
+T-07  Playwright 端到端用例未落地
+      AGENTS.md 第八章要求用 Playwright 覆盖「发帖 → 审核 → 下架」主流程。P1 只做了人工浏览器
+      冒烟（认证 → 发布 → 放行 → 列表 → 详情 → 评论/回复/点赞/删除 → 游客脱敏），P2 仍未留下
+      可重复执行的脚本；下架链路现已具备（举报自动下架 + 申诉恢复），整条 E2E 待补
+
+T-08  「我的」页无「我的帖子」入口
+      ProfileView 空态已改为指向 /publish 的真实入口，个人帖子聚合接口（含草稿箱）尚未在后端
+      提供
+
+T-11  帖子下架不清理点赞行（P2 已定）
+      R-15 只处理了评论（不可撤回）。帖子下架可申诉恢复（不变量 #5），硬删点赞会永久丢失，
+      故 P2 的下架 / 恢复处置均不动 like_record，保留待恢复。此条不再变动，仅留痕
+
+T-12' 图片归属绑定与孤儿回收未做
+      R-20 G 项只收紧了引用格式校验（服务端只接受本服务生成的地址），未做「图片必须属于发帖人」
+      的归属绑定，也未回收发帖未引用的孤儿文件。P2 未处理，待与对象存储一并设计
+
+T-13  P2 处置未扣信用分、未发通知
+      设计方案第 109 行要求「下架 → 通知作者 + 通知举报人 + 扣信用分」。P2 只做了状态迁移与
+      审计留痕（ReviewService.takeDown 仅在下架请求带 banDays 时才封禁），下发通知与作者扣分
+      均未实现——通知属设计书「待办另议」，扣分需与信用分规则一并定
+
+T-14  前端 SPA 的防嵌套响应头待部署侧补齐
+      R-22 只把 CSP 以 <meta> 形式注入了前端构建产物，而 frame-ancestors 写在 <meta> 里会被
+      浏览器忽略，X-Frame-Options / frame-ancestors 只能由托管 index.html 的服务器（如 nginx）
+      发响应头。仓库内目前无任何部署配置，故该头尚未落地——部署前端静态站点时必须补上，
+      否则点击劫持防护对 SPA 页面无效
+
+说明：T-06（未激活徽标填充色）已由 R-18 解决并移出；T-09（软删残留 like_record）已由 R-15
+解决并移出；T-12（R-19 复核 E–O 共 10 项）已由 R-20 解决并移出，其 G 项的归属绑定部分转为
+上面的 T-12'。
+
+
+================================================================================
+三、经验（跨条目，务必延续）
+================================================================================
+
+1. 几何正确 ≠ 视觉正确。验证叠压、遮挡、裁切类问题，不能只读 getBoundingClientRect——
+   它返回的是元素矩形，不含绘制顺序与裁剪信息。R-09 因此被连续两轮检查漏过。正确做法：
+   elementFromPoint 探测关键点、或做像素采样。
+
+2. jsdom 没有布局引擎，图层、遮挡、溢出这类问题无法用单测覆盖，断言 class 名只是同义反复。
+   这类 bug 只能靠浏览器实测兜底，等 P1 接入 Playwright 后应补端到端断言。
+
+3. 改名/重构时，手写 CSS 是盲区。变量改名不会有编译错误，只有浏览器里才看得见。这类重构
+   必须配一次浏览器实测（R-03）。
+
+4. 修 bug 先写能复现的失败测试。R-04 是这条的正面样本：先让 useToast.spec.ts 出 2 个失败，
+   再改实现，最后全绿。
+
+5. 语义色的对比度要按用途分档。同一个主色，"大面积装饰"和"承载小字号文字"的要求完全不同；
+   #2E8B7A 只能用于前者。危险色同理：danger 管「白字填充底」，danger-deep 管「浅色底上的
+   文字」。规则已写进 uno.config.ts 注释（R-08、R-11）。
+
+6. 错误提示只能有一个出口。请求错误一律由 http.ts 拦截器弹窗，页面不得内联渲染，否则必然
+   重复（R-06）。
+
+7. 不要为展示差异在请求层开洞。R-06 第一版用 errorToast: false 让调用方决定是否弹窗，被
+   否决——展示策略应统一在拦截器，调用方只关心成功与失败。
+
+8. 对比度有两类阈值，改一类会牵动另一类。文字对比是 4.5:1、非文本组件（图标、边框、色块
+   边界）是 3:1。R-11 为了让未激活徽标的数字达标而调浅其底色，数字从 4.41 升到 4.70，但徽标
+   圆本身对白底的对比反而从 1.15 掉到 1.08。量对比度必须同时算「文字/其底色」与「组件/其
+   背景」两组，不能只算被点名的那一处。
+
+9. 把 repository.save 全部 mock 掉的单测，测不到任何数据库约束。R-13 的 NOT NULL 冲突在 15 例
+   PostServiceTest 里毫无征兆，只有真实 MySQL 的集成测试一跑就炸。凡是「列约束 / 唯一键 /
+   外键 / 默认值」相关的行为，必须由 @DataJpaTest 或端到端集成测试兜底，Mockito 单测不能
+   算数。
+
+10. 跨前后端的资源路径要单独确认代理。R-14 的 /uploads 不属于 /api，代理规则只覆盖 /api 时
+    前端一切正常、只有图片静默 404。新增任何非 /api 前缀的对外路径（静态资源、回调、
+    WebSocket），都要同步检查。
+
+11. 门禁要写成「漏写即失败」，不能「漏写即放行」，并且必须反向验证一次。R-16 能溜过去，是
+    因为白名单只活在文档里。ModuleBoundaryTest 采用「动态发现模块 + 未登记即只允许依赖
+    common」，于是新增模块忘了登记就是构建失败而非静默通过。写完门禁还要故意制造一次违规看
+    它是否真红（本项目做法：临时去掉 comment 的 post，确认报 8 处违规）——永远为真的断言等于
+    没写。
+
+12. 非文本对比度不达标时，先问「这个元素非画不可吗」。R-18 的未激活圆对白底只有 1.08:1，
+    加描边会让未激活态比激活态还重；直接不画，问题连同视觉负担一起消失。但只要它承载信息
+    （如进度），就不能按装饰处理，必须正面达标。
+
+13. 无状态令牌（JWT）下，「登录时校验过了」不构成任何保证。R-19 B 项的现场：封禁发生后，
+    旧令牌在有效期内（2h）畅通无阻地继续发帖 / 评论 / 点赞 / 上传。凡是账号级禁令（封禁、
+    黑名单、降权），都必须在每个写入口重新判定；只读入口可放行以保留浏览能力。同时规则要
+    收敛到单一出处（本项目为 UserService.assertUsable），否则「一处收紧、另一处漏」几乎是
+    必然。
+
+14. 实体上的计数器不能用读-改-写。R-19 C 项：无 @Version 的 count++ 在并发下必丢更新，单测
+    （mock 掉 repository）完全测不出来。正确做法是原子 UPDATE ... SET c = c ± ?。用
+    @Modifying 时还要想清持久化上下文：批量更新绕过一级缓存，同一事务内随后再读该行会拿到
+    旧值（需要 clearAutomatically），而清除前必须先 flushAutomatically 落定本事务尚未刷出的
+    改动（否则 comment.remove() 这类脏数据会被连带丢弃）。
+
+15. 校验「目标存在」不等于校验「目标可访问」。R-19 A 项：评论点赞只查了评论在不在，没查它
+    所属帖子是否可见，于是下架帖成了可读写后门。凡是挂在父资源下的子资源（评论之于帖子、
+    文件之于帖子），写入口都必须连同父资源的可见性 / 状态一起校验。
+
+16. 一次性凭证要「抢占式消费」，且消费记录的存活期必须覆盖凭证本身的有效期。R-20 J 项：
+    emailToken 带 jti，绑定前先 markUsedOnce 占位，占不到即视为重放——抢占式（而非成功后
+    再记）才能让并发请求里只有一个进入创建流程；消费记录的 TTL 取 emailTokenTtl，短于此则
+    记录先失效、凭证又能被重放。凭证签名只证明「这是本服务签发的」，不证明「没被用过」。
+
+17. 含密钥的本地配置绝不能放在 src/main/resources。R-20 N 项：resources 下的文件会被打进
+    target/classes 与产物 jar，application-local.yml（AES key / email pepper / JWT secret）
+    因此进了构建产物。改放 qinglan-server/config/ 后由 Spring Boot 默认的 file:./config/
+    加载，启动命令不变；换位置后要手工删掉 target 下的陈旧副本，否则它仍在 classpath 上。
+
+18. 限流要放在校验之前，否则绕过成本为零。R-20 H 项：若先校验格式再计数，攻击者拿一批坏
+    文件即可无限次请求而不消耗配额。顺序应为「可写状态 → 频次 → 格式」，让非法请求同样
+    计入窗口。
+
+19. 一列承载多种语义，前端必然猜错。R-21 A 项：post.review_reason 在下架时存「类型码[: 说明]」、
+    驳回时存自由文本，再叠加「恢复后仍残留旧值」，前端用「是否非空」根本分不清三态。判据要
+    用显式的状态字段（本项目新增 takenDown 布尔），不能让前端从字符串内容反推状态；同时
+    「处罚被撤销」时应在实体上清空当前理由（历史留在只增不改的审计表），否则恢复后的内容会
+    一直挂着失效的处罚说明。表现形式不同、语义不同的数据，宁可分开字段，也不要塞进同一列。
+
+20. 全局浮层的 z-index 不能与既有元素撞值。R-21 B 项：举报弹层初版用 z-50，与 sticky 页头
+    同值，谁在上面只取决于 DOM 顺序，一次组件搬动就会翻转。应为页面确定一份固定的分层刻度
+    （本项目：页头 z-50 < 弹层 z-[900] < 全局提示 z-[1000]）并写进组件注释，而不是各自随手
+    挑一个「够大」的数。
+
+21. 集成测试里用 JdbcTemplate 直查，必须先 flush 持久化上下文。R-21 C 项：JPA 把 flush 推迟
+    到事务提交，JdbcTemplate 又完全绕过一级缓存，于是读库拿到的是事务开始时的旧值，出现
+    「实体已迁移、库里还是旧状态」的假失败。凡在测试内混合「JPA 写 + JdbcTemplate 读」，读之
+    前都要显式 entityManager.flush()。这与第 14 条同源——持久化上下文与数据库之间有两层缓存，
+    混用工具时最容易踩。
+
+22. CSP 没有「一份通用模板」，要按「这个响应返回什么」分档。R-22：后端只返回 JSON 与图片、
+    不托管任何页面，可取最严的 default-src 'none'（被注入的内容连子资源都加载不了）；前端 SPA
+    必须放行自身的脚本与样式，只能取 'self'。给 API 套 SPA 策略等于白写，给 SPA 套 'none' 则
+    页面直接白屏。写策略前先查清「这个端点到底吐什么」，并把这个前提写进注释——本项目后端
+    CSP 的 'none' 就绑定在「后端不托管 SPA」上，将来若改由后端托管页面，必须同步放宽。
+
+23. 安全头能拦住的攻击面与它自身的盲区都要写清楚，别造成「加了头就安全」的错觉。R-22：
+    （a）frame-ancestors 写在 <meta> 里会被浏览器直接忽略，防 iframe 嵌套必须由托管页面
+    的服务器发响应头，前端构建插件覆盖不到——只在构建产物里加 meta 不等于防住了点击劫持；
+    （b）安全头只是纵深防御的第二道墙，第一位的仍是「不产生 XSS 注入点」（本项目全程无
+    v-html、无 innerHTML 拼用户输入），头不能替代输出编码。
+    另外：头部类改动必须浏览器实测。响应头存在与否、CSP 有无违规（Refused to load/execute/
+    apply style）只有真实浏览器能暴露，MockMvc 只能断言「头被写出来了」，断言不了「页面
+    在策略下仍能正常工作」。
+
+24. -Werror 门禁的真实价值在「拦住后来废弃的 API」，而不只是拦住新写的坏代码。R-22 C 项：
+    SecurityConfig 用了 Spring Security 6.5 已标记 @Deprecated 的 permissionsPolicy(Customizer)，
+    编译期直接红。判断「哪个是替代 API」不能靠猜，用 javap -v 比对两个候选成员的 Deprecated
+    标记最可靠（本项目据此确认应改用 permissionsPolicyHeader(Customizer)）。这是 R-17 立的
+    编译门禁第二次拦下废弃调用，与第 11 条同理——门禁要常驻，且要真的能红。
+
+25. 「已经是目标态」不等于「非法迁移」，幂等入口要先短路。R-23 A 项：restore 只考虑了
+    TakenDown → Approved，当帖子已被他人手工恢复成 Approved 时，复审再走一次 Approved →
+    Approved 会被状态机判非法并整体回滚，连带把申诉状态也退回。凡是从外部可重复触发的状态
+    迁移（复审、重试、回调），入口都要先判「是否已经是目标态」，是则直接返回，而不是硬闯
+    状态机。判据要用显式的状态字段，不要从别的字段反推（与第 19 条同源）。
+
+26. 「系统先动手、人后确认」的流程，必须把人工终态动作单独做出来。R-23 B 项：举报数达阈值
+    自动下架时举报刻意保持 PENDING 好留在队列，但只做了自动下架、没做「人工确认举报成立」，
+    于是管理员要么走首次下架（对已下架内容非法），要么走驳回举报（语义是「内容不违规」），
+    举报永远清不掉。补动作时语义不能与相邻动作混淆（「维持下架」≠「驳回举报」）——相邻动作
+    名字相近但语义相反时，最容易漏掉其中一个。
+
+27. 排序键与游标必须覆盖「全部可能撞号的列」。R-23 D 项：target_id 只在各自类型内唯一，帖子
+    #7 与评论 #7 会撞号；只按 reportCount/firstReportedAt/targetId 三键分页，两键并列时无法
+    区分，翻页会漏行或重复。复合游标要包含能把每行唯一确定的全部列，且 having 的比较顺序
+    必须与 order by 严格一致。另：JPQL 里 case ... then 0 else 1 end 的 0/1 字面量被 Hibernate
+    推断为 Integer，对应参数必须声明 int——声明成 long 时首页哨兵 Long.MAX_VALUE 会在绑定
+    参数处直接抛 InvalidDataAccessApiUsage（表现为接口 500），而单测用 mock 完全看不出来。
+
+28. 同一个「写入口家族」（举报 / 申诉 / 评论…）的校验步骤要对齐。R-23 E/F 项：申诉比举报少了
+    requireUsableById（封禁账号仍可申诉）与唯一键冲突的 409 映射（并发重复提交抛 500）。多个
+    写入口做同类事情时，把公共校验抽到一处、或至少维护一份 checklist，否则「一处收紧、另一处
+    漏」几乎必然发生（与第 13 条同源）。约定好的错误码（如重复提交 409）必须显式捕获约束
+    异常去映射，不能指望全局兜底自动给出正确的状态码。

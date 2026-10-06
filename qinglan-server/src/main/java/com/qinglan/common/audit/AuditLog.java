@@ -1,4 +1,4 @@
-package com.qinglan.review.entity;
+package com.qinglan.common.audit;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -19,6 +19,11 @@ import java.time.Instant;
  *
  * <p>不变量 #7：只增不改不删。因此该实体没有任何 setter，创建时间在构造时固化；
  * 对应仓储只暴露保存与查询，刻意不继承 JpaRepository 以免带出 delete/update 能力。</p>
+ *
+ * <p>放在 {@code common} 而非 {@code review}：{@code post} 与 {@code user} 都要写审计日志，
+ * 若它们直接依赖 {@code review}，而 {@code review} 的审核编排又需要调用 {@code post}/{@code user}，
+ * 依赖图就会成环（AGENTS.md 第三章要求无环）。把写入底座下沉到 common 后，
+ * 各模块依赖 common、{@code review} 单向编排业务模块，图保持无环。</p>
  */
 @Getter
 @Entity

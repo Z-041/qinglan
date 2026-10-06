@@ -47,26 +47,29 @@ public class EmailVerificationService {
 
     /**
      * 校验验证码，成功即一次性销毁，返回该邮箱的不可逆哈希。
+     *
+     * <p>「未获取 / 已过期 / 填错」一律返回同一个错误码，不对外区分：区分开等于把
+     * 「该邮箱是否请求过验证码」变成可探测的信息（T-12 I）。</p>
      */
     public String verifyCode(String email, String code) {
         String normalized = normalize(email);
         assertDomainAllowed(normalized);
         String emailHash = cryptoService.hashEmail(normalized);
 
-        String stored = codeStore.findCode(emailHash)
-                .orElseThrow(() -> new BizException(ErrorCode.VERIFICATION_CODE_EXPIRED));
-
-        if (!stored.equals(code)) {
-            long attempts = codeStore.incrementAttempts(emailHash, authProperties.codeTtl());
-            if (attempts >= authProperties.maxVerifyAttempts()) {
-                codeStore.removeCode(emailHash);
-                throw new BizException(ErrorCode.VERIFY_ATTEMPTS_EXCEEDED);
-            }
-            throw new BizException(ErrorCode.VERIFICATION_CODE_INVALID);
+        boolean matched = codeStore.findCode(emailHash)
+                .filter(stored -> stored.equals(code))
+                .isPresent();
+        if (matched) {
+            codeStore.removeCode(emailHash);
+            return emailHash;
         }
 
-        codeStore.removeCode(emailHash);
-        return emailHash;
+        long attempts = codeStore.incrementAttempts(emailHash, authProperties.codeTtl());
+        if (attempts >= authProperties.maxVerifyAttempts()) {
+            codeStore.removeCode(emailHash);
+            throw new BizException(ErrorCode.VERIFY_ATTEMPTS_EXCEEDED);
+        }
+        throw new BizException(ErrorCode.VERIFICATION_CODE_INVALID);
     }
 
     private void assertDomainAllowed(String email) {

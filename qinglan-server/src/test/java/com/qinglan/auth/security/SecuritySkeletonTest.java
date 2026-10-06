@@ -17,8 +17,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -62,6 +64,20 @@ class SecuritySkeletonTest {
     void shouldReturn401WithMalformedToken() throws Exception {
         mockMvc.perform(get("/api/users/me").header("Authorization", "Bearer not.a.token"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("所有响应都写安全头：CSP / X-Frame-Options / nosniff / Referrer-Policy / Permissions-Policy")
+    void shouldWriteSecurityHeaders() throws Exception {
+        mockMvc.perform(get("/api/users/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("Content-Security-Policy", containsString("default-src 'none'")))
+                .andExpect(header().string("Content-Security-Policy", containsString("frame-ancestors 'none'")))
+                .andExpect(header().string("X-Frame-Options", "DENY"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(header().string("Referrer-Policy", "no-referrer"))
+                .andExpect(header().string("Permissions-Policy",
+                        "camera=(), microphone=(), geolocation=(), payment=(), usb=()"));
     }
 
     @Test

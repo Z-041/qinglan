@@ -37,7 +37,7 @@ describe('useFeed', () => {
   })
 
   it('加载第一页并据 nextCursor 判定是否还有下一页', async () => {
-    mockedFetchPosts.mockResolvedValue({ items: [post(9), post(8)], nextCursor: 8 })
+    mockedFetchPosts.mockResolvedValue({ items: [post(9), post(8)], nextCursor: '8' })
 
     const feed = useFeed()
     await feed.load(null)
@@ -61,21 +61,21 @@ describe('useFeed', () => {
 
   it('加载更多时带上末条游标并追加到列表尾部', async () => {
     mockedFetchPosts
-      .mockResolvedValueOnce({ items: [post(9), post(8)], nextCursor: 8 })
+      .mockResolvedValueOnce({ items: [post(9), post(8)], nextCursor: '8' })
       .mockResolvedValueOnce({ items: [post(7)], nextCursor: null })
 
     const feed = useFeed()
     await feed.load(null)
     await feed.loadMore()
 
-    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: null, cursor: 8 })
+    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: null, cursor: '8' })
     expect(feed.posts.value.map((item) => item.id)).toEqual([9, 8, 7])
     expect(feed.hasMore.value).toBe(false)
   })
 
   it('切换话题时重置列表与游标', async () => {
     mockedFetchPosts
-      .mockResolvedValueOnce({ items: [post(9)], nextCursor: 9 })
+      .mockResolvedValueOnce({ items: [post(9)], nextCursor: '9' })
       .mockResolvedValueOnce({ items: [post(1)], nextCursor: null })
 
     const feed = useFeed()

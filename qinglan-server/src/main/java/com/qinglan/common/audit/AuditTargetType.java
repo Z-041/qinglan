@@ -1,4 +1,4 @@
-package com.qinglan.review.entity;
+package com.qinglan.common.audit;
 
 /**
  * 审计日志的目标类型。

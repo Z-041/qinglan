@@ -95,7 +95,7 @@ class PostFlowIntegrationTest {
                 .andExpect(status().isOk());
 
         // 放行后游客也能在信息流里看到，且只给匿名代号
-        JsonNode items = readJson(mockMvc.perform(get("/api/posts").param("size", "50"))
+        JsonNode items = readJson(mockMvc.perform(get("/api/posts"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8))
                 .path("data").path("items");

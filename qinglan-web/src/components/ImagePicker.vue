@@ -1,39 +1,26 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-import { uploadImage } from '@/api/upload'
+const props = withDefaults(defineProps<{ max?: number; uploading?: boolean }>(), {
+  max: 9,
+  uploading: false,
+})
 
-const props = withDefaults(defineProps<{ max?: number }>(), { max: 9 })
-
+/** 已上传的图片地址；上传动作由父级 composable 负责，本组件只负责选择与展示 */
 const model = defineModel<string[]>({ default: () => [] })
 
-const fileInput = ref<HTMLInputElement | null>(null)
-const uploading = ref(false)
+const emit = defineEmits<{ select: [files: File[]] }>()
 
-/**
- * 逐个上传并在成功后立即追加，中途失败时已传成功的仍保留。
- * 失败提示由 http 拦截器统一弹窗（AGENTS.md 第七章），这里只负责结束上传态。
- */
-async function handleFiles(event: Event): Promise<void> {
+const fileInput = ref<HTMLInputElement | null>(null)
+
+/** 只把选中的文件交出去，上传与配额由调用方（useImageUpload）负责 */
+function handleFiles(event: Event): void {
   const target = event.target as HTMLInputElement
   const files = Array.from(target.files ?? [])
   // 清空 value，否则再次选择同一文件不会触发 change
   target.value = ''
-  const remaining = props.max - model.value.length
-  if (!files.length || remaining <= 0) {
-    return
-  }
-
-  uploading.value = true
-  try {
-    for (const file of files.slice(0, remaining)) {
-      const { url } = await uploadImage(file)
-      model.value = [...model.value, url]
-    }
-  } catch {
-    // 错误已由拦截器提示
-  } finally {
-    uploading.value = false
+  if (files.length) {
+    emit('select', files)
   }
 }
 
@@ -60,11 +47,11 @@ function remove(url: string): void {
       v-if="model.length < props.max"
       type="button"
       class="flex size-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-line-strong text-xs text-muted transition hover:border-primary hover:text-primary-deep disabled:cursor-not-allowed"
-      :disabled="uploading"
+      :disabled="props.uploading"
       @click="fileInput?.click()"
     >
       <span
-        v-if="uploading"
+        v-if="props.uploading"
         class="size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
         aria-hidden="true"
       />
@@ -79,7 +66,7 @@ function remove(url: string): void {
       >
         <path d="M12 6v12M6 12h12" stroke-linecap="round" />
       </svg>
-      <span>{{ uploading ? '上传中' : '添加图片' }}</span>
+      <span>{{ props.uploading ? '上传中' : '添加图片' }}</span>
     </button>
 
     <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="handleFiles" />

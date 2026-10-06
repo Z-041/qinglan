@@ -17,9 +17,9 @@ export function useFeed() {
   const hasMore = ref(false)
 
   /** 不放进 ref：只作为下一次请求的入参，变化不需要触发渲染 */
-  let cursor: number | null = null
+  let cursor: string | null = null
 
-  function applyPage(items: PostSummary[], nextCursor: number | null, append: boolean): void {
+  function applyPage(items: PostSummary[], nextCursor: string | null, append: boolean): void {
     posts.value = append ? [...posts.value, ...items] : items
     cursor = nextCursor
     hasMore.value = nextCursor !== null

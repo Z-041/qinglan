@@ -1,12 +1,12 @@
 package com.qinglan.user.service;
 
+import com.qinglan.common.audit.AuditAction;
+import com.qinglan.common.audit.AuditLogService;
+import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.crypto.CryptoProperties;
 import com.qinglan.common.crypto.CryptoService;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
-import com.qinglan.review.entity.AuditAction;
-import com.qinglan.review.entity.AuditTargetType;
-import com.qinglan.review.service.AuditLogService;
 import com.qinglan.user.dto.UserProfileResponse;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.entity.UserStatus;
@@ -116,15 +116,15 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("一人一学号：同一学号不可重复绑定")
-    void shouldRejectDuplicateStudentId() {
+    @DisplayName("I：学号被占用时返回与并发兜底相同的通用码，避免逐个试探学号是否已绑定")
+    void shouldRejectDuplicateStudentIdWithGenericCode() {
         when(userRepository.existsByEmailHash(anyString())).thenReturn(false);
         when(userRepository.existsByStudentIdHash(anyString())).thenReturn(true);
 
         assertThatThrownBy(() -> userService.createVerifiedStudent("emailHash", STUDENT_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
-                .isEqualTo(ErrorCode.STUDENT_ID_ALREADY_BOUND);
+                .isEqualTo(ErrorCode.REGISTRATION_CONFLICT);
     }
 
     @Test

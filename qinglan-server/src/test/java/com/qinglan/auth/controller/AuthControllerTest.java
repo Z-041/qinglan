@@ -82,12 +82,12 @@ class AuthControllerTest {
     @DisplayName("业务异常映射为对应 HTTP 状态与错误码")
     void shouldMapBizException() throws Exception {
         when(authService.verifyEmail(anyString(), anyString()))
-                .thenThrow(new BizException(ErrorCode.VERIFICATION_CODE_EXPIRED));
+                .thenThrow(new BizException(ErrorCode.VERIFICATION_CODE_INVALID));
 
         mockMvc.perform(post("/api/auth/verify-email")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"student@qinglan.edu.cn\",\"code\":\"123456\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("QL-400-004"));
+                .andExpect(jsonPath("$.code").value("QL-400-003"));
     }
 }

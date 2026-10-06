@@ -4,9 +4,12 @@ import com.qinglan.auth.config.JwtProperties;
 import com.qinglan.auth.dto.AuthTokenResponse;
 import com.qinglan.auth.dto.VerifyEmailResponse;
 import com.qinglan.auth.security.AccessTokenPayload;
+import com.qinglan.auth.security.EmailTokenPayload;
 import com.qinglan.auth.security.JwtService;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.store.EphemeralStore;
+import com.qinglan.common.store.InMemoryEphemeralStore;
 import com.qinglan.user.dto.UserProfileResponse;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.entity.UserRole;
@@ -46,13 +49,15 @@ class AuthServiceTest {
     private UserService userService;
 
     private JwtService jwtService;
+    private EphemeralStore ephemeralStore;
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         jwtService = new JwtService(new JwtProperties(
                 JWT_SECRET_BASE64, "qinglan", Duration.ofHours(2), Duration.ofMinutes(10)));
-        authService = new AuthService(emailVerificationService, userService, jwtService);
+        ephemeralStore = new InMemoryEphemeralStore();
+        authService = new AuthService(emailVerificationService, userService, jwtService, ephemeralStore);
     }
 
     @Test
@@ -66,7 +71,11 @@ class AuthServiceTest {
         assertThat(response.needsStudentBinding()).isTrue();
         assertThat(response.accessToken()).isNull();
         assertThat(response.user()).isNull();
-        assertThat(jwtService.parseEmailToken(response.emailToken())).contains(EMAIL_HASH);
+        assertThat(jwtService.parseEmailToken(response.emailToken()))
+                .hasValueSatisfying(payload -> {
+                    assertThat(payload.emailHash()).isEqualTo(EMAIL_HASH);
+                    assertThat(payload.jti()).isNotBlank();
+                });
     }
 
     @Test
@@ -128,6 +137,34 @@ class AuthServiceTest {
         assertThat(response.user().id()).isEqualTo(7L);
         assertThat(jwtService.parseAccessToken(response.accessToken()))
                 .hasValueSatisfying(parsed -> assertThat(parsed.userId()).isEqualTo(7L));
+    }
+
+    @Test
+    @DisplayName("J：同一邮箱认证凭证只能消费一次，重复绑定被拒（防重放）")
+    void shouldRejectReusedEmailToken() {
+        User user = existingUser(7L);
+        String emailToken = jwtService.issueEmailToken(EMAIL_HASH);
+        when(userService.createVerifiedStudent(EMAIL_HASH, "2023010101")).thenReturn(user);
+        when(userService.toProfile(user)).thenReturn(profileOf(user));
+
+        authService.bindStudentId(emailToken, "2023010101");
+
+        assertThatThrownBy(() -> authService.bindStudentId(emailToken, "2023010101"))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.EMAIL_TOKEN_INVALID);
+    }
+
+    @Test
+    @DisplayName("J：每次签发的邮箱凭证 jti 都不同，消费记录不会互相覆盖")
+    void shouldIssueDistinctJtiPerEmailToken() {
+        EmailTokenPayload first = jwtService.parseEmailToken(jwtService.issueEmailToken(EMAIL_HASH))
+                .orElseThrow();
+        EmailTokenPayload second = jwtService.parseEmailToken(jwtService.issueEmailToken(EMAIL_HASH))
+                .orElseThrow();
+
+        assertThat(first.jti()).isNotEqualTo(second.jti());
+        assertThat(first.emailHash()).isEqualTo(second.emailHash());
     }
 
     private User existingUser(Long id) {

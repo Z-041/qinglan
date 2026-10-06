@@ -19,7 +19,6 @@ export function usePublish() {
   const contact = ref('')
   const images = ref<string[]>([])
 
-  const loadingTopics = ref(false)
   const submitting = ref(false)
 
   const selectedTopic = computed(
@@ -43,13 +42,10 @@ export function usePublish() {
   )
 
   async function loadTopics(): Promise<void> {
-    loadingTopics.value = true
     try {
       topics.value = await fetchTopics()
     } catch {
       // 错误已由拦截器提示
-    } finally {
-      loadingTopics.value = false
     }
   }
 
@@ -80,7 +76,6 @@ export function usePublish() {
     content,
     contact,
     images,
-    loadingTopics,
     submitting,
     selectedTopic,
     blockedReason,

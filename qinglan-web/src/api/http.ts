@@ -6,6 +6,21 @@ import { SUCCESS_CODE, type ApiResponse } from '@/types/api'
 /** 访问令牌在 localStorage 中的键名 */
 export const TOKEN_STORAGE_KEY = 'qinglan.access-token'
 
+/** 收到 401 时的处理回调，由应用入口注入 */
+type UnauthorizedHandler = () => void
+
+let unauthorizedHandler: UnauthorizedHandler | null = null
+
+/**
+ * 注册 401 处理器：由 main.ts 注入「重置用户态 + 回认证页」。
+ *
+ * 拦截器刻意不直接 import store / router——store 反向依赖本模块的 TOKEN_STORAGE_KEY，
+ * 直接引用会形成循环依赖（AGENTS.md 第七章）。
+ */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler
+}
+
 /**
  * 承载后端错误码的异常，便于调用方按 code 分支处理。
  *
@@ -44,11 +59,9 @@ instance.interceptors.response.use(
     const message = error.response?.data?.message ?? '网络异常，请稍后重试'
 
     if (status === 401) {
+      // 令牌已失效：先清持久化，再交给应用层重置内存态（Pinia 里的令牌与档案）并跳认证页
       localStorage.removeItem(TOKEN_STORAGE_KEY)
-      // 拦截器不依赖 router，避免与 store 形成循环引用；401 直接回认证页
-      if (window.location.pathname !== '/login') {
-        window.location.assign('/login')
-      }
+      unauthorizedHandler?.()
     }
 
     pushToast(message, 'error')

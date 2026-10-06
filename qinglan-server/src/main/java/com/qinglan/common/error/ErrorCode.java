@@ -9,12 +9,16 @@ public enum ErrorCode {
 
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "QL-400-001", "请求参数不合法"),
     EMAIL_DOMAIN_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "QL-400-002", "仅支持校园邮箱认证"),
-    VERIFICATION_CODE_INVALID(HttpStatus.BAD_REQUEST, "QL-400-003", "验证码不正确"),
-    VERIFICATION_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "QL-400-004", "验证码已失效，请重新获取"),
+    // 验证码「未获取 / 已过期 / 填错」统一用同一个码：区分开等于把「该邮箱是否请求过验证码」
+    // 变成可探测的信息（T-12 I）
+    VERIFICATION_CODE_INVALID(HttpStatus.BAD_REQUEST, "QL-400-003", "验证码不正确或已失效，请重新获取"),
     CONTACT_REQUIRED(HttpStatus.BAD_REQUEST, "QL-400-005", "该话题要求留下联系方式，便于对方联系到你"),
     UPLOAD_INVALID(HttpStatus.BAD_REQUEST, "QL-400-006", "仅支持 JPG / PNG / WebP，单张不超过 5MB"),
     CURSOR_INVALID(HttpStatus.BAD_REQUEST, "QL-400-007", "分页游标不合法"),
     CONTENT_REJECTED(HttpStatus.BAD_REQUEST, "QL-400-008", "内容暂不符合社区规范，请修改后重试"),
+    // 隐私信息是「确定不该出现在校园墙」的一类，单独给码以便前端给出更具体的提示
+    PRIVACY_CONTENT_BLOCKED(HttpStatus.BAD_REQUEST, "QL-400-009", "请勿填写身份证、银行卡号等敏感信息"),
+    SELF_REPORT_FORBIDDEN(HttpStatus.BAD_REQUEST, "QL-400-010", "不能举报自己发布的内容"),
 
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "QL-401-001", "请先完成认证"),
     EMAIL_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "QL-401-002", "邮箱认证凭证无效或已过期"),
@@ -23,19 +27,28 @@ public enum ErrorCode {
     USER_BANNED(HttpStatus.FORBIDDEN, "QL-403-002", "账号已被限制，暂时无法使用该功能"),
     NOT_CONTENT_OWNER(HttpStatus.FORBIDDEN, "QL-403-003", "只能操作自己发布的内容"),
     CREDIT_TOO_LOW(HttpStatus.FORBIDDEN, "QL-403-004", "信用分不足，暂时无法发帖"),
+    // 「复审人 ≠ 原处置人」的落点：同一个管理员不能复核自己的裁决
+    SELF_REVIEW_FORBIDDEN(HttpStatus.FORBIDDEN, "QL-403-005", "不能复审自己处置过的内容"),
 
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-001", "用户不存在"),
     POST_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-002", "帖子不存在或已被删除"),
     TOPIC_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-003", "话题不存在"),
     COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-004", "评论不存在或已被删除"),
+    REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-005", "没有待处理的举报"),
+    APPEAL_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-006", "申诉不存在"),
 
     EMAIL_ALREADY_BOUND(HttpStatus.CONFLICT, "QL-409-001", "该校园邮箱已完成认证，请直接登录"),
-    STUDENT_ID_ALREADY_BOUND(HttpStatus.CONFLICT, "QL-409-002", "该学号已被绑定，不可重复认证"),
     REGISTRATION_CONFLICT(HttpStatus.CONFLICT, "QL-409-003", "该邮箱或学号已完成认证"),
     ILLEGAL_REVIEW_TRANSITION(HttpStatus.CONFLICT, "QL-409-004", "当前审核状态不允许该操作"),
+    // 不变量 #4：重复举报明确回报，不静默吞掉——静默会让用户以为已提交
+    ALREADY_REPORTED(HttpStatus.CONFLICT, "QL-409-005", "你已经举报过该内容，请等待处理"),
+    // 每个目标只受理一次申诉（appeal.uk_appeal_target），重复提交明确回报
+    APPEAL_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "QL-409-006", "该内容已提交过申诉，请等待复审"),
+    APPEAL_WINDOW_EXPIRED(HttpStatus.CONFLICT, "QL-409-007", "申诉期已过，无法再提交申诉"),
 
     CODE_SEND_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "QL-429-001", "验证码发送过于频繁，请稍后再试"),
     VERIFY_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "QL-429-002", "验证失败次数过多，请重新获取验证码"),
+    UPLOAD_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "QL-429-003", "上传过于频繁，请稍后再试"),
 
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "QL-500-001", "服务暂时不可用"),
     STORAGE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "QL-500-002", "文件存储暂时不可用，请稍后重试");

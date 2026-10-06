@@ -1,11 +1,11 @@
 package com.qinglan.user.service;
 
+import com.qinglan.common.audit.AuditAction;
+import com.qinglan.common.audit.AuditLogService;
+import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.crypto.CryptoService;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
-import com.qinglan.review.entity.AuditAction;
-import com.qinglan.review.entity.AuditTargetType;
-import com.qinglan.review.service.AuditLogService;
 import com.qinglan.user.dto.UserProfileResponse;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.entity.UserStatus;
@@ -81,7 +81,8 @@ public class UserService {
             throw new BizException(ErrorCode.EMAIL_ALREADY_BOUND);
         }
         if (userRepository.existsByStudentIdHash(studentIdHash)) {
-            throw new BizException(ErrorCode.STUDENT_ID_ALREADY_BOUND);
+            // 与「并发下唯一约束兜底」返回同一个通用码：否则可以拿它逐个试探学号是否已被绑定（T-12 I）
+            throw new BizException(ErrorCode.REGISTRATION_CONFLICT);
         }
         User user = User.register(
                 emailHash,

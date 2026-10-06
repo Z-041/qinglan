@@ -1,9 +1,9 @@
 import { AxiosError, type AxiosResponse } from 'axios'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useToast } from '@/composables/useToast'
 
-import instance, { httpPost } from './http'
+import instance, { httpGet, httpPost, setUnauthorizedHandler, TOKEN_STORAGE_KEY } from './http'
 
 const { toasts } = useToast()
 
@@ -38,10 +38,12 @@ describe('http 全局错误提示', () => {
 
   beforeEach(() => {
     toasts.splice(0)
+    localStorage.clear()
   })
 
   afterEach(() => {
     instance.defaults.adapter = originalAdapter
+    setUnauthorizedHandler(null)
   })
 
   it('非 2xx 错误由拦截器统一弹一次提示', async () => {
@@ -59,5 +61,17 @@ describe('http 全局错误提示', () => {
     await expect(httpPost('/reports', {})).rejects.toThrow('请勿重复举报')
 
     expect(toasts.map((toast) => toast.message)).toEqual(['请勿重复举报'])
+  })
+
+  it('401 时清空持久化令牌并回调注册的处理器（用于重置内存态）', async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, 'stale-token')
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+    stubHttpFailure(401, 'QL-401-001', '请先完成认证')
+
+    await expect(httpGet('/user/me')).rejects.toThrow('请先完成认证')
+
+    expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull()
+    expect(handler).toHaveBeenCalledTimes(1)
   })
 })

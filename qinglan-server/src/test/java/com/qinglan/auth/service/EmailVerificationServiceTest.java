@@ -80,7 +80,7 @@ class EmailVerificationServiceTest {
     }
 
     @Test
-    @DisplayName("验证码校验成功，成功即一次性失效")
+    @DisplayName("I：验证码校验成功即一次性失效，再次使用只返回统一错误码（不区分已失效/填错）")
     void shouldVerifyCodeOnceAndInvalidateIt() {
         String email = "once@qinglan.edu.cn";
         SendCodeResponse response = emailVerificationService.sendCode(email);
@@ -91,7 +91,7 @@ class EmailVerificationServiceTest {
         assertThatThrownBy(() -> emailVerificationService.verifyCode(email, response.devCode()))
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
-                .isEqualTo(ErrorCode.VERIFICATION_CODE_EXPIRED);
+                .isEqualTo(ErrorCode.VERIFICATION_CODE_INVALID);
     }
 
     @Test

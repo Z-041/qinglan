@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createComment, deleteComment, fetchComments, likeComment, unlikeComment } from '@/api/comment'
 import { fetchPostDetail, likePost, unlikePost } from '@/api/post'
+import { submitAppeal } from '@/api/review'
 import { usePostDetail } from '@/composables/usePostDetail'
 import type { Comment } from '@/types/comment'
 import type { PostDetail } from '@/types/post'
@@ -20,6 +21,11 @@ vi.mock('@/api/post', () => ({
   unlikePost: vi.fn(),
 }))
 
+vi.mock('@/api/review', () => ({
+  createReport: vi.fn(),
+  submitAppeal: vi.fn(),
+}))
+
 const mockedFetchPostDetail = vi.mocked(fetchPostDetail)
 const mockedFetchComments = vi.mocked(fetchComments)
 const mockedCreateComment = vi.mocked(createComment)
@@ -28,6 +34,7 @@ const mockedLikeComment = vi.mocked(likeComment)
 const mockedUnlikeComment = vi.mocked(unlikeComment)
 const mockedLikePost = vi.mocked(likePost)
 const mockedUnlikePost = vi.mocked(unlikePost)
+const mockedSubmitAppeal = vi.mocked(submitAppeal)
 
 function detail(overrides: Partial<PostDetail> = {}): PostDetail {
   return {
@@ -45,6 +52,7 @@ function detail(overrides: Partial<PostDetail> = {}): PostDetail {
     commentCount: 0,
     mine: false,
     reviewReason: null,
+    takenDown: false,
     createdAt: '2026-10-06T00:00:00Z',
     ...overrides,
   }
@@ -203,5 +211,34 @@ describe('usePostDetail', () => {
     await state.toggleLike()
 
     expect(mockedLikePost).not.toHaveBeenCalled()
+  })
+
+  it('申诉成功后标记已申诉，页面据此收起申诉表单', async () => {
+    mockedFetchPostDetail.mockResolvedValue(detail({ mine: true, takenDown: true }))
+    mockedFetchComments.mockResolvedValue([])
+    mockedSubmitAppeal.mockResolvedValue(undefined)
+
+    const state = usePostDetail(7)
+    await state.load()
+
+    await expect(state.submitAppeal('内容并未违规')).resolves.toBe(true)
+
+    expect(mockedSubmitAppeal).toHaveBeenCalledWith({ postId: 7, reason: '内容并未违规' })
+    expect(state.appealed.value).toBe(true)
+    expect(state.appealSubmitting.value).toBe(false)
+  })
+
+  it('申诉失败（如已超过 7 日）不标记已申诉，交由拦截器提示', async () => {
+    mockedFetchPostDetail.mockResolvedValue(detail({ mine: true, takenDown: true }))
+    mockedFetchComments.mockResolvedValue([])
+    mockedSubmitAppeal.mockRejectedValue(new Error('申诉期已过'))
+
+    const state = usePostDetail(7)
+    await state.load()
+
+    await expect(state.submitAppeal('再来一次')).resolves.toBe(false)
+
+    expect(state.appealed.value).toBe(false)
+    expect(state.appealSubmitting.value).toBe(false)
   })
 })

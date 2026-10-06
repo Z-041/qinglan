@@ -2,11 +2,12 @@ import { ref } from 'vue'
 
 import { createComment, deleteComment, fetchComments, likeComment, unlikeComment } from '@/api/comment'
 import { fetchPostDetail, likePost, unlikePost } from '@/api/post'
+import { submitAppeal as requestAppeal } from '@/api/review'
 import type { Comment } from '@/types/comment'
 import type { PostDetail } from '@/types/post'
 
 /**
- * 帖子详情：正文 + 联系方式（服务端已按 viewer 脱敏）+ 二级评论 + 点赞。
+ * 帖子详情：正文 + 联系方式（服务端已按 viewer 脱敏）+ 二级评论 + 点赞 + 作者申诉。
  *
  * 请求失败由 http 拦截器统一弹窗，本 composable 只负责成功后的状态推进。
  */
@@ -15,6 +16,15 @@ export function usePostDetail(postId: number) {
   const comments = ref<Comment[]>([])
   const loading = ref(false)
   const submitting = ref(false)
+  const appealSubmitting = ref(false)
+  /**
+   * 本次会话内是否已提交过申诉。
+   *
+   * 后端「每帖限一次」由 `uk_appeal_target` 兜底，但申诉状态属于 review 模块，
+   * post 模块不得反向依赖它，故详情响应里没有该字段——前端只记住本次结果，
+   * 刷新后重新点会拿到 409 提示，与实际一致。
+   */
+  const appealed = ref(false)
 
   /** 评论计数由列表实际条数推导，删一级评论会级联删回复，直接复用后端返回值反而容易不一致 */
   function syncCommentCount(): void {
@@ -106,15 +116,32 @@ export function usePostDetail(postId: number) {
     }
   }
 
+  /** 作者对已下架帖子申诉；返回是否成功，失败时由调用方保留已输入的理由 */
+  async function submitAppeal(reason: string): Promise<boolean> {
+    appealSubmitting.value = true
+    try {
+      await requestAppeal({ postId, reason })
+      appealed.value = true
+      return true
+    } catch {
+      return false
+    } finally {
+      appealSubmitting.value = false
+    }
+  }
+
   return {
     post,
     comments,
     loading,
     submitting,
+    appealSubmitting,
+    appealed,
     load,
     toggleLike,
     toggleCommentLike,
     submitComment,
     removeComment,
+    submitAppeal,
   }
 }

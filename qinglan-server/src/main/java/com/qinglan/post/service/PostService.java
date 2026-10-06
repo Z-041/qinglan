@@ -1,6 +1,9 @@
 package com.qinglan.post.service;
 
 import com.qinglan.common.anonymous.AnonymousCodeService;
+import com.qinglan.common.audit.AuditAction;
+import com.qinglan.common.audit.AuditLogService;
+import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.interaction.LikeCount;
@@ -8,8 +11,7 @@ import com.qinglan.common.interaction.LikeRecord;
 import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeStateResponse;
 import com.qinglan.common.interaction.LikeTargetType;
-import com.qinglan.common.moderation.ContentModerator;
-import com.qinglan.common.moderation.ModerationResult;
+import com.qinglan.common.moderation.ContentGuard;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.config.PostProperties;
@@ -19,15 +21,11 @@ import com.qinglan.post.dto.PostSummaryResponse;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostImage;
 import com.qinglan.post.entity.PostStatus;
-import com.qinglan.post.entity.ReviewState;
 import com.qinglan.post.entity.RiskLevel;
 import com.qinglan.post.entity.Topic;
 import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.post.repository.TopicRepository;
-import com.qinglan.review.entity.AuditAction;
-import com.qinglan.review.entity.AuditTargetType;
-import com.qinglan.review.service.AuditLogService;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -38,16 +36,19 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 帖子主流程：发布、信息流、详情、点赞、最小审核放行。
+ * 帖子主流程：发布、信息流、详情、点赞。
+ *
+ * <p>审核侧动作（放行 / 驳回 / 下架 / 恢复 / 隐藏联系方式）全在 {@code review} 模块，
+ * 本服务不再持有任何管理端入口——帖子模块只负责内容本身的读写。</p>
  *
  * <p>三条不变量在本服务的落点：</p>
  * <ul>
@@ -65,8 +66,17 @@ public class PostService {
     private static final Logger log = LoggerFactory.getLogger(PostService.class);
 
     private static final int DEFAULT_PAGE_SIZE = 20;
-    private static final int MAX_PAGE_SIZE = 50;
     private static final int MAX_CONTACT_LENGTH = 200;
+
+    /**
+     * 帖子配图只接受本站上传产生的地址，格式与 {@code LocalStorageService} 的返回值一一对应：
+     * {@code /uploads/{yyyy}/{MM}/{32 位 hex}.{ext}}。
+     *
+     * <p>只判前缀是不够的——{@code /uploads/anything} 同样以 {@code /uploads/} 开头。更换存储实现
+     * （如对象存储）时必须同步修改本模式，否则发帖会被整体拒绝。</p>
+     */
+    private static final Pattern IMAGE_URL_PATTERN =
+            Pattern.compile("^/uploads/\\d{4}/\\d{2}/[0-9a-f]{32}\\.(?:jpg|png|webp)$");
 
     private final PostRepository postRepository;
     private final PostImageRepository postImageRepository;
@@ -76,7 +86,7 @@ public class PostService {
     private final UserService userService;
     private final AuditLogService auditLogService;
     private final PostProperties postProperties;
-    private final ContentModerator contentModerator;
+    private final ContentGuard contentGuard;
 
     /**
      * 发布。落 Pending 而非直接可见——主帖先审后发，是设计方案第一章的红线 2。
@@ -91,7 +101,7 @@ public class PostService {
         if (topic.isRequiresContact() && contact == null) {
             throw new BizException(ErrorCode.CONTACT_REQUIRED);
         }
-        requireAllowedContent(request.content());
+        requireAllowedContent(request.content(), contact);
         List<String> images = validateImageUrls(request.images());
 
         Post post = Post.draft(authorId, topic.getId(), request.content().trim(), contact);
@@ -108,10 +118,12 @@ public class PostService {
 
     /**
      * 信息流。只出审核通过的帖子，游标按 id 倒序翻页。
+     *
+     * <p>页大小固定，不对外暴露 size 参数——AGENTS.md 第三章要求列表接口只用游标分页。</p>
      */
     @Transactional(readOnly = true)
-    public CursorPage<PostSummaryResponse> listFeed(Long topicId, String cursorRaw, Integer size, Viewer viewer) {
-        int limit = normalizePageSize(size);
+    public CursorPage<PostSummaryResponse> listFeed(Long topicId, String cursorRaw, Viewer viewer) {
+        int limit = DEFAULT_PAGE_SIZE;
         long cursor = parseCursor(cursorRaw);
         // 多取一条用于判断是否还有下一页，避免额外 count 查询
         Pageable pageable = PageRequest.of(0, limit + 1);
@@ -146,7 +158,7 @@ public class PostService {
                         viewer.is(post.getAuthorId()),
                         post.getCreatedAt()))
                 .toList();
-        Long nextCursor = hasMore ? page.get(page.size() - 1).getId() : null;
+        String nextCursor = hasMore ? page.get(page.size() - 1).getId().toString() : null;
         return CursorPage.of(items, nextCursor);
     }
 
@@ -195,33 +207,6 @@ public class PostService {
         return likeState(postId, userId);
     }
 
-    /**
-     * 放行：Pending → Reviewing → Approved。
-     *
-     * <p>P1 还没有独立的认领队列，但状态机禁止跳态（不变量 #5），所以这里在同一事务内
-     * 原子地走完两步，而不是把 Pending 直接写成 Approved。P2 接入机审与人工队列后，
-     * 这两步会分别由不同角色触发。</p>
-     */
-    @Transactional
-    public void approve(Long postId, Long operatorId) {
-        Post post = requirePost(postId);
-        Instant now = Instant.now();
-        post.transitionTo(new ReviewState.Reviewing(operatorId, now));
-        post.transitionTo(new ReviewState.Approved(operatorId, now));
-        auditLogService.record(AuditTargetType.POST, postId, AuditAction.POST_APPROVE, operatorId, null);
-        log.info("放行帖子 postId={}，操作人 operatorId={}", postId, operatorId);
-    }
-
-    /** 驳回：Reviewing → Rejected，理由对作者可见（同样先经 Reviewing，不跳态） */
-    @Transactional
-    public void reject(Long postId, Long operatorId, String reason) {
-        Post post = requirePost(postId);
-        post.transitionTo(new ReviewState.Reviewing(operatorId, Instant.now()));
-        post.transitionTo(new ReviewState.Rejected("MANUAL_REJECT", reason));
-        auditLogService.record(AuditTargetType.POST, postId, AuditAction.POST_REJECT, operatorId, reason);
-        log.info("驳回帖子 postId={}，操作人 operatorId={}", postId, operatorId);
-    }
-
     // ---------------------------------------------------------------- 内部方法
 
     /**
@@ -233,13 +218,15 @@ public class PostService {
         }
     }
 
-    /** 内容审核端口：P1 默认放行，接入内容安全服务后此处即为拦截点 */
-    private void requireAllowedContent(String content) {
-        ModerationResult result = contentModerator.moderate(content);
-        if (!result.allowed()) {
-            log.info("内容审核未通过，reason={}", result.reason());
-            throw new BizException(ErrorCode.CONTENT_REJECTED);
-        }
+    /**
+     * 本地硬拦截（P2）：正文与联系方式分别过一遍。
+     *
+     * <p>联系方式必须一起校验——它同样是用户输入、同样对认证用户可见，
+     * 「正文干净、联系方式里夹带」是显然的绕过路径。</p>
+     */
+    private void requireAllowedContent(String content, String contact) {
+        contentGuard.check(content);
+        contentGuard.check(contact);
     }
 
     private Topic requireEnabledTopic(Long topicId) {
@@ -288,10 +275,11 @@ public class PostService {
     }
 
     /**
-     * 图片地址只接受本站上传产生的相对路径。
+     * 图片地址只接受本站上传产生的路径。
      *
      * <p>放任客户端传任意字符串的话，可以把 {@code javascript:} 或外链塞进 img 的 src，
-     * 造成 XSS 与盗链。要求以 {@code /} 开头且不含协议分隔符，即可挡掉绝对 URL 与伪协议。</p>
+     * 造成 XSS 与盗链；只校验 {@code /uploads/} 前缀也不够，需要与上传接口的返回格式严格对齐。
+     * 图片归属（不能引用他人上传的文件）与未使用文件的回收留到 P2 接对象存储时一并处理。</p>
      */
     private List<String> validateImageUrls(List<String> images) {
         if (images == null || images.isEmpty()) {
@@ -301,7 +289,7 @@ public class PostService {
             throw new BizException(ErrorCode.UPLOAD_INVALID);
         }
         for (String url : images) {
-            if (url == null || !url.startsWith("/") || url.contains(":")) {
+            if (url == null || !IMAGE_URL_PATTERN.matcher(url).matches()) {
                 throw new BizException(ErrorCode.UPLOAD_INVALID);
             }
         }
@@ -370,6 +358,7 @@ public class PostService {
                 post.getCommentCount(),
                 mine,
                 mine ? post.getReviewReason() : null,
+                post.getStatus() == PostStatus.TAKEN_DOWN,
                 post.getCreatedAt());
     }
 
@@ -387,15 +376,5 @@ public class PostService {
         } catch (NumberFormatException ex) {
             throw new BizException(ErrorCode.CURSOR_INVALID);
         }
-    }
-
-    private int normalizePageSize(Integer size) {
-        if (size == null) {
-            return DEFAULT_PAGE_SIZE;
-        }
-        if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new BizException(ErrorCode.INVALID_REQUEST);
-        }
-        return size;
     }
 }

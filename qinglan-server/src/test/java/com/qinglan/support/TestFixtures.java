@@ -50,6 +50,11 @@ public final class TestFixtures {
         set(entity, "id", id);
     }
 
+    /** 待处理举报数由 review 模块原子维护，单测里 mock 掉仓储后需要手工给一个初始值 */
+    public static void setReportCount(Post post, int reportCount) {
+        set(post, "reportCount", reportCount);
+    }
+
     private static <T> T newInstance(Class<T> type) {
         try {
             var constructor = type.getDeclaredConstructor();

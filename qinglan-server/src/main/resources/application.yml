@@ -70,6 +70,29 @@ qinglan:
     min-credit-to-post: 60
     # 单个帖子的图片数量上限（设计方案：≤9 图）
     max-images-per-post: 9
+  moderation:
+    # 本地硬拦截词库（classpath 资源，一行一词，# 开头为注释）
+    sensitive-word-file: classpath:moderation/sensitive-words.txt
+    # 隐私信息正则，命中即拒绝发布。默认只拦身份证与银行卡；
+    # 学号规则刻意留空——\d{9,12} 会把 11 位手机号一起误拦，等确认真实格式后再在此追加，不改代码
+    privacy-rules:
+      - label: 身份证
+        regex: '[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[0-9Xx]'
+      - label: 银行卡
+        regex: '(?<!\d)\d{16,19}(?!\d)'
+  review:
+    # 待处理举报数达到该值时帖子自动下架，转人工复核（设计方案：N=3）
+    auto-takedown-threshold: 3
+    # 申诉期限：自下架时刻起算，超期不再受理（设计方案：7 日内）
+    appeal-window: 7d
+  upload:
+    # 单个用户在窗口内的上传次数上限，防止刷爆对象存储
+    max-per-window: 30
+    # 上传限流窗口；计数窗口从该用户第一次上传时开始计时
+    window: 1m
+  store:
+    # 短时效存储实现：memory=单机内存（本地/测试）；redis=集群共享（生产）
+    type: ${QINGLAN_STORE_TYPE:memory}
   storage:
     # 本地开发用磁盘目录；生产切对象存储后本项不再生效
     local-root: ${QINGLAN_STORAGE_ROOT:./data/uploads}

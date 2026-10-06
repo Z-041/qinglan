@@ -35,6 +35,8 @@ export interface PostSummary {
  * `contact` 由服务端按 viewer 身份脱敏（不变量 #2）：未认证时必为 null，
  * `contactVisible` 为 false 时前端显示「认证后可查看联系方式」而非空白。
  * `reviewReason` 仅作者本人可见，其余为 null。
+ * `takenDown` 为下架态标记：下架帖只有作者能打开，作者据此拿到申诉入口。
+ * 不能用 `reviewReason` 非空代替——驳回、恢复后的帖子都会残留该字段。
  */
 export interface PostDetail {
   id: number
@@ -51,6 +53,7 @@ export interface PostDetail {
   commentCount: number
   mine: boolean
   reviewReason: string | null
+  takenDown: boolean
   createdAt: string
 }
 

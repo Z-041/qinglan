@@ -131,6 +131,9 @@ public class Post extends BaseEntity {
                 }
                 this.reviewAt = approved.approvedAt();
                 this.takenDownAt = null;
+                // 放行/恢复后处罚理由不再成立，必须清空：否则申诉通过的帖子会一直挂着下架说明。
+                // 历史仍完整保留在 review_log（不变量 #7 只增不改删）。
+                this.reviewReason = null;
             }
             case ReviewState.Rejected rejected -> {
                 this.reviewReason = rejected.explanation();
@@ -165,6 +168,21 @@ public class Post extends BaseEntity {
 
     public boolean isAuthoredBy(Long userId) {
         return userId != null && Objects.equals(this.authorId, userId);
+    }
+
+    /**
+     * 处置动作：隐藏联系方式（仅作者本人可见）。
+     *
+     * <p>只改可见性标记、不清空 {@code contact} 值——处罚可能被申诉撤销，清空就找不回了。
+     * 是否对外返回仍由 {@link #contactVisibleTo} 统一裁决（不变量 #2）。</p>
+     */
+    public void hideContact() {
+        this.contactVisibility = ContactVisibility.HIDDEN;
+    }
+
+    /** 恢复联系方式可见性（申诉通过后） */
+    public void showContact() {
+        this.contactVisibility = ContactVisibility.VISIBLE;
     }
 
     /**

@@ -38,13 +38,12 @@ public class PostController {
         return ApiResponse.ok(postService.create(CurrentUser.requireUserId(), request));
     }
 
-    /** 信息流，游标分页；topic 为空表示全部话题 */
+    /** 信息流，游标分页（页大小由服务端固定）；topic 为空表示全部话题 */
     @GetMapping
     public ApiResponse<CursorPage<PostSummaryResponse>> list(
             @RequestParam(required = false) Long topic,
-            @RequestParam(required = false) String cursor,
-            @RequestParam(required = false) Integer size) {
-        return ApiResponse.ok(postService.listFeed(topic, cursor, size, CurrentUser.viewer()));
+            @RequestParam(required = false) String cursor) {
+        return ApiResponse.ok(postService.listFeed(topic, cursor, CurrentUser.viewer()));
     }
 
     /** 详情，含作者匿名代号；联系方式按 viewer 身份在服务端脱敏（不变量 #2） */

@@ -35,6 +35,7 @@ const created: PostDetail = {
   commentCount: 0,
   mine: true,
   reviewReason: null,
+  takenDown: false,
   createdAt: '2026-10-06T00:00:00Z',
 }
 
@@ -52,7 +53,6 @@ describe('usePublish', () => {
 
     expect(publish.topics.value).toHaveLength(2)
     expect(publish.selectedTopic.value?.requiresContact).toBe(true)
-    expect(publish.loadingTopics.value).toBe(false)
   })
 
   it('未选话题或正文为空时不允许提交', async () => {

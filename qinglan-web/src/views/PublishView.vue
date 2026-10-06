@@ -9,10 +9,13 @@ import BaseTextarea from '@/components/base/BaseTextarea.vue'
 import FormField from '@/components/base/FormField.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
 import TopicFilter from '@/components/TopicFilter.vue'
+import { useImageUpload } from '@/composables/useImageUpload'
 import { usePublish } from '@/composables/usePublish'
 import { pushToast } from '@/composables/useToast'
 
 const router = useRouter()
+
+const { uploading: uploadingImages, addFiles } = useImageUpload()
 
 const {
   topics,
@@ -36,6 +39,10 @@ const contactLabel = computed(() =>
 onMounted(() => {
   void loadTopics()
 })
+
+async function handleSelectImages(files: File[]): Promise<void> {
+  images.value = await addFiles(files, images.value)
+}
 
 async function handleSubmit(): Promise<void> {
   const created = await submit()
@@ -80,7 +87,11 @@ async function handleSubmit(): Promise<void> {
 
       <div class="mt-5">
         <span class="ql-label">图片（最多 9 张）</span>
-        <ImagePicker v-model="images" />
+        <ImagePicker
+          v-model="images"
+          :uploading="uploadingImages"
+          @select="handleSelectImages"
+        />
       </div>
 
       <BaseButton class="mt-6" block :loading="submitting" :disabled="!canSubmit" @click="handleSubmit">

@@ -6,6 +6,9 @@ import com.qinglan.comment.entity.Comment;
 import com.qinglan.comment.entity.CommentStatus;
 import com.qinglan.comment.repository.CommentRepository;
 import com.qinglan.common.anonymous.AnonymousCodeService;
+import com.qinglan.common.audit.AuditAction;
+import com.qinglan.common.audit.AuditLogService;
+import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.interaction.LikeCount;
@@ -13,8 +16,7 @@ import com.qinglan.common.interaction.LikeRecord;
 import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeStateResponse;
 import com.qinglan.common.interaction.LikeTargetType;
-import com.qinglan.common.moderation.ContentModerator;
-import com.qinglan.common.moderation.ModerationResult;
+import com.qinglan.common.moderation.ContentGuard;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
@@ -53,7 +55,8 @@ public class CommentService {
     private final LikeRepository likeRepository;
     private final AnonymousCodeService anonymousCodeService;
     private final UserService userService;
-    private final ContentModerator contentModerator;
+    private final AuditLogService auditLogService;
+    private final ContentGuard contentGuard;
 
     /**
      * 评论列表：一次取出该帖全部一级评论与其回复，再批量装配点赞，避免评论树的 N+1。
@@ -132,20 +135,26 @@ public class CommentService {
         if (comment.isRemoved()) {
             return;
         }
-        comment.remove();
-        List<Long> removedIds = new ArrayList<>();
-        removedIds.add(comment.getId());
-        if (!comment.isReply()) {
-            List<Comment> replies = commentRepository
-                    .findByParentIdInAndStatusOrderByCreatedAtAsc(List.of(comment.getId()), CommentStatus.PUBLISHED);
-            for (Comment reply : replies) {
-                reply.remove();
-                removedIds.add(reply.getId());
-            }
+        int removed = removeWithReplies(comment);
+        log.info("删除评论 commentId={} 连同回复共 {} 条", commentId, removed);
+    }
+
+    /**
+     * 管理员移除评论（先发后审的唯一兜底处置）。
+     *
+     * <p>移除细节与作者自删完全共用 {@link #removeWithReplies}——硬删点赞行这类步骤漏一处，
+     * 就会留下读不到的孤儿数据。处置动作必须留痕（不变量 #7），故这里写审计日志。</p>
+     */
+    @Transactional
+    public void removeByAdmin(Long commentId, Long operatorId, String reason) {
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new BizException(ErrorCode.COMMENT_NOT_FOUND));
+        if (comment.isRemoved()) {
+            return;
         }
-        postRepository.adjustCommentCount(comment.getPostId(), -removedIds.size());
-        likeRepository.deleteByTargets(LikeTargetType.COMMENT, removedIds);
-        log.info("删除评论 commentId={} 连同回复共 {} 条", commentId, removedIds.size());
+        int removed = removeWithReplies(comment);
+        auditLogService.record(AuditTargetType.COMMENT, commentId, AuditAction.COMMENT_REMOVE, operatorId, reason);
+        log.info("管理员移除评论 commentId={} 连同回复共 {} 条，操作人 operatorId={}", commentId, removed, operatorId);
     }
 
     /** 给评论点赞，幂等 */
@@ -169,6 +178,30 @@ public class CommentService {
     }
 
     // ---------------------------------------------------------------- 内部方法
+
+    /**
+     * 软删评论本身与（一级评论的）全部回复，同步扣减 {@code post.comment_count}，
+     * 并在同一事务内硬删这些评论的点赞行——评论删除没有恢复入口（R-15）。
+     *
+     * @return 实际移除的评论条数（含连带移除的回复）
+     */
+    private int removeWithReplies(Comment comment) {
+        comment.remove();
+        List<Long> removedIds = new ArrayList<>();
+        removedIds.add(comment.getId());
+        if (!comment.isReply()) {
+            List<Comment> replies = commentRepository
+                    .findByParentIdInAndStatusOrderByCreatedAtAsc(List.of(comment.getId()), CommentStatus.PUBLISHED);
+            for (Comment reply : replies) {
+                reply.remove();
+                removedIds.add(reply.getId());
+            }
+        }
+        // 原子自减：读-改-写在并发删除下会丢更新
+        postRepository.adjustCommentCount(comment.getPostId(), -removedIds.size());
+        likeRepository.deleteByTargets(LikeTargetType.COMMENT, removedIds);
+        return removedIds.size();
+    }
 
     private Post requireVisiblePost(Long postId, Long viewerId) {
         Post post = postRepository.findById(postId)
@@ -201,13 +234,9 @@ public class CommentService {
         requireVisiblePost(comment.getPostId(), userId);
     }
 
-    /** 内容审核端口：P1 默认放行，接入内容安全服务后此处即为拦截点 */
+    /** 本地硬拦截（P2）：敏感词与隐私格式在入库前拦下，命中即抛，不进入待审流程 */
     private void requireAllowedContent(String content) {
-        ModerationResult result = contentModerator.moderate(content);
-        if (!result.allowed()) {
-            log.info("评论内容审核未通过，reason={}", result.reason());
-            throw new BizException(ErrorCode.CONTENT_REJECTED);
-        }
+        contentGuard.check(content);
     }
 
     private LikeStateResponse likeState(Long commentId, Long userId) {

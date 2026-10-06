@@ -2,11 +2,14 @@ package com.qinglan.post.service;
 
 import com.qinglan.comment.dto.CommentResponse;
 import com.qinglan.common.anonymous.AnonymousCodeService;
+import com.qinglan.common.audit.AuditAction;
+import com.qinglan.common.audit.AuditLogService;
+import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeTargetType;
-import com.qinglan.common.moderation.ModerationResult;
+import com.qinglan.common.moderation.ContentGuard;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.post.config.PostProperties;
 import com.qinglan.post.dto.CreatePostRequest;
@@ -19,9 +22,6 @@ import com.qinglan.post.entity.RiskLevel;
 import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.post.repository.TopicRepository;
-import com.qinglan.review.entity.AuditAction;
-import com.qinglan.review.entity.AuditTargetType;
-import com.qinglan.review.service.AuditLogService;
 import com.qinglan.support.TestFixtures;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.service.UserService;
@@ -59,6 +59,8 @@ class PostServiceTest {
     private static final long TOPIC_ID = 3L;
     private static final String CONTACT = "13800000000";
     private static final String SALT = "salt";
+    /** 与 LocalStorageService 返回值同构：/uploads/{yyyy}/{MM}/{32 位 hex}.{ext} */
+    private static final String IMAGE_URL = "/uploads/2026/10/" + "a".repeat(32) + ".jpg";
 
     @Mock
     private PostRepository postRepository;
@@ -83,11 +85,15 @@ class PostServiceTest {
 
     private PostService postService;
 
+    /** 默认放行的硬拦截桩；需要拦截的用例自行构造一个会抛的守卫 */
+    private static final ContentGuard ALLOW_ALL = text -> {
+    };
+
     @BeforeEach
     void setUp() {
         postService = new PostService(postRepository, postImageRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
-                new PostProperties(60, 9), content -> ModerationResult.pass());
+                new PostProperties(60, 9), ALLOW_ALL);
     }
 
     // ------------------------------------------------------------------ 发布
@@ -106,7 +112,7 @@ class PostServiceTest {
         when(anonymousCodeService.deriveCode(POST_ID, AUTHOR_ID, SALT)).thenReturn("银杏#1a2b");
 
         PostDetailResponse response = postService.create(AUTHOR_ID,
-                new CreatePostRequest(TOPIC_ID, " 出个二手自行车 ", CONTACT, List.of("/uploads/a.jpg")));
+                new CreatePostRequest(TOPIC_ID, " 出个二手自行车 ", CONTACT, List.of(IMAGE_URL)));
 
         // 代号是插入后回填的派生值，不是插入占位符
         assertThat(response.anonymousCode()).isEqualTo("银杏#1a2b");
@@ -150,14 +156,17 @@ class PostServiceTest {
     }
 
     @Test
-    @DisplayName("D：内容审核端口已接入发布链路，判定不通过即拒绝")
+    @DisplayName("本地硬拦截已接入发布链路，命中即拒绝且不落库")
     void shouldRejectWhenModeratorBlocks() {
         stubAuthor(activeAuthor());
         when(topicRepository.findById(TOPIC_ID))
                 .thenReturn(Optional.of(TestFixtures.topic(TOPIC_ID, "吐槽", false)));
+        ContentGuard blocking = text -> {
+            throw new BizException(ErrorCode.CONTENT_REJECTED);
+        };
         PostService strict = new PostService(postRepository, postImageRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
-                new PostProperties(60, 9), content -> ModerationResult.reject("测试拦截"));
+                new PostProperties(60, 9), blocking);
 
         assertThatThrownBy(() -> strict.create(AUTHOR_ID, new CreatePostRequest(TOPIC_ID, "正文", null, null)))
                 .isInstanceOf(BizException.class)
@@ -193,16 +202,24 @@ class PostServiceTest {
     }
 
     @Test
-    @DisplayName("图片来源必须是自己上传的相对路径，伪协议与外链一律拒绝")
+    @DisplayName("G：图片来源必须是本服务生成的格式，伪协议、外链与伪造的 /uploads 路径一律拒绝")
     void shouldRejectForeignImageUrls() {
         stubAuthor(activeAuthor());
         when(topicRepository.findById(TOPIC_ID))
                 .thenReturn(Optional.of(TestFixtures.topic(TOPIC_ID, "吐槽", false)));
 
-        for (String bad : List.of("javascript:alert(1)", "https://evil.example/x.jpg", "data:image/png;base64,AAAA")) {
+        List<String> bad = List.of(
+                "javascript:alert(1)",
+                "https://evil.example/x.jpg",
+                "data:image/png;base64,AAAA",
+                // 只判 /uploads/ 前缀会放过这两条：路径段数不对、文件名不是 32 位 hex
+                "/uploads/anything",
+                "/uploads/2026/10/not-a-uuid.jpg",
+                "/uploads/2026/10/" + "a".repeat(32) + ".gif");
+        for (String url : bad) {
             assertThatThrownBy(() -> postService.create(AUTHOR_ID,
-                    new CreatePostRequest(TOPIC_ID, "正文", null, List.of(bad))))
-                    .as("应拒绝非法图片地址：%s", bad)
+                    new CreatePostRequest(TOPIC_ID, "正文", null, List.of(url))))
+                    .as("应拒绝非法图片地址：%s", url)
                     .isInstanceOf(BizException.class)
                     .extracting(ex -> ((BizException) ex).errorCode())
                     .isEqualTo(ErrorCode.UPLOAD_INVALID);
@@ -262,50 +279,6 @@ class PostServiceTest {
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.POST_NOT_FOUND);
         verifyNoInteractions(auditLogService);
-    }
-
-    // -------------------------------------------------------- 不变量 #5
-
-    @Test
-    @DisplayName("不变量 #5：放行需经 Reviewing 走到 Approved，并写审计日志")
-    void shouldApproveThroughReviewing() {
-        Post pending = Post.draft(AUTHOR_ID, TOPIC_ID, "待审正文", null);
-        pending.submit(RiskLevel.LOW);
-        TestFixtures.setId(pending, POST_ID);
-        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(pending));
-
-        postService.approve(POST_ID, 9L);
-
-        assertThat(pending.getStatus()).isEqualTo(PostStatus.APPROVED);
-        assertThat(pending.getReviewBy()).isEqualTo(9L);
-        verify(auditLogService).record(AuditTargetType.POST, POST_ID, AuditAction.POST_APPROVE, 9L, null);
-    }
-
-    @Test
-    @DisplayName("不变量 #5：已通过的帖子再次放行属非法迁移，且不留审计")
-    void shouldRejectApproveWhenAlreadyApproved() {
-        stubApprovedPost();
-
-        assertThatThrownBy(() -> postService.approve(POST_ID, 9L))
-                .isInstanceOf(BizException.class)
-                .extracting(ex -> ((BizException) ex).errorCode())
-                .isEqualTo(ErrorCode.ILLEGAL_REVIEW_TRANSITION);
-        verifyNoInteractions(auditLogService);
-    }
-
-    @Test
-    @DisplayName("驳回写入理由，作者在详情里能看到该理由")
-    void shouldRejectWithReasonVisibleToAuthor() {
-        Post pending = Post.draft(AUTHOR_ID, TOPIC_ID, "待审正文", null);
-        pending.submit(RiskLevel.LOW);
-        TestFixtures.setId(pending, POST_ID);
-        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(pending));
-
-        postService.reject(POST_ID, 9L, "正文含他人手机号");
-
-        assertThat(pending.getStatus()).isEqualTo(PostStatus.REJECTED);
-        assertThat(pending.getReviewReason()).isEqualTo("正文含他人手机号");
-        verify(auditLogService).record(AuditTargetType.POST, POST_ID, AuditAction.POST_REJECT, 9L, "正文含他人手机号");
     }
 
     // -------------------------------------------------------- 不变量 #1

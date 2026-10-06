@@ -3,9 +3,11 @@ package com.qinglan.auth.service;
 import com.qinglan.auth.dto.AuthTokenResponse;
 import com.qinglan.auth.dto.SendCodeResponse;
 import com.qinglan.auth.dto.VerifyEmailResponse;
+import com.qinglan.auth.security.EmailTokenPayload;
 import com.qinglan.auth.security.JwtService;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.store.EphemeralStore;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -24,9 +26,13 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AuthService {
 
+    /** 邮箱认证令牌的一次性消费键（AGENTS.md Redis key 约定 ql:{domain}:{id}） */
+    private static final String EMAIL_TOKEN_KEY_PREFIX = "ql:auth:emailtoken:";
+
     private final EmailVerificationService emailVerificationService;
     private final UserService userService;
     private final JwtService jwtService;
+    private final EphemeralStore ephemeralStore;
 
     public SendCodeResponse sendEmailCode(String email) {
         return emailVerificationService.sendCode(email);
@@ -49,9 +55,16 @@ public class AuthService {
     }
 
     public AuthTokenResponse bindStudentId(String emailToken, String studentId) {
-        String emailHash = jwtService.parseEmailToken(emailToken)
+        EmailTokenPayload payload = jwtService.parseEmailToken(emailToken)
                 .orElseThrow(() -> new BizException(ErrorCode.EMAIL_TOKEN_INVALID));
-        User user = userService.createVerifiedStudent(emailHash, studentId);
+        // 凭证一次性：先原子占用 jti，占用失败即说明已被用过（重复提交或重放）。
+        // 抢占式消费而非成功后再记，是为了让并发请求里只有一个能进入创建流程。
+        boolean firstUse = ephemeralStore.markUsedOnce(
+                EMAIL_TOKEN_KEY_PREFIX + payload.jti(), jwtService.emailTokenTtl());
+        if (!firstUse) {
+            throw new BizException(ErrorCode.EMAIL_TOKEN_INVALID);
+        }
+        User user = userService.createVerifiedStudent(payload.emailHash(), studentId);
         return new AuthTokenResponse(
                 jwtService.issueAccessToken(user.getId(), user.getRole()),
                 "Bearer",

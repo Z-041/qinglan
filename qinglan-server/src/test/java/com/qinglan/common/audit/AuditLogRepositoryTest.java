@@ -1,8 +1,5 @@
-package com.qinglan.review.repository;
+package com.qinglan.common.audit;
 
-import com.qinglan.review.entity.AuditAction;
-import com.qinglan.review.entity.AuditLog;
-import com.qinglan.review.entity.AuditTargetType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

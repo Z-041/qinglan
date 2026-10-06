@@ -6,14 +6,20 @@ const props = withDefaults(
     comment: Comment
     /** 0 = 一级评论，1 = 回复；只支持两级，故回复不再提供「回复」入口 */
     depth?: number
+    /**
+     * 当前访问者是否具备举报资格（已认证）。
+     * 「是不是自己的评论」组件自己知道，但「有没有登录」属于页面态，由父级传入。
+     */
+    reportable?: boolean
   }>(),
-  { depth: 0 },
+  { depth: 0, reportable: false },
 )
 
 const emit = defineEmits<{
   'toggle-like': [commentId: number]
   reply: [comment: Comment]
   delete: [commentId: number]
+  report: [comment: Comment]
 }>()
 </script>
 
@@ -65,6 +71,15 @@ const emit = defineEmits<{
       </button>
 
       <button
+        v-if="props.reportable && !props.comment.mine"
+        type="button"
+        class="cursor-pointer text-xs text-muted transition hover:text-danger"
+        @click="emit('report', props.comment)"
+      >
+        举报
+      </button>
+
+      <button
         v-if="props.comment.mine"
         type="button"
         class="cursor-pointer text-xs text-muted transition hover:text-danger"
@@ -80,8 +95,10 @@ const emit = defineEmits<{
         :key="reply.id"
         :comment="reply"
         :depth="props.depth + 1"
+        :reportable="props.reportable"
         @toggle-like="emit('toggle-like', $event)"
         @delete="emit('delete', $event)"
+        @report="emit('report', $event)"
       />
     </ul>
   </li>
