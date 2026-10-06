@@ -96,3 +96,18 @@ export interface DismissReportsPayload {
 export interface ReasonPayload {
   reason: string
 }
+
+/**
+ * 管理端处置动作，与 ReviewActionBar 的按钮一一对应。
+ * 放在 types 里而不是组件的 `<script setup>` 里：SFC 的 script setup 不能导出类型。
+ */
+export type ReviewAction =
+  | 'approve'
+  | 'reject'
+  | 'take-down'
+  | 'restore'
+  | 'uphold'
+  | 'hide-contact'
+  | 'show-contact'
+  | 'remove-comment'
+  | 'dismiss'
