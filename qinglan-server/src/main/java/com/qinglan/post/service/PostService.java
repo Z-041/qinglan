@@ -14,6 +14,9 @@ import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeStateResponse;
 import com.qinglan.common.interaction.LikeTargetType;
 import com.qinglan.common.moderation.ContentGuard;
+import com.qinglan.common.notify.NotificationMessage;
+import com.qinglan.common.notify.NotificationPort;
+import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.config.PostProperties;
@@ -90,6 +93,7 @@ public class PostService {
     private final PostProperties postProperties;
     private final ContentGuard contentGuard;
     private final AnnouncementService announcementService;
+    private final NotificationPort notificationPort;
 
     /**
      * 发布。落 Pending 而非直接可见——主帖先审后发，是设计方案第一章的红线 2。
@@ -197,10 +201,13 @@ public class PostService {
     @Transactional
     public LikeStateResponse like(Long postId, Long userId) {
         userService.requireUsableById(userId);
-        requireVisiblePost(postId, userId);
+        Post post = requireVisiblePost(postId, userId);
         if (likeRepository.findByTargetTypeAndTargetIdAndUserId(LikeTargetType.POST, postId, userId).isEmpty()) {
             // uk_like_target_user 是并发下的最终防线：重复插入会被数据库拒绝，不会产生第二条
             likeRepository.save(LikeRecord.of(LikeTargetType.POST, postId, userId));
+            // 只在「本次确实新建了点赞记录」时通知——重复点赞（幂等命中）不重复打扰作者
+            notificationPort.notify(post.getAuthorId(), userId,
+                    new NotificationMessage(NotificationType.LIKE, "有人赞了你的帖子", null, "/posts/" + postId));
         }
         return likeState(postId, userId);
     }

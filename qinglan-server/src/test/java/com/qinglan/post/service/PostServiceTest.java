@@ -11,9 +11,13 @@ import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.error.PreconditionRequiredException;
+import com.qinglan.common.interaction.LikeRecord;
 import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeTargetType;
 import com.qinglan.common.moderation.ContentGuard;
+import com.qinglan.common.notify.NotificationMessage;
+import com.qinglan.common.notify.NotificationPort;
+import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.post.config.PostProperties;
 import com.qinglan.post.dto.CreatePostRequest;
@@ -48,6 +52,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -92,6 +97,9 @@ class PostServiceTest {
     @Mock
     private AnnouncementService announcementService;
 
+    @Mock
+    private NotificationPort notificationPort;
+
     private PostService postService;
 
     /** 默认放行的硬拦截桩；需要拦截的用例自行构造一个会抛的守卫 */
@@ -102,7 +110,7 @@ class PostServiceTest {
     void setUp() {
         postService = new PostService(postRepository, postImageRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
-                new PostProperties(60, 9), ALLOW_ALL, announcementService);
+                new PostProperties(60, 9), ALLOW_ALL, announcementService, notificationPort);
     }
 
     // ------------------------------------------------------------------ 发布
@@ -175,7 +183,7 @@ class PostServiceTest {
         };
         PostService strict = new PostService(postRepository, postImageRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
-                new PostProperties(60, 9), blocking, announcementService);
+                new PostProperties(60, 9), blocking, announcementService, notificationPort);
 
         assertThatThrownBy(() -> strict.create(AUTHOR_ID, new CreatePostRequest(TOPIC_ID, "正文", null, null)))
                 .isInstanceOf(BizException.class)
@@ -332,6 +340,45 @@ class PostServiceTest {
         String second = real.deriveCode(2L, AUTHOR_ID, SALT);
 
         assertThat(first).isNotEqualTo(second);
+    }
+
+    // ------------------------------------------------------------------ 点赞通知
+
+    @Test
+    @DisplayName("点赞仅在确为新建点赞记录时通知帖主：类型 LIKE、收件人为作者")
+    void shouldNotifyAuthorOnNewLike() {
+        long likerId = 8L;
+        when(userService.requireUsableById(likerId)).thenReturn(activeAuthor());
+        when(postRepository.findById(POST_ID))
+                .thenReturn(Optional.of(TestFixtures.approvedPost(POST_ID, AUTHOR_ID, TOPIC_ID, null)));
+        when(likeRepository.findByTargetTypeAndTargetIdAndUserId(LikeTargetType.POST, POST_ID, likerId))
+                .thenReturn(Optional.empty());
+        when(likeRepository.countByTargetTypeAndTargetId(LikeTargetType.POST, POST_ID)).thenReturn(1L);
+
+        postService.like(POST_ID, likerId);
+
+        ArgumentCaptor<NotificationMessage> captor = ArgumentCaptor.forClass(NotificationMessage.class);
+        verify(notificationPort).notify(eq(AUTHOR_ID), eq(likerId), captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo(NotificationType.LIKE);
+        assertThat(captor.getValue().title()).isEqualTo("有人赞了你的帖子");
+        assertThat(captor.getValue().link()).isEqualTo("/posts/" + POST_ID);
+    }
+
+    @Test
+    @DisplayName("重复点赞（幂等命中已有记录）不重复发通知")
+    void shouldNotNotifyOnDuplicateLike() {
+        long likerId = 8L;
+        when(userService.requireUsableById(likerId)).thenReturn(activeAuthor());
+        when(postRepository.findById(POST_ID))
+                .thenReturn(Optional.of(TestFixtures.approvedPost(POST_ID, AUTHOR_ID, TOPIC_ID, null)));
+        when(likeRepository.findByTargetTypeAndTargetIdAndUserId(LikeTargetType.POST, POST_ID, likerId))
+                .thenReturn(Optional.of(LikeRecord.of(LikeTargetType.POST, POST_ID, likerId)));
+        when(likeRepository.countByTargetTypeAndTargetId(LikeTargetType.POST, POST_ID)).thenReturn(1L);
+
+        postService.like(POST_ID, likerId);
+
+        verify(likeRepository, never()).save(any());
+        verify(notificationPort, never()).notify(any(), any(), any());
     }
 
     // ------------------------------------------------------------------ 辅助

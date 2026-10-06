@@ -6,6 +6,9 @@ import com.qinglan.common.audit.AuditLogService;
 import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.notify.NotificationMessage;
+import com.qinglan.common.notify.NotificationPort;
+import com.qinglan.common.notify.NotificationType;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.entity.ReviewState;
@@ -50,11 +53,17 @@ public class ReviewService {
      */
     private static final String MANUAL_REJECT_CODE = "MANUAL_REJECT";
 
+    /** 举报反馈标题：举报成立 / 内容已被处置 */
+    private static final String REPORT_UPHELD_TITLE = "你举报的内容已处理";
+    /** 举报反馈标题：举报被驳回（内容不违规） */
+    private static final String REPORT_DISMISSED_TITLE = "你的举报未获支持";
+
     private final PostRepository postRepository;
     private final ReportRepository reportRepository;
     private final CommentService commentService;
     private final UserService userService;
     private final AuditLogService auditLogService;
+    private final NotificationPort notificationPort;
 
     /**
      * 放行：Pending → Reviewing → Approved。
@@ -69,6 +78,8 @@ public class ReviewService {
         post.transitionTo(new ReviewState.Reviewing(operatorId, now));
         post.transitionTo(new ReviewState.Approved(operatorId, now));
         auditLogService.record(AuditTargetType.POST, postId, AuditAction.POST_APPROVE, operatorId, null);
+        notificationPort.notify(post.getAuthorId(), operatorId,
+                new NotificationMessage(NotificationType.REVIEW_RESULT, "你的帖子已通过审核", null, "/posts/" + postId));
         log.info("放行帖子 postId={}，操作人 operatorId={}", postId, operatorId);
     }
 
@@ -79,6 +90,9 @@ public class ReviewService {
         post.transitionTo(new ReviewState.Reviewing(operatorId, Instant.now()));
         post.transitionTo(new ReviewState.Rejected(MANUAL_REJECT_CODE, reason));
         auditLogService.record(AuditTargetType.POST, postId, AuditAction.POST_REJECT, operatorId, reason);
+        // 驳回理由对作者可见，这里一并作为通知正文带出
+        notificationPort.notify(post.getAuthorId(), operatorId,
+                new NotificationMessage(NotificationType.REVIEW_RESULT, "你的帖子未通过审核", reason, "/posts/" + postId));
         log.info("驳回帖子 postId={}，操作人 operatorId={}", postId, operatorId);
     }
 
@@ -105,6 +119,9 @@ public class ReviewService {
             userService.ban(post.getAuthorId(), Duration.ofDays(request.banDays()), reason, operatorId);
         }
         auditLogService.record(AuditTargetType.POST, postId, AuditAction.POST_TAKEDOWN, operatorId, reason);
+        // 下架理由对作者可见（申诉入口在详情里）
+        notificationPort.notify(post.getAuthorId(), operatorId,
+                new NotificationMessage(NotificationType.REVIEW_RESULT, "你的帖子已被下架", reason, "/posts/" + postId));
         log.info("下架帖子 postId={} 结案举报数={} 封禁={}，操作人 operatorId={}",
                 postId, handled, request.banDays() != null, operatorId);
     }
@@ -157,6 +174,7 @@ public class ReviewService {
         postRepository.adjustReportCount(postId, -pending.size());
         auditLogService.record(AuditTargetType.POST, postId, AuditAction.REPORT_UPHOLD,
                 operatorId, normalize(reason));
+        notifyReporters(pending, REPORT_UPHELD_TITLE, ReviewTargetType.POST, postId, operatorId);
         log.info("维持下架并结案举报 postId={} 结案数={}，操作人 operatorId={}", postId, pending.size(), operatorId);
     }
 
@@ -218,6 +236,7 @@ public class ReviewService {
         }
         auditLogService.record(auditTarget(request.targetType()), request.targetId(),
                 AuditAction.REPORT_DISMISS, operatorId, normalize(request.reason()));
+        notifyReporters(pending, REPORT_DISMISSED_TITLE, request.targetType(), request.targetId(), operatorId);
         log.info("驳回举报 targetType={} targetId={} 共 {} 条，操作人 operatorId={}",
                 request.targetType(), request.targetId(), pending.size(), operatorId);
     }
@@ -229,12 +248,29 @@ public class ReviewService {
                 .orElseThrow(() -> new BizException(ErrorCode.POST_NOT_FOUND));
     }
 
-    /** 把某目标下所有待处理举报置为成立，返回结案条数 */
+    /** 把某目标下所有待处理举报置为成立，返回结案条数；成立即向各举报人反馈（REPORT_FEEDBACK） */
     private int upholdPendingReports(ReviewTargetType targetType, Long targetId, Long operatorId) {
         List<Report> pending = reportRepository.findByTargetTypeAndTargetIdAndStatus(
                 targetType, targetId, ReportStatus.PENDING);
         pending.forEach(report -> report.uphold(operatorId));
+        notifyReporters(pending, REPORT_UPHELD_TITLE, targetType, targetId, operatorId);
         return pending.size();
+    }
+
+    /**
+     * 举报处置完毕，逐条通知**各自的举报人**（同一目标的多条举报分别通知）。
+     *
+     * <p>收件人是 {@code report.reporterId}，不聚合、不去重——举报人身份只在此处用于投递，
+     * 不出现在任何对外 DTO 里（不变量 #1 的引申）。目标的链接：帖子给 {@code /posts/{id}}，
+     * 评论拿不到所属帖子 id（跨模块不在本层展开查询）故留空，前端按 null 处理。</p>
+     */
+    private void notifyReporters(List<Report> reports, String title,
+                                 ReviewTargetType targetType, Long targetId, Long operatorId) {
+        String link = targetType == ReviewTargetType.POST ? "/posts/" + targetId : null;
+        for (Report report : reports) {
+            notificationPort.notify(report.getReporterId(), operatorId,
+                    new NotificationMessage(NotificationType.REPORT_FEEDBACK, title, null, link));
+        }
     }
 
     /**

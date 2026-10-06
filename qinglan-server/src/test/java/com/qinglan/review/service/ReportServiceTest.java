@@ -7,6 +7,9 @@ import com.qinglan.common.audit.AuditLogService;
 import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.notify.NotificationMessage;
+import com.qinglan.common.notify.NotificationPort;
+import com.qinglan.common.notify.NotificationType;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.entity.ReviewState;
@@ -39,6 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -72,12 +76,16 @@ class ReportServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private NotificationPort notificationPort;
+
     private ReportService reportService;
 
     @BeforeEach
     void setUp() {
         reportService = new ReportService(reportRepository, postRepository, commentRepository,
-                userService, auditLogService, new ReviewProperties(THRESHOLD, Duration.ofDays(7)));
+                userService, auditLogService, notificationPort,
+                new ReviewProperties(THRESHOLD, Duration.ofDays(7)));
     }
 
     @Test
@@ -164,6 +172,25 @@ class ReportServiceTest {
         assertThat(post.getReviewReason()).isEqualTo("AUTO_REPORT_THRESHOLD");
         verify(auditLogService).record(AuditTargetType.POST, POST_ID, AuditAction.POST_AUTO_TAKEDOWN,
                 AuditLogService.SYSTEM_OPERATOR_ID, "AUTO_REPORT_THRESHOLD");
+    }
+
+    @Test
+    @DisplayName("自动下架通知作者：REVIEW_RESULT「已下架」，actor 为系统操作人")
+    void shouldNotifyAuthorOnAutoTakeDown() {
+        Post post = approvedPost(THRESHOLD);
+        stubReportablePost(post);
+        stubSave();
+        stubNoExistingReport(ReviewTargetType.POST, POST_ID);
+
+        reportService.report(REPORTER_ID, new CreateReportRequest(
+                ReviewTargetType.POST, POST_ID, ReportReason.FRAUD, null));
+
+        ArgumentCaptor<NotificationMessage> captor = ArgumentCaptor.forClass(NotificationMessage.class);
+        verify(notificationPort).notify(eq(AUTHOR_ID), eq(AuditLogService.SYSTEM_OPERATOR_ID), captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo(NotificationType.REVIEW_RESULT);
+        assertThat(captor.getValue().title()).isEqualTo("你的帖子已被下架");
+        assertThat(captor.getValue().body()).isEqualTo("AUTO_REPORT_THRESHOLD");
+        assertThat(captor.getValue().link()).isEqualTo("/posts/" + POST_ID);
     }
 
     @Test

@@ -15,6 +15,9 @@ import com.qinglan.common.interaction.LikeCount;
 import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeTargetType;
 import com.qinglan.common.moderation.ContentGuard;
+import com.qinglan.common.notify.NotificationMessage;
+import com.qinglan.common.notify.NotificationPort;
+import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
@@ -25,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -34,6 +38,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -70,6 +75,9 @@ class CommentServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private NotificationPort notificationPort;
+
     private CommentService commentService;
 
     /** 默认放行的硬拦截桩；需要拦截的用例自行构造一个会抛的守卫 */
@@ -79,7 +87,7 @@ class CommentServiceTest {
     @BeforeEach
     void setUp() {
         commentService = new CommentService(commentRepository, postRepository, likeRepository,
-                anonymousCodeService, userService, auditLogService, ALLOW_ALL);
+                anonymousCodeService, userService, auditLogService, notificationPort, ALLOW_ALL);
     }
 
     @Test
@@ -105,6 +113,33 @@ class CommentServiceTest {
         assertThat(response.mine()).isTrue();
         assertThat(response.replies()).isEmpty();
         verify(postRepository).adjustCommentCount(POST_ID, 1);
+    }
+
+    @Test
+    @DisplayName("发表评论通知帖主：收件人为帖主、类型 COMMENT，且 body 不含评论者可关联身份（不变量 #1）")
+    void shouldNotifyPostAuthorOnComment() {
+        long commenterId = 8L;
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
+        when(userService.requireUsableById(commenterId))
+                .thenReturn(User.register("emailHash", "studentIdHash", "enc", SALT));
+        when(anonymousCodeService.deriveCode(POST_ID, commenterId, SALT)).thenReturn("青竹#0f0f");
+        when(commentRepository.save(any(Comment.class))).thenAnswer(invocation -> {
+            Comment comment = invocation.getArgument(0);
+            TestFixtures.setId(comment, ROOT_ID);
+            return comment;
+        });
+
+        commentService.create(POST_ID, commenterId, new CreateCommentRequest("同问", null));
+
+        ArgumentCaptor<NotificationMessage> captor = ArgumentCaptor.forClass(NotificationMessage.class);
+        verify(notificationPort).notify(eq(AUTHOR_ID), eq(commenterId), captor.capture());
+        NotificationMessage message = captor.getValue();
+        assertThat(message.type()).isEqualTo(NotificationType.COMMENT);
+        assertThat(message.title()).isEqualTo("有人评论了你的帖子");
+        assertThat(message.body()).isEqualTo("同问");
+        assertThat(message.link()).isEqualTo("/posts/" + POST_ID);
+        // 不变量 #1：body 只放评论文本，绝不带评论者代号等可关联字段
+        assertThat(message.body()).doesNotContain("青竹#0f0f");
     }
 
     @Test
@@ -281,7 +316,7 @@ class CommentServiceTest {
             throw new BizException(ErrorCode.CONTENT_REJECTED);
         };
         CommentService strict = new CommentService(commentRepository, postRepository, likeRepository,
-                anonymousCodeService, userService, auditLogService, blocking);
+                anonymousCodeService, userService, auditLogService, notificationPort, blocking);
 
         assertThatThrownBy(() -> strict.create(POST_ID, AUTHOR_ID, new CreateCommentRequest("评论", null)))
                 .isInstanceOf(BizException.class)

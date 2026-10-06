@@ -17,6 +17,9 @@ import com.qinglan.common.interaction.LikeRepository;
 import com.qinglan.common.interaction.LikeStateResponse;
 import com.qinglan.common.interaction.LikeTargetType;
 import com.qinglan.common.moderation.ContentGuard;
+import com.qinglan.common.notify.NotificationMessage;
+import com.qinglan.common.notify.NotificationPort;
+import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
@@ -50,12 +53,16 @@ public class CommentService {
 
     private static final Logger log = LoggerFactory.getLogger(CommentService.class);
 
+    /** 通知正文（评论摘要）截断长度；超出补省略号，避免把整条评论塞进通知 */
+    private static final int NOTIFICATION_BODY_LENGTH = 50;
+
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
     private final LikeRepository likeRepository;
     private final AnonymousCodeService anonymousCodeService;
     private final UserService userService;
     private final AuditLogService auditLogService;
+    private final NotificationPort notificationPort;
     private final ContentGuard contentGuard;
 
     /**
@@ -96,7 +103,7 @@ public class CommentService {
 
     @Transactional
     public CommentResponse create(Long postId, Long authorId, CreateCommentRequest request) {
-        requireVisiblePost(postId, authorId);
+        Post post = requireVisiblePost(postId, authorId);
         Long parentId = request.parentId();
         if (parentId != null) {
             requireReplyableRoot(parentId, postId);
@@ -111,6 +118,10 @@ public class CommentService {
                 anonymousCodeService.deriveCode(postId, authorId, author.getAnonymousSalt()));
         // 原子自增：读-改-写会在并发下丢更新（C）
         postRepository.adjustCommentCount(postId, 1);
+        // 通知帖主。body 只能是评论正文，绝不带上评论者的匿名代号 / authorId，否则跨帖可关联（不变量 #1）
+        notificationPort.notify(post.getAuthorId(), authorId,
+                new NotificationMessage(NotificationType.COMMENT, "有人评论了你的帖子",
+                        truncateForNotification(request.content().trim()), "/posts/" + postId));
 
         log.info("用户发表评论 commentId={} postId={} parentId={}", saved.getId(), postId, parentId);
         return toResponse(saved, List.of(), Map.of(), Set.of(), new Viewer(authorId));
@@ -237,6 +248,13 @@ public class CommentService {
     /** 本地硬拦截（P2）：敏感词与隐私格式在入库前拦下，命中即抛，不进入待审流程 */
     private void requireAllowedContent(String content) {
         contentGuard.check(content);
+    }
+
+    /** 评论摘要：超过 {@value #NOTIFICATION_BODY_LENGTH} 字截断并补省略号，与既有预览截断同风格 */
+    private static String truncateForNotification(String content) {
+        return content.length() > NOTIFICATION_BODY_LENGTH
+                ? content.substring(0, NOTIFICATION_BODY_LENGTH) + "..."
+                : content;
     }
 
     private LikeStateResponse likeState(Long commentId, Long userId) {

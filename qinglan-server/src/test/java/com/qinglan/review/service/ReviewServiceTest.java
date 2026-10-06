@@ -6,6 +6,9 @@ import com.qinglan.common.audit.AuditLogService;
 import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.notify.NotificationMessage;
+import com.qinglan.common.notify.NotificationPort;
+import com.qinglan.common.notify.NotificationType;
 import com.qinglan.post.entity.ContactVisibility;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostStatus;
@@ -24,6 +27,7 @@ import com.qinglan.user.service.UserService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,6 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -70,6 +75,9 @@ class ReviewServiceTest {
 
     @Mock
     private AuditLogService auditLogService;
+
+    @Mock
+    private NotificationPort notificationPort;
 
     @InjectMocks
     private ReviewService reviewService;
@@ -377,6 +385,75 @@ class ReviewServiceTest {
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.POST_NOT_FOUND);
         verifyNoInteractions(reportRepository, auditLogService, userService);
+    }
+
+    // -------------------------------------------------------- 通知（REVIEW_RESULT / REPORT_FEEDBACK）
+
+    @Test
+    @DisplayName("放行通知作者：REVIEW_RESULT「已通过审核」")
+    void shouldNotifyAuthorOnApprove() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(pendingPost()));
+
+        reviewService.approve(POST_ID, OPERATOR_ID);
+
+        ArgumentCaptor<NotificationMessage> captor = ArgumentCaptor.forClass(NotificationMessage.class);
+        verify(notificationPort).notify(eq(AUTHOR_ID), eq(OPERATOR_ID), captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo(NotificationType.REVIEW_RESULT);
+        assertThat(captor.getValue().title()).isEqualTo("你的帖子已通过审核");
+        assertThat(captor.getValue().link()).isEqualTo("/posts/" + POST_ID);
+    }
+
+    @Test
+    @DisplayName("驳回通知作者：REVIEW_RESULT「未通过审核」，body 为驳回理由")
+    void shouldNotifyAuthorOnReject() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(pendingPost()));
+
+        reviewService.reject(POST_ID, OPERATOR_ID, "正文含他人手机号");
+
+        ArgumentCaptor<NotificationMessage> captor = ArgumentCaptor.forClass(NotificationMessage.class);
+        verify(notificationPort).notify(eq(AUTHOR_ID), eq(OPERATOR_ID), captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo(NotificationType.REVIEW_RESULT);
+        assertThat(captor.getValue().title()).isEqualTo("你的帖子未通过审核");
+        assertThat(captor.getValue().body()).isEqualTo("正文含他人手机号");
+    }
+
+    @Test
+    @DisplayName("下架通知作者，并分别通知该帖各举报人「已处理」")
+    void shouldNotifyAuthorAndReportersOnTakeDown() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(approvedPost()));
+        when(reportRepository.findByTargetTypeAndTargetIdAndStatus(
+                ReviewTargetType.POST, POST_ID, ReportStatus.PENDING))
+                .thenReturn(List.of(postReport(101L), postReport(102L)));
+
+        reviewService.takeDown(POST_ID, OPERATOR_ID,
+                new TakeDownPostRequest(ReportReason.ABUSE, "人身攻击", null));
+
+        ArgumentCaptor<NotificationMessage> captor = ArgumentCaptor.forClass(NotificationMessage.class);
+        verify(notificationPort).notify(eq(AUTHOR_ID), eq(OPERATOR_ID), captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo(NotificationType.REVIEW_RESULT);
+        assertThat(captor.getValue().title()).isEqualTo("你的帖子已被下架");
+        assertThat(captor.getValue().body()).isEqualTo("ABUSE: 人身攻击");
+
+        verify(notificationPort).notify(eq(101L), eq(OPERATOR_ID), any(NotificationMessage.class));
+        verify(notificationPort).notify(eq(102L), eq(OPERATOR_ID), any(NotificationMessage.class));
+    }
+
+    @Test
+    @DisplayName("驳回举报：分别通知各举报人「未获支持」")
+    void shouldNotifyReportersOnDismiss() {
+        when(reportRepository.findByTargetTypeAndTargetIdAndStatus(
+                ReviewTargetType.POST, POST_ID, ReportStatus.PENDING))
+                .thenReturn(List.of(postReport(301L), postReport(302L)));
+
+        reviewService.dismissReports(
+                new DismissReportsRequest(ReviewTargetType.POST, POST_ID, "内容合规"), OPERATOR_ID);
+
+        ArgumentCaptor<NotificationMessage> captor = ArgumentCaptor.forClass(NotificationMessage.class);
+        verify(notificationPort).notify(eq(301L), eq(OPERATOR_ID), captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo(NotificationType.REPORT_FEEDBACK);
+        assertThat(captor.getValue().title()).isEqualTo("你的举报未获支持");
+        assertThat(captor.getValue().link()).isEqualTo("/posts/" + POST_ID);
+        verify(notificationPort).notify(eq(302L), eq(OPERATOR_ID), any(NotificationMessage.class));
     }
 
     // ------------------------------------------------------------------ 辅助

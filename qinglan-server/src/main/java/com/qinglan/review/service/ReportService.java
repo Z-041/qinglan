@@ -7,6 +7,9 @@ import com.qinglan.common.audit.AuditLogService;
 import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.notify.NotificationMessage;
+import com.qinglan.common.notify.NotificationPort;
+import com.qinglan.common.notify.NotificationType;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.entity.ReviewState;
@@ -49,6 +52,7 @@ public class ReportService {
     private final CommentRepository commentRepository;
     private final UserService userService;
     private final AuditLogService auditLogService;
+    private final NotificationPort notificationPort;
     private final ReviewProperties reviewProperties;
 
     /**
@@ -137,6 +141,10 @@ public class ReportService {
         post.transitionTo(new ReviewState.TakenDown(null, AUTO_TAKEDOWN_REASON, Instant.now()));
         auditLogService.record(AuditTargetType.POST, postId, AuditAction.POST_AUTO_TAKEDOWN,
                 AuditLogService.SYSTEM_OPERATOR_ID, AUTO_TAKEDOWN_REASON);
+        // 自动下架也要通知作者；trigger 不是人，actor 用系统哨兵值（与审计一致）
+        notificationPort.notify(post.getAuthorId(), AuditLogService.SYSTEM_OPERATOR_ID,
+                new NotificationMessage(NotificationType.REVIEW_RESULT, "你的帖子已被下架",
+                        AUTO_TAKEDOWN_REASON, "/posts/" + postId));
         log.info("举报数达阈值自动下架 postId={} reportCount={}", postId, post.getReportCount());
     }
 
