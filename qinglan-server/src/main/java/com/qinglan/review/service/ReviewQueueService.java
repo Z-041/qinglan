@@ -4,6 +4,7 @@ import com.qinglan.comment.entity.Comment;
 import com.qinglan.comment.repository.CommentRepository;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
@@ -52,7 +53,7 @@ public class ReviewQueueService {
     private static final Instant FIRST_PAGE_FIRST_REPORTED_AT = Instant.EPOCH;
     private static final long FIRST_PAGE_TARGET_ID = Long.MAX_VALUE;
     private static final int FIRST_PAGE_TYPE_RANK = Integer.MAX_VALUE;
-    /** 游标段数：举报数 : 首报毫秒 : 目标 id : 目标类型序 */
+    /** 游标段数：举报数 : 首报微秒 : 目标 id : 目标类型序 */
     private static final int CURSOR_SEGMENTS = 4;
 
     private final ReportRepository reportRepository;
@@ -181,7 +182,7 @@ public class ReviewQueueService {
 
     /**
      * 解析游标。游标对客户端不透明，只要求原样回传；格式为
-     * 「举报数:首报毫秒:目标 id:目标类型序」，四段必须齐全，数字段不得为负，
+     * 「举报数:首报微秒:目标 id:目标类型序」，四段必须齐全，数字段不得为负，
      * 缺段或分段错位一律按非法游标拒绝。
      */
     private ReviewQueueCursor parseCursor(String raw) {
@@ -195,7 +196,7 @@ public class ReviewQueueService {
         }
         try {
             long reportCount = Long.parseLong(parts[0]);
-            Instant firstReportedAt = Instant.ofEpochMilli(Long.parseLong(parts[1]));
+            Instant firstReportedAt = CursorCodec.decode(Long.parseLong(parts[1]));
             long targetId = Long.parseLong(parts[2]);
             int typeRank = Integer.parseInt(parts[3]);
             if (reportCount <= 0 || targetId <= 0 || typeRank < 0) {
@@ -208,7 +209,7 @@ public class ReviewQueueService {
     }
 
     private String formatCursor(ReviewQueueRow row) {
-        return row.reportCount() + KEY_SEPARATOR + row.firstReportedAt().toEpochMilli()
+        return row.reportCount() + KEY_SEPARATOR + CursorCodec.encode(row.firstReportedAt())
                 + KEY_SEPARATOR + row.targetId() + KEY_SEPARATOR + typeRank(row.targetType());
     }
 

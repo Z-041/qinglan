@@ -6,6 +6,7 @@ import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.crypto.CryptoService;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.user.dto.AdminUserQuery;
 import com.qinglan.user.dto.UserProfileResponse;
@@ -40,7 +41,7 @@ public class UserService {
     private static final int ANONYMOUS_SALT_BYTES = 16;
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final String KEY_SEPARATOR = ":";
-    /** 游标段数：注册毫秒 : 用户 id */
+    /** 游标段数：注册微秒 : 用户 id */
     private static final int CURSOR_SEGMENTS = 2;
 
     private final UserRepository userRepository;
@@ -185,14 +186,14 @@ public class UserService {
             throw new BizException(ErrorCode.CURSOR_INVALID);
         }
         try {
-            return new AdminUserCursor(Instant.ofEpochMilli(Long.parseLong(parts[0])), Long.parseLong(parts[1]));
+            return new AdminUserCursor(CursorCodec.decode(Long.parseLong(parts[0])), Long.parseLong(parts[1]));
         } catch (NumberFormatException ex) {
             throw new BizException(ErrorCode.CURSOR_INVALID);
         }
     }
 
     private String formatCursor(User last) {
-        return last.getCreatedAt().toEpochMilli() + KEY_SEPARATOR + last.getId();
+        return CursorCodec.encode(last.getCreatedAt()) + KEY_SEPARATOR + last.getId();
     }
 
     /** 用户列表游标：与 {@code UserRepository#findAdminPage} 的排序键逐一对应 */

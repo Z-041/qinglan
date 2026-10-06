@@ -153,21 +153,21 @@ class ReviewQueueServiceTest {
 
         assertThat(page.items()).hasSize(20);
         // 第 20 行（下标 19）的复合键：举报数:首报毫秒:目标 id:目标类型序（POST 为 0）
-        assertThat(page.nextCursor()).isEqualTo("1:" + lastAt.toEpochMilli() + ":81:0");
+        assertThat(page.nextCursor()).isEqualTo("1:" + lastAt.getEpochSecond() * 1_000_000L + ":81:0");
     }
 
     @Test
     @DisplayName("合法游标原样解析后交给仓储，首页与后续页共用同一条查询")
     void shouldPassParsedCursorToRepository() {
-        long millis = BASE.plusSeconds(5).toEpochMilli();
+        long micros = BASE.plusSeconds(5).getEpochSecond() * 1_000_000L;
         when(reportRepository.findQueueAggregates(eq(ReportStatus.PENDING), eq(2L),
-                eq(Instant.ofEpochMilli(millis)), eq(7L), eq(1), any(Pageable.class)))
+                eq(BASE.plusSeconds(5)), eq(7L), eq(1), any(Pageable.class)))
                 .thenReturn(List.of());
 
-        reviewQueueService.queue("2:" + millis + ":7:1");
+        reviewQueueService.queue("2:" + micros + ":7:1");
 
         verify(reportRepository).findQueueAggregates(eq(ReportStatus.PENDING), eq(2L),
-                eq(Instant.ofEpochMilli(millis)), eq(7L), eq(1), any(Pageable.class));
+                eq(BASE.plusSeconds(5)), eq(7L), eq(1), any(Pageable.class));
     }
 
     @Test
@@ -207,6 +207,31 @@ class ReviewQueueServiceTest {
 
         assertThat(componentNames).doesNotContain(
                 "reporterId", "reporter", "authorId", "studentId", "anonymousCode", "email");
+    }
+
+    @Test
+    @DisplayName("游标带微秒：边界行与下一行同毫秒时，续页仍按边界行的原始时刻")
+    void shouldKeepMicrosWhenRowsShareTheSameMillisecond() {
+        // 边界行 .000234s 与下一行 .000235s 落在同一毫秒：毫秒截断会让下一页重新取回边界行
+        Instant boundary = BASE.plusSeconds(19).plusNanos(234_000);
+        Instant next = BASE.plusSeconds(19).plusNanos(235_000);
+        List<ReviewQueueRow> rows = IntStream.range(0, 21)
+                .mapToObj(i -> new ReviewQueueRow(ReviewTargetType.POST, 100L - i, 1L,
+                        i < 19 ? BASE.plusSeconds(i) : (i == 19 ? boundary : next)))
+                .toList();
+        stubFirstPageRows(rows);
+
+        CursorPage<ReviewQueueItemResponse> page = reviewQueueService.queue(null);
+
+        assertThat(rows.get(19).firstReportedAt().toEpochMilli())
+                .isEqualTo(rows.get(20).firstReportedAt().toEpochMilli());
+        assertThat(page.nextCursor())
+                .isEqualTo("1:" + (boundary.getEpochSecond() * 1_000_000L + 234L) + ":81:0");
+
+        reviewQueueService.queue(page.nextCursor());
+
+        verify(reportRepository).findQueueAggregates(eq(ReportStatus.PENDING), eq(1L),
+                eq(boundary), eq(81L), eq(0), any(Pageable.class));
     }
 
     // ------------------------------------------------------------------ 辅助

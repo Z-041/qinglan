@@ -2,6 +2,7 @@ package com.qinglan.review.service;
 
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
@@ -35,7 +36,7 @@ public class AppealQueueService {
     private static final int PREVIEW_LENGTH = 80;
     private static final String ELLIPSIS = "...";
     private static final String KEY_SEPARATOR = ":";
-    /** 游标段数：申诉毫秒 : 申诉 id */
+    /** 游标段数：申诉微秒 : 申诉 id */
     private static final int CURSOR_SEGMENTS = 2;
 
     private final AppealRepository appealRepository;
@@ -90,7 +91,7 @@ public class AppealQueueService {
     }
 
     /**
-     * 解析游标。游标对客户端不透明，只要求原样回传；格式为「申诉毫秒:申诉 id」，
+     * 解析游标。游标对客户端不透明，只要求原样回传；格式为「申诉微秒:申诉 id」，
      * 两段必须齐全且为正数，缺段、错位或非数字一律按非法游标拒绝。
      */
     private AppealCursor parseCursor(String raw) {
@@ -102,19 +103,19 @@ public class AppealQueueService {
             throw new BizException(ErrorCode.CURSOR_INVALID);
         }
         try {
-            long millis = Long.parseLong(parts[0]);
+            long micros = Long.parseLong(parts[0]);
             long id = Long.parseLong(parts[1]);
-            if (millis <= 0 || id <= 0) {
+            if (micros <= 0 || id <= 0) {
                 throw new NumberFormatException("游标各段不合法");
             }
-            return new AppealCursor(Instant.ofEpochMilli(millis), id);
+            return new AppealCursor(CursorCodec.decode(micros), id);
         } catch (NumberFormatException ex) {
             throw new BizException(ErrorCode.CURSOR_INVALID);
         }
     }
 
     private String formatCursor(Appeal appeal) {
-        return appeal.getCreatedAt().toEpochMilli() + KEY_SEPARATOR + appeal.getId();
+        return CursorCodec.encode(appeal.getCreatedAt()) + KEY_SEPARATOR + appeal.getId();
     }
 
     /** 申诉队列游标：与 {@link AppealRepository#findAdminPage} 的排序键逐一对应 */

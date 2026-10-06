@@ -21,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.lang.reflect.RecordComponent;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -125,20 +126,20 @@ class AppealQueueServiceTest {
 
         assertThat(page.items()).hasSize(20);
         // 第 20 行（下标 19）的复合键：申诉毫秒 : 申诉 id
-        assertThat(page.nextCursor()).isEqualTo(BASE.plusSeconds(19).toEpochMilli() + ":81");
+        assertThat(page.nextCursor()).isEqualTo(BASE.plusSeconds(19).getEpochSecond() * 1_000_000L + ":81");
     }
 
     @Test
-    @DisplayName("合法游标解析后按「申诉毫秒 + 申诉 id」交给仓储")
+    @DisplayName("合法游标解析后按「申诉微秒 + 申诉 id」交给仓储")
     void shouldPassParsedCursorToRepository() {
-        long millis = BASE.plusSeconds(5).toEpochMilli();
+        long micros = BASE.plusSeconds(5).getEpochSecond() * 1_000_000L;
         when(appealRepository.findAdminPage(AppealStatus.PENDING,
-                Instant.ofEpochMilli(millis), 7L, PageRequest.of(0, 21))).thenReturn(List.of());
+                BASE.plusSeconds(5), 7L, PageRequest.of(0, 21))).thenReturn(List.of());
 
-        appealQueueService.queue(millis + ":7");
+        appealQueueService.queue(micros + ":7");
 
         verify(appealRepository).findAdminPage(AppealStatus.PENDING,
-                Instant.ofEpochMilli(millis), 7L, PageRequest.of(0, 21));
+                BASE.plusSeconds(5), 7L, PageRequest.of(0, 21));
     }
 
     @Test
@@ -174,6 +175,30 @@ class AppealQueueServiceTest {
 
         assertThat(componentNames).doesNotContain(
                 "appellantId", "authorId", "studentId", "anonymousCode", "email", "reviewedBy");
+    }
+
+    @Test
+    @DisplayName("游标带微秒：申诉边界行与下一行同毫秒时，续页仍按边界行的原始时刻")
+    void shouldKeepMicrosWhenAppealsShareTheSameMillisecond() {
+        Instant boundary = BASE.plusSeconds(19).plusNanos(234_000);
+        Instant next = BASE.plusSeconds(19).plusNanos(235_000);
+        List<Appeal> appeals = new ArrayList<>();
+        for (int i = 0; i < 21; i++) {
+            appeals.add(appeal(100L - i, 7L, i < 19 ? BASE.plusSeconds(i) : (i == 19 ? boundary : next)));
+        }
+        stubFirstPage(appeals);
+        when(postRepository.findAllById(any())).thenReturn(List.of());
+
+        CursorPage<AdminAppealItemResponse> page = appealQueueService.queue(null);
+
+        assertThat(appeals.get(19).getCreatedAt().toEpochMilli())
+                .isEqualTo(appeals.get(20).getCreatedAt().toEpochMilli());
+        assertThat(page.nextCursor())
+                .isEqualTo((boundary.getEpochSecond() * 1_000_000L + 234L) + ":81");
+
+        appealQueueService.queue(page.nextCursor());
+
+        verify(appealRepository).findAdminPage(AppealStatus.PENDING, boundary, 81L, PageRequest.of(0, 21));
     }
 
     // ------------------------------------------------------------------ 辅助

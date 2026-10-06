@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.RecordComponent;
@@ -204,7 +205,7 @@ class UserServiceTest {
                 new AdminUserQuery(null, null, null, null, null, null, null));
 
         assertThat(page.items()).hasSize(20);
-        assertThat(page.nextCursor()).isEqualTo("1767225600000:81");
+        assertThat(page.nextCursor()).isEqualTo("1767225600000000:81");
     }
 
     @Test
@@ -236,12 +237,12 @@ class UserServiceTest {
         when(userRepository.findAdminPage(any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of());
 
-        userService.listUsers(new AdminUserQuery(null, null, null, null, null, null, "1767225600000:7"));
+        userService.listUsers(new AdminUserQuery(null, null, null, null, null, null, "1767225600000000:7"));
 
         verify(userRepository).findAdminPage(
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                eq(Instant.ofEpochMilli(1767225600000L)), eq(7L),
-                eq(org.springframework.data.domain.PageRequest.of(0, 21)));
+                eq(Instant.parse("2026-01-01T00:00:00Z")), eq(7L),
+                eq(PageRequest.of(0, 21)));
     }
 
     private User userWithId(Long id, String isoInstant) {
@@ -250,5 +251,33 @@ class UserServiceTest {
         org.springframework.test.util.ReflectionTestUtils.setField(
                 user, "createdAt", Instant.parse(isoInstant));
         return user;
+    }
+
+    @Test
+    @DisplayName("游标带微秒：用户边界行与下一行同毫秒时，续页仍按边界行的原始时刻")
+    void shouldKeepMicrosWhenUsersShareTheSameMillisecond() {
+        List<User> rows = new ArrayList<>();
+        for (int i = 0; i < 21; i++) {
+            String createdAt = switch (i) {
+                case 19 -> "2026-01-01T00:00:19.000234Z";
+                case 20 -> "2026-01-01T00:00:19.000235Z";
+                default -> "2026-01-01T00:00:%02dZ".formatted(i);
+            };
+            rows.add(userWithId((long) (100 - i), createdAt));
+        }
+        when(userRepository.findAdminPage(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(rows);
+
+        CursorPage<UserProfileResponse> page = userService.listUsers(
+                new AdminUserQuery(null, null, null, null, null, null, null));
+
+        assertThat(rows.get(19).getCreatedAt().toEpochMilli())
+                .isEqualTo(rows.get(20).getCreatedAt().toEpochMilli());
+        assertThat(page.nextCursor()).isEqualTo("1767225619000234:81");
+
+        userService.listUsers(new AdminUserQuery(null, null, null, null, null, null, page.nextCursor()));
+
+        verify(userRepository).findAdminPage(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                eq(Instant.parse("2026-01-01T00:00:19.000234Z")), eq(81L), eq(PageRequest.of(0, 21)));
     }
 }
