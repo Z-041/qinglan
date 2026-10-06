@@ -36,6 +36,10 @@ const contactLabel = computed(() =>
   contactRequired.value ? '联系方式（该话题必填）' : '联系方式（选填）',
 )
 
+/** 发布须知文案：PC 由右栏卡承载，窄屏右栏隐藏时在表单内回显，避免任一宽度丢信息 */
+const PUBLISH_NOTICE =
+  '禁止发布：姓名、学号、宿舍号、联系方式。联系方式请填写到下方独立字段，只对认证用户可见。'
+
 onMounted(() => {
   void loadTopics()
 })
@@ -55,48 +59,71 @@ async function handleSubmit(): Promise<void> {
 </script>
 
 <template>
-  <section class="py-2">
+  <section class="ql-shell py-8 max-lg:py-5">
     <h1 class="text-lg font-semibold text-ink">发布</h1>
     <p class="mt-1 text-xs text-muted">主帖先审后发，通过后才会出现在首页</p>
 
-    <BaseCard class="mt-4">
-      <div>
-        <span class="ql-label">选择话题</span>
-        <TopicFilter v-model="topicId" :topics="topics" :allow-all="false" />
-        <p v-if="selectedTopic" class="ql-hint">话题规则：{{ selectedTopic.rules }}</p>
+    <div class="mt-4 grid grid-cols-[minmax(0,1fr)_320px] gap-10 max-lg:(grid-cols-1 gap-6)">
+      <div class="min-w-0 self-start">
+        <BaseCard>
+          <div>
+            <span class="ql-label">选择话题</span>
+            <TopicFilter v-model="topicId" :topics="topics" :allow-all="false" />
+            <p v-if="selectedTopic" class="ql-hint">话题规则：{{ selectedTopic.rules }}</p>
+          </div>
+
+          <div class="mt-5">
+            <!-- 窄屏右栏隐藏，须知在表单内回显；PC 由右栏「发布须知」卡承担 -->
+            <p
+              class="mb-2 hidden rounded-lg bg-warning-soft px-3 py-2 text-xs leading-relaxed text-warning max-lg:block"
+            >
+              {{ PUBLISH_NOTICE }}
+            </p>
+            <FormField label="正文" :hint="`${content.length}/2000`">
+              <BaseTextarea v-model="content" :rows="6" :maxlength="2000" placeholder="说点什么…" />
+            </FormField>
+            <p v-if="blockedReason" class="ql-error" role="alert">{{ blockedReason }}</p>
+          </div>
+
+          <div class="mt-5">
+            <FormField
+              :label="contactLabel"
+              hint="不会展示给游客，仅认证学生可见；被人查看会留下审计记录"
+            >
+              <BaseInput v-model="contact" :maxlength="200" placeholder="微信号 / QQ / 手机号" />
+            </FormField>
+          </div>
+
+          <div class="mt-5">
+            <span class="ql-label">图片（最多 9 张）</span>
+            <ImagePicker v-model="images" :uploading="uploadingImages" @select="handleSelectImages" />
+          </div>
+
+          <BaseButton
+            class="mt-6"
+            block
+            :loading="submitting"
+            :disabled="!canSubmit"
+            @click="handleSubmit"
+          >
+            发布
+          </BaseButton>
+        </BaseCard>
       </div>
 
-      <div class="mt-5">
-        <p class="mb-2 rounded-lg bg-warning-soft px-3 py-2 text-xs leading-relaxed text-warning">
-          禁止发布：姓名、学号、宿舍号、联系方式。联系方式请填写到下方独立字段，只对认证用户可见。
-        </p>
-        <FormField label="正文" :hint="`${content.length}/2000`">
-          <BaseTextarea v-model="content" :rows="6" :maxlength="2000" placeholder="说点什么…" />
-        </FormField>
-        <p v-if="blockedReason" class="ql-error" role="alert">{{ blockedReason }}</p>
-      </div>
+      <aside class="sticky top-24 flex flex-col gap-4 self-start max-lg:hidden">
+        <div class="ql-card p-4">
+          <p class="text-sm font-semibold text-ink">话题规则</p>
+          <p class="mt-2 text-xs leading-relaxed text-muted">
+            {{ selectedTopic ? selectedTopic.rules : '选择一个话题后显示该话题的规则' }}
+          </p>
+        </div>
 
-      <div class="mt-5">
-        <FormField
-          :label="contactLabel"
-          hint="不会展示给游客，仅认证学生可见；被人查看会留下审计记录"
-        >
-          <BaseInput v-model="contact" :maxlength="200" placeholder="微信号 / QQ / 手机号" />
-        </FormField>
-      </div>
-
-      <div class="mt-5">
-        <span class="ql-label">图片（最多 9 张）</span>
-        <ImagePicker
-          v-model="images"
-          :uploading="uploadingImages"
-          @select="handleSelectImages"
-        />
-      </div>
-
-      <BaseButton class="mt-6" block :loading="submitting" :disabled="!canSubmit" @click="handleSubmit">
-        发布
-      </BaseButton>
-    </BaseCard>
+        <div class="ql-card p-4">
+          <p class="text-sm font-semibold text-ink">发布须知</p>
+          <p class="mt-2 text-xs leading-relaxed text-muted">{{ PUBLISH_NOTICE }}</p>
+        </div>
+      </aside>
+    </div>
   </section>
 </template>

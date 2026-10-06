@@ -21,17 +21,13 @@ const authenticated = computed(() => userStore.isAuthenticated)
 const isAdminArea = computed(() => route.path.startsWith('/admin'))
 
 /**
- * 首页自己渲染 ql-shell（PC 双栏需要 1200px），因此外层不再套 ql-container；
- * 其余学生端页面（发布/详情/我的/登录）继续沿用 ql-container（720px）。
+ * 内容容器是否放宽：管理端自带 AdminLayout；其余页面由路由 meta.wide 声明
+ * （首页/详情/发布/我的用 ql-shell = 1200px，登录页仍是 720px 的 ql-container）。
+ *
+ * 头部与 main 的宽度**必须由同一个判断驱动**：头部容器 1200px 而内容容器 720px 时，
+ * 1440px 视口下头部 logo 左边缘在 x=144、内容左边缘在 x=376，两者错开 232px（改造前同为 720px）。
  */
-const isHome = computed(() => route.path === '/')
-
-/**
- * 页面容器是否放宽。头部与 main 的宽度**必须由同一个判断驱动**：
- * 头部容器 1200px 而内容容器 720px 时，1440px 视口下头部 logo 左边缘在 x=144、
- * 内容左边缘在 x=376，两者错开 232px（改造前二者同为 720px，是严格对齐的）。
- */
-const fullWidth = computed(() => isAdminArea.value || isHome.value)
+const fullWidth = computed(() => isAdminArea.value || route.meta.wide === true)
 </script>
 
 <template>

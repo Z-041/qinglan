@@ -16,6 +16,11 @@ declare module 'vue-router' {
      * 未登录 → 管理端登录页；已登录但非管理员 → 提示后回首页。
      */
     requiresAdmin?: boolean
+    /**
+     * 宽页面：该页内容容器用 `ql-shell`（1200px），因此顶部导航也要跟着放宽到同一宽度。
+     * `App.vue` 的 `fullWidth` 同时驱动头部容器与 main 容器，二者必须一致，否则左边缘错位。
+     */
+    wide?: boolean
   }
 }
 
@@ -29,18 +34,24 @@ function isAdmin(role: UserRole | null | undefined): boolean {
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
+    {
+      path: '/',
+      name: 'home',
+      component: () => import('@/views/HomeView.vue'),
+      meta: { wide: true },
+    },
     {
       // 只接受数字 id：否则 /posts/abc 会被视图 Number() 成 NaN 再拿去请求接口
       path: '/posts/:id(\\d+)',
       name: 'post-detail',
       component: () => import('@/views/PostDetailView.vue'),
+      meta: { wide: true },
     },
     {
       path: '/publish',
       name: 'publish',
       component: () => import('@/views/PublishView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, wide: true },
     },
     {
       path: '/login',
@@ -52,7 +63,7 @@ const router = createRouter({
       path: '/profile',
       name: 'profile',
       component: () => import('@/views/ProfileView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, wide: true },
     },
     {
       // 刻意不设 guestOnly：与学生端 /login 同设会让两页互相弹走（spec 5.3 重定向环防护）
