@@ -2,11 +2,13 @@ package com.qinglan.review.controller;
 
 import com.qinglan.auth.security.JwtService;
 import com.qinglan.common.web.CursorPage;
+import com.qinglan.review.dto.AdminAppealItemResponse;
 import com.qinglan.review.dto.AdminReviewContextResponse;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
 import com.qinglan.review.dto.TakeDownPostRequest;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReviewTargetType;
+import com.qinglan.review.service.AppealQueueService;
 import com.qinglan.review.service.AppealService;
 import com.qinglan.review.service.ReviewContextService;
 import com.qinglan.review.service.ReviewQueueService;
@@ -64,6 +66,9 @@ class AdminReviewControllerTest {
 
     @MockitoBean
     private AppealService appealService;
+
+    @MockitoBean
+    private AppealQueueService appealQueueService;
 
     @MockitoBean
     private JwtService jwtService;
@@ -244,5 +249,23 @@ class AdminReviewControllerTest {
                         .content("{\"reason\":\"\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("QL-400-001"));
+    }
+
+    @Test
+    @DisplayName("申诉队列返回游标分页，且响应不含申诉人字段")
+    void shouldReturnAppealQueueWithoutAppellant() throws Exception {
+        when(appealQueueService.queue(null)).thenReturn(CursorPage.of(
+                List.of(new AdminAppealItemResponse(500L, ReviewTargetType.POST, POST_ID, "摘要",
+                        "TAKEN_DOWN", "ABUSE: 人身攻击", "误判", Instant.parse("2026-10-06T00:00:00Z"))),
+                "600"));
+
+        mockMvc.perform(get("/api/admin/appeals"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("QL-000-000"))
+                .andExpect(jsonPath("$.data.items[0].appealId").value(500L))
+                .andExpect(jsonPath("$.data.items[0].targetId").value(POST_ID))
+                .andExpect(jsonPath("$.data.items[0].takenDownReason").value("ABUSE: 人身攻击"))
+                .andExpect(jsonPath("$.data.items[0].appellantId").doesNotExist())
+                .andExpect(jsonPath("$.data.nextCursor").value("600"));
     }
 }

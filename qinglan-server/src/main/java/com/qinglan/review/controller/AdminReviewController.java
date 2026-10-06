@@ -3,11 +3,13 @@ package com.qinglan.review.controller;
 import com.qinglan.common.security.CurrentUser;
 import com.qinglan.common.web.ApiResponse;
 import com.qinglan.common.web.CursorPage;
+import com.qinglan.review.dto.AdminAppealItemResponse;
 import com.qinglan.review.dto.AdminReviewContextResponse;
 import com.qinglan.review.dto.DismissReportsRequest;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
 import com.qinglan.review.dto.TakeDownPostRequest;
 import com.qinglan.review.entity.ReviewTargetType;
+import com.qinglan.review.service.AppealQueueService;
 import com.qinglan.review.service.AppealService;
 import com.qinglan.review.service.ReviewContextService;
 import com.qinglan.review.service.ReviewQueueService;
@@ -40,12 +42,20 @@ public class AdminReviewController {
     private final ReviewQueueService reviewQueueService;
     private final ReviewContextService reviewContextService;
     private final AppealService appealService;
+    private final AppealQueueService appealQueueService;
 
     /** 举报队列：按举报数降序 + 等待时长升序，游标分页 */
     @GetMapping("/review-queue")
     public ApiResponse<CursorPage<ReviewQueueItemResponse>> queue(
             @RequestParam(required = false) String cursor) {
         return ApiResponse.ok(reviewQueueService.queue(cursor));
+    }
+
+    /** 待复审申诉队列：先到先审，游标分页 */
+    @GetMapping("/appeals")
+    public ApiResponse<CursorPage<AdminAppealItemResponse>> appeals(
+            @RequestParam(required = false) String cursor) {
+        return ApiResponse.ok(appealQueueService.queue(cursor));
     }
 
     /** 上下文面板：作者信用分、历史违规次数、举报聚合。不出作者与举报人身份 */

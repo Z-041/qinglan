@@ -50,6 +50,23 @@ public final class TestFixtures {
         set(entity, "id", id);
     }
 
+    /** 时间字段由 @PrePersist 填充，单元测试里 mock 掉仓储后需要手工补一个 */
+    public static void setCreatedAt(BaseEntity entity, Instant createdAt) {
+        set(entity, "createdAt", createdAt);
+    }
+
+    /** 已下架、带下架理由的主帖（申诉队列的典型目标） */
+    public static Post takenDownPost(Long id, String content, String reviewReason) {
+        Post post = Post.draft(7L, 1L, content, null);
+        post.submit(RiskLevel.LOW);
+        post.transitionTo(new ReviewState.Reviewing(9L, Instant.now()));
+        post.transitionTo(new ReviewState.Approved(9L, Instant.now()));
+        post.transitionTo(new ReviewState.TakenDown(9L, reviewReason, Instant.now()));
+        setId(post, id);
+        post.assignAnonymousCode("银杏#1a2b");
+        return post;
+    }
+
     /** 待处理举报数由 review 模块原子维护，单测里 mock 掉仓储后需要手工给一个初始值 */
     public static void setReportCount(Post post, int reportCount) {
         set(post, "reportCount", reportCount);
