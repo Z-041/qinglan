@@ -18,8 +18,16 @@ const app = createApp(App).use(pinia).use(router)
 const userStore = useUserStore(pinia)
 setUnauthorizedHandler(() => {
   userStore.signOut()
-  if (router.currentRoute.value.name !== 'login') {
-    void router.replace({ name: 'login' })
+  const current = router.currentRoute.value
+  // 管理端与学生端各有一个登录页：按路径前缀分叉，且只在不是本区登录页时才跳，
+  // 避免两个登录页互相跳转（spec 5.3 重定向环防护）
+  const adminArea = current.path.startsWith('/admin')
+  const loginName = adminArea ? 'admin-login' : 'login'
+  if (current.name !== loginName) {
+    void router.replace({
+      name: loginName,
+      query: adminArea ? { redirect: current.fullPath } : {},
+    })
   }
 })
 

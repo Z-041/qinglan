@@ -76,7 +76,16 @@ const router = createRouter({
           name: 'admin-review-queue',
           component: () => import('@/views/admin/ReviewQueueView.vue'),
         },
-        // 申诉复审（admin-appeals）与用户管理（admin-users）两条子路由待对应视图就绪后补入
+        {
+          path: 'appeals',
+          name: 'admin-appeals',
+          component: () => import('@/views/admin/AppealQueueView.vue'),
+        },
+        {
+          path: 'users',
+          name: 'admin-users',
+          component: () => import('@/views/admin/UserManageView.vue'),
+        },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },
