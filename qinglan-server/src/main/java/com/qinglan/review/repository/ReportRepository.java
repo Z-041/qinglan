@@ -103,4 +103,6 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
             @Param("reporterIds") Collection<Long> reporterIds,
             @Param("targetType") ReviewTargetType targetType,
             @Param("targetId") Long targetId);
+
+    long countByStatus(ReportStatus status);
 }

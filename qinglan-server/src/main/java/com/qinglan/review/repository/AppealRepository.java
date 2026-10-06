@@ -1,6 +1,7 @@
 package com.qinglan.review.repository;
 
 import com.qinglan.review.entity.Appeal;
+import com.qinglan.review.entity.AppealStatus;
 import com.qinglan.review.entity.ReviewTargetType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -13,4 +14,6 @@ public interface AppealRepository extends JpaRepository<Appeal, Long> {
      * 并发下仍以 {@code uk_appeal_target} 为最终防线。
      */
     Optional<Appeal> findByTargetTypeAndTargetId(ReviewTargetType targetType, Long targetId);
+
+    long countByStatus(AppealStatus status);
 }

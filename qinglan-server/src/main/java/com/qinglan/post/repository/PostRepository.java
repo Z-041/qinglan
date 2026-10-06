@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 public interface PostRepository extends JpaRepository<Post, Long> {
@@ -68,4 +70,10 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             where p.id = :postId
             """)
     int adjustReportCount(@Param("postId") Long postId, @Param("delta") int delta);
+
+    long countByStatus(PostStatus status);
+
+    long countByStatusIn(Collection<PostStatus> statuses);
+
+    long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(Instant from, Instant to);
 }
