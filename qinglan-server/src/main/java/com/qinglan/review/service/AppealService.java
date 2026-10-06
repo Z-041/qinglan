@@ -5,6 +5,9 @@ import com.qinglan.common.audit.AuditLogService;
 import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.notify.NotificationMessage;
+import com.qinglan.common.notify.NotificationPort;
+import com.qinglan.common.notify.NotificationType;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.repository.PostRepository;
@@ -47,6 +50,7 @@ public class AppealService {
     private final ReviewProperties reviewProperties;
     private final AuditLogService auditLogService;
     private final UserService userService;
+    private final NotificationPort notificationPort;
 
     /**
      * 作者申诉。校验「本人 + 确已下架 + 未过期 + 未曾申诉」四关，全部通过才落记录。
@@ -78,6 +82,9 @@ public class AppealService {
     public void accept(Long appealId, Long reviewerId, String reason) {
         Appeal appeal = review(appealId, reviewerId, true, reason);
         reviewService.restore(appeal.getTargetId(), reviewerId, normalize(reason));
+        notificationPort.notify(appeal.getAppellantId(), reviewerId, new NotificationMessage(
+                NotificationType.REVIEW_RESULT, "你的申诉已通过，内容已恢复", null,
+                "/posts/" + appeal.getTargetId()));
         log.info("申诉通过 postId={}，复审人 reviewerId={}", appeal.getTargetId(), reviewerId);
     }
 
@@ -85,6 +92,9 @@ public class AppealService {
     @Transactional
     public void reject(Long appealId, Long reviewerId, String reason) {
         Appeal appeal = review(appealId, reviewerId, false, reason);
+        notificationPort.notify(appeal.getAppellantId(), reviewerId, new NotificationMessage(
+                NotificationType.REVIEW_RESULT, "你的申诉未获支持", normalize(reason),
+                "/posts/" + appeal.getTargetId()));
         log.info("申诉维持原判 postId={}，复审人 reviewerId={}", appeal.getTargetId(), reviewerId);
     }
 

@@ -5,6 +5,9 @@ import com.qinglan.common.audit.AuditLogService;
 import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.notify.NotificationMessage;
+import com.qinglan.common.notify.NotificationPort;
+import com.qinglan.common.notify.NotificationType;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.entity.ReviewState;
@@ -32,6 +35,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -66,12 +70,15 @@ class AppealServiceTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private NotificationPort notificationPort;
+
     private AppealService appealService;
 
     @BeforeEach
     void setUp() {
         appealService = new AppealService(appealRepository, postRepository, reviewService,
-                new ReviewProperties(3, Duration.ofDays(7)), auditLogService, userService);
+                new ReviewProperties(3, Duration.ofDays(7)), auditLogService, userService, notificationPort);
     }
 
     // ---------------------------------------------------------------- 申诉提交
@@ -200,6 +207,23 @@ class AppealServiceTest {
         verify(reviewService).restore(POST_ID, REVIEWER_ID, "确系误判");
         verify(auditLogService).record(AuditTargetType.POST, POST_ID,
                 AuditAction.APPEAL_REVIEW, REVIEWER_ID, "ACCEPTED: 确系误判");
+    }
+
+    @Test
+    @DisplayName("申诉复审结果通知申诉人本人，且通知里只有一个跳转链接、不含任何身份字段")
+    void shouldNotifyAppellantOnAppealReview() {
+        Appeal appeal = appeal(AppealStatus.PENDING);
+        when(appealRepository.findById(APPEAL_ID)).thenReturn(Optional.of(appeal));
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(takenDownPost(Instant.now())));
+
+        appealService.accept(APPEAL_ID, REVIEWER_ID, "确系误判");
+
+        ArgumentCaptor<NotificationMessage> captor = ArgumentCaptor.forClass(NotificationMessage.class);
+        verify(notificationPort).notify(eq(AUTHOR_ID), eq(REVIEWER_ID), captor.capture());
+        NotificationMessage message = captor.getValue();
+        assertThat(message.type()).isEqualTo(NotificationType.REVIEW_RESULT);
+        assertThat(message.link()).isEqualTo("/posts/" + POST_ID);
+        assertThat(message.title()).isNotBlank();
     }
 
     @Test
