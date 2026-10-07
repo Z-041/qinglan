@@ -43,6 +43,22 @@ export default defineConfig({
       warning: 'var(--ql-warning)',
       'warning-soft': 'var(--ql-warning-soft)',
     },
+    /**
+     * z 轴分层：全站唯一口径，优先级从低到高
+     *   页头 header 50 < 学生端弹层 overlay 900 < 强制阅读公告 announcement 950
+     *   < **Element Plus 弹层与遮罩 2000+** < 全局提示 toast 3000
+     *
+     * Element Plus 的 `defaultInitialZIndex` 是 2000（每开一个新弹层递增，见
+     * node_modules/element-plus/es/hooks/use-z-index/index.mjs），所以全局提示**必须高于 2000**：
+     * 否则管理端在 el-dialog 里发起请求失败时，错误提示会被遮罩压在下面——既看不清也点不掉，
+     * 而按 AGENTS.md 第七章的错误唯一出口约定，页面是不会内联渲染这段文案的。
+     */
+    zIndex: {
+      header: '50',
+      overlay: '900',
+      announcement: '950',
+      toast: '3000',
+    },
   },
   shortcuts: {
     // 容器：窄屏满宽限宽居中（发布/详情/我的/登录四个页面沿用）

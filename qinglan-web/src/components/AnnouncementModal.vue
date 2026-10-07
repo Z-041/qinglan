@@ -174,13 +174,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!-- z 轴分层：举报弹层 z-[900] < 公告 z-[950] < 全局提示 z-[1000]。
-       低于提示是刻意的：标记已读失败的错误提示要能盖在公告之上。 -->
+  <!-- z 轴分层：举报弹层 z-overlay < 公告 z-announcement < 全局提示 z-toast。
+       低于提示是刻意的：标记已读失败的错误提示要能盖在公告之上。
+       完整口径（含 Element Plus 的 2000+ 一档）见 uno.config.ts。 -->
   <Teleport to="body">
     <div
       v-if="current"
       ref="dialogRef"
-      class="fixed inset-0 z-[950] flex items-center justify-center bg-black/40 p-4"
+      class="fixed inset-0 z-announcement flex items-center justify-center bg-black/40 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="announcement-title"

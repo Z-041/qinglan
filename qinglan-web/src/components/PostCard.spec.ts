@@ -88,4 +88,24 @@ describe('PostCard', () => {
 
     expect(wrapper.emitted('toggle-like')).toHaveLength(1)
   })
+
+  it('compact 变体点「赞」不冒泡到外层链接，也不执行其默认跳转', async () => {
+    const wrapper = mountCard(post(), 'compact')
+    const outerClicks: Event[] = []
+    wrapper.get('a').element.addEventListener('click', (event) => outerClicks.push(event))
+
+    const button = wrapper.get('button[aria-pressed]')
+    const defaultPrevented: boolean[] = []
+    button.element.addEventListener('click', (event) => {
+      defaultPrevented.push((event as MouseEvent).defaultPrevented)
+    })
+
+    await button.trigger('click')
+
+    expect(wrapper.emitted('toggle-like')).toHaveLength(1)
+    // 事件必须被取消默认行为：否则即便 router.push 被拦下，浏览器也会跟随外层 <a> 做整页跳转
+    expect(defaultPrevented).toEqual([true])
+    // 且不得冒泡到 RouterLink，否则点「赞」会同时跳进详情页
+    expect(outerClicks).toHaveLength(0)
+  })
 })

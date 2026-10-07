@@ -55,12 +55,15 @@ const topicInitial = computed(() => props.post.topicName.slice(0, 1))
           </div>
 
           <div class="mt-2 flex items-center gap-4">
+            <!-- 这个按钮在 RouterLink（<a>）内部：不加 .prevent.stop 的话，点「赞」会冒泡到锚点，
+                 既触发 router.push 跳进详情页，浏览器也可能执行 <a> 的默认跳转。
+                 .stop 拦冒泡、.prevent 取消默认行为，两者都要，否则仍会导航。 -->
             <button
               type="button"
               class="flex cursor-pointer items-center gap-1 text-xs transition"
               :class="props.post.liked ? 'text-primary-deep' : 'text-muted hover:text-primary-deep'"
               :aria-pressed="props.post.liked"
-              @click="emit('toggle-like')"
+              @click.prevent.stop="emit('toggle-like')"
             >
               <svg
                 viewBox="0 0 24 24"

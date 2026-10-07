@@ -41,7 +41,13 @@ function handleSubmit(): void {
     @update:model-value="emit('close')"
   >
     <div class="flex flex-col gap-4">
-      <FormField label="复审结论">
+      <!-- 单选组**不能**用 FormField 包：FormField 的根是 <label>（它是为单个输入框设计的），
+           再套一层 radio 的 <label> 就构成非法嵌套；而 HTML 规定无 for 的 <label> 会关联
+           树序上第一个 labelable 后代——也就是「通过申诉」。结果点一下分组标题「复审结论」
+           就会把结论静默改成「通过申诉」（内容恢复可见，属不可逆处置）。
+           ReportDialog 的「举报理由」用的是同一套 fieldset/legend 写法。 -->
+      <fieldset>
+        <legend class="ql-label">复审结论</legend>
         <div class="flex gap-2">
           <label class="cursor-pointer">
             <input v-model="approved" class="peer sr-only" type="radio" name="appeal-verdict" :value="true" />
@@ -60,7 +66,7 @@ function handleSubmit(): void {
             </span>
           </label>
         </div>
-      </FormField>
+      </fieldset>
 
       <FormField label="复审说明" hint="会写入审计日志">
         <BaseTextarea v-model="reason" :rows="3" :maxlength="500" placeholder="说明复审依据" />

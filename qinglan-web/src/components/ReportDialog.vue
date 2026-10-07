@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 
 import BaseButton from '@/components/base/BaseButton.vue'
 import BaseTextarea from '@/components/base/BaseTextarea.vue'
@@ -37,15 +37,31 @@ const { reportReasonLabel } = useUserLabels()
 
 const reasonCode = ref<ReportReason | null>(null)
 const detail = ref('')
+const dialogRef = ref<HTMLElement | null>(null)
 
-// 每次重新打开都回到初始态，避免上一轮的选择与说明残留到下一次举报
+/**
+ * 关闭的唯一入口：提交中一律不关（遮罩、头部关闭、取消三个出口口径一致），
+ * 避免请求在途时把弹窗撤掉、用户既看不到结果也不知道提交去了哪里。
+ */
+function requestClose(): void {
+  if (props.submitting) {
+    return
+  }
+  emit('close')
+}
+
+// 每次打开都回到初始态（避免上一轮的选择残留）并把焦点收进弹窗：
+// 容器带 tabindex="-1"，获得焦点后 ESC 才生效，键盘用户也不会把焦点留在背后的页面上
 watch(
   () => props.open,
-  (open) => {
-    if (open) {
-      reasonCode.value = null
-      detail.value = ''
+  async (open) => {
+    if (!open) {
+      return
     }
+    reasonCode.value = null
+    detail.value = ''
+    await nextTick()
+    dialogRef.value?.focus()
   },
 )
 
@@ -58,15 +74,19 @@ function handleSubmit(): void {
 </script>
 
 <template>
-  <!-- z 轴分层：页头 z-50 < 弹层 z-[900] < 全局提示 z-[1000]。不能与页头同为 50——
-       同值时靠 DOM 顺序决胜负，弹层一旦被挪到页头之前就会被盖住。 -->
+  <!-- z 轴分层：页头 z-header < 本弹层 z-overlay < 公告 z-announcement < 全局提示 z-toast
+       （完整口径见 uno.config.ts）。不能与页头同为 50——同值时靠 DOM 顺序决胜负，
+       弹层一旦被挪到页头之前就会被盖住。 -->
   <div
     v-if="props.open"
-    class="fixed inset-0 z-[900] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+    ref="dialogRef"
+    tabindex="-1"
+    class="fixed inset-0 z-overlay flex items-center justify-center bg-black/40 p-4 outline-none max-sm:items-end"
     role="dialog"
     aria-modal="true"
     aria-label="举报"
-    @click.self="!props.submitting && emit('close')"
+    @click.self="requestClose"
+    @keydown.escape="requestClose"
   >
     <div class="w-full max-w-md rounded-xl border border-line bg-surface p-4 shadow-xl">
       <div class="flex items-start justify-between gap-3">
@@ -76,8 +96,9 @@ function handleSubmit(): void {
         </div>
         <button
           type="button"
-          class="shrink-0 cursor-pointer text-xs text-muted transition hover:text-ink"
-          @click="emit('close')"
+          class="shrink-0 cursor-pointer text-xs text-muted transition hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:text-muted"
+          :disabled="props.submitting"
+          @click="requestClose"
         >
           关闭
         </button>
@@ -115,7 +136,7 @@ function handleSubmit(): void {
       </div>
 
       <div class="mt-4 flex justify-end gap-2">
-        <BaseButton variant="ghost" size="sm" :disabled="props.submitting" @click="emit('close')">
+        <BaseButton variant="ghost" size="sm" :disabled="props.submitting" @click="requestClose">
           取消
         </BaseButton>
         <BaseButton

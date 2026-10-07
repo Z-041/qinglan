@@ -30,7 +30,7 @@ const emit = defineEmits<{ 'sign-out': [] }>()
 </script>
 
 <template>
-  <header class="sticky top-0 z-50 border-b border-line bg-surface-glass backdrop-blur">
+  <header class="sticky top-0 z-header border-b border-line bg-surface-glass backdrop-blur">
     <div
       class="flex h-16 items-center gap-3 max-sm:h-14"
       :class="props.wide ? 'ql-shell' : 'ql-container'"
@@ -55,7 +55,7 @@ const emit = defineEmits<{ 'sign-out': [] }>()
 
       <div class="ml-auto flex items-center gap-3">
         <template v-if="authenticated">
-          <span class="ql-badge hidden bg-primary-soft text-primary-deep sm:inline-flex">{{ roleText }}</span>
+          <span class="ql-badge inline-flex bg-primary-soft text-primary-deep max-sm:hidden">{{ roleText }}</span>
           <NotificationBell :unread-count="props.unreadCount" />
           <BaseButton variant="ghost" size="sm" @click="emit('sign-out')">退出</BaseButton>
         </template>

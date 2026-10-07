@@ -1,13 +1,21 @@
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { nextTick } from 'vue'
 
 import CreditAdjustDialog from '@/components/admin/CreditAdjustDialog.vue'
 
 /**
  * el-dialog 默认走 Teleport 且懒渲染，单测里换成只渲染插槽的桩，
  * 聚焦表单逻辑本身（本 spec 要盯的就是「填完值按钮能不能点」）。
+ *
+ * 桩必须保留 `modelValue` / `update:modelValue`：丢掉这条唯一通道就会出现
+ * 「单测全绿、浏览器里弹窗关不掉」的盲区。
  */
-const ElDialogStub = { template: '<div><slot /><slot name="footer" /></div>' }
+const ElDialogStub = {
+  props: ['modelValue'],
+  emits: ['update:modelValue'],
+  template: '<div><slot /><slot name="footer" /></div>',
+}
 
 function mountDialog() {
   return mount(CreditAdjustDialog, {
@@ -49,5 +57,17 @@ describe('CreditAdjustDialog', () => {
     const wrapper = mountDialog()
 
     expect(buttonByText(wrapper, '确认调整').attributes('disabled')).toBeDefined()
+  })
+
+  it('把 open 透传给 el-dialog，并响应它抛出的关闭事件', async () => {
+    const wrapper = mountDialog()
+    const dialog = wrapper.findComponent(ElDialogStub)
+
+    expect(dialog.props('modelValue')).toBe(true)
+
+    dialog.vm.$emit('update:modelValue', false)
+    await nextTick()
+
+    expect(wrapper.emitted('close')).toHaveLength(1)
   })
 })

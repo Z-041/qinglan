@@ -45,10 +45,29 @@ describe('QueueTable', () => {
   })
 
   it('首报超过 24 小时的行标红', () => {
-    const wrapper = mount(QueueTable, { props: { items: [item({ firstReportedAt: '2000-01-01T00:00:00Z' })] } })
+    const firstReportedAt = '2000-01-01T00:00:00Z'
+    const wrapper = mount(QueueTable, { props: { items: [item({ firstReportedAt })] } })
 
-    // 列序：目标类型 / 摘要 / 状态 / 举报数 / 首报时间 / 理由 / 操作
-    expect(wrapper.findAll('td')[4].classes()).toContain('text-danger-deep')
+    // 按「渲染出来的首报时间」定位单元格，而不是写死 td[4]：
+    // 列序一旦增删，写死的下标会指向别的列，断言就失去意义了
+    const cell = wrapper
+      .findAll('td')
+      .find((element) => element.text() === new Date(firstReportedAt).toLocaleString())
+
+    expect(cell).toBeDefined()
+    expect(cell?.classes()).toContain('text-danger-deep')
+  })
+
+  it('首报在 24 小时内的行不标红', () => {
+    const firstReportedAt = new Date().toISOString()
+    const wrapper = mount(QueueTable, { props: { items: [item({ firstReportedAt })] } })
+
+    const cell = wrapper
+      .findAll('td')
+      .find((element) => element.text() === new Date(firstReportedAt).toLocaleString())
+
+    expect(cell).toBeDefined()
+    expect(cell?.classes()).not.toContain('text-danger-deep')
   })
 
   it('点击「处置」抛出该行数据', async () => {

@@ -66,7 +66,20 @@ describe('ReportDialog', () => {
       props: { open: true, label: '这条评论', submitting: true },
     })
 
+    // 头部「关闭」也要断言：此前它没有 disabled，测试名宣称覆盖了、断言里却漏了它
+    expect(buttonByText(wrapper, '关闭').element.disabled).toBe(true)
     expect(buttonByText(wrapper, '取消').element.disabled).toBe(true)
     expect(buttonByText(wrapper, '提交举报').element.disabled).toBe(true)
+  })
+
+  it('提交中即使绕过 disabled 触发关闭也不生效（唯一出口统一判 submitting）', async () => {
+    const wrapper = mount(ReportDialog, {
+      props: { open: true, label: '这条评论', submitting: true },
+    })
+
+    await wrapper.get('[role="dialog"]').trigger('click')
+    await wrapper.get('[role="dialog"]').trigger('keydown.escape')
+
+    expect(wrapper.emitted('close')).toBeUndefined()
   })
 })
