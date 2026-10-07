@@ -25,6 +25,7 @@ const {
   post,
   comments,
   loading,
+  failed,
   submitting,
   appealSubmitting,
   appealed,
@@ -120,6 +121,17 @@ async function handleAppeal(): Promise<void> {
     </RouterLink>
 
     <p v-if="loading" class="mt-6 text-center text-sm text-muted">加载中…</p>
+
+    <!-- 失败态只在「确实没有内容可显示」时出现：若已有正文、只是重新加载失败，
+         继续显示已有内容（错误已由拦截器 toast），不要用错误屏把内容盖掉。
+         下面的文案是状态说明，不是请求错误信息本身，两者不重复。 -->
+    <div
+      v-else-if="failed && !post"
+      class="mt-6 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+    >
+      <p class="text-sm font-medium text-ink">内容没能加载出来</p>
+      <BaseButton class="mt-4" variant="ghost" size="sm" @click="load()">重试</BaseButton>
+    </div>
 
     <template v-else-if="post">
       <div class="mt-3 grid grid-cols-[minmax(0,1fr)_320px] gap-10 max-lg:(grid-cols-1 gap-6)">

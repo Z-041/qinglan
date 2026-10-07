@@ -31,6 +31,15 @@ function post(id: number, overrides: Partial<PostSummary> = {}): PostSummary {
   }
 }
 
+/** 手动控制何时 resolve，用来构造「响应乱序」的场景 */
+function deferredPage() {
+  let resolve: (value: { items: PostSummary[]; nextCursor: string | null }) => void = () => {}
+  const promise = new Promise<{ items: PostSummary[]; nextCursor: string | null }>((r) => {
+    resolve = r
+  })
+  return { promise, resolve }
+}
+
 describe('useFeed', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -127,5 +136,90 @@ describe('useFeed', () => {
 
     expect(feed.loading.value).toBe(false)
     expect(feed.posts.value).toEqual([])
+  })
+
+  it('首屏失败时置 failed，供页面与「真的没有内容」区分开', async () => {
+    mockedFetchPosts.mockRejectedValue(new Error('网络异常'))
+
+    const feed = useFeed()
+    await feed.load(null)
+
+    expect(feed.failed.value).toBe(true)
+  })
+
+  it('重试成功后清掉 failed', async () => {
+    mockedFetchPosts
+      .mockRejectedValueOnce(new Error('网络异常'))
+      .mockResolvedValueOnce({ items: [post(9)], nextCursor: null })
+
+    const feed = useFeed()
+    await feed.load(null)
+    expect(feed.failed.value).toBe(true)
+
+    await feed.refresh()
+
+    expect(feed.failed.value).toBe(false)
+    expect(feed.posts.value.map((item) => item.id)).toEqual([9])
+  })
+
+  it('切换话题失败时不残留上一话题的列表与游标（否则加载更多会拼出跨话题请求）', async () => {
+    mockedFetchPosts
+      .mockResolvedValueOnce({ items: [post(9), post(8)], nextCursor: '8' })
+      .mockRejectedValueOnce(new Error('网络异常'))
+
+    const feed = useFeed()
+    await feed.load(null)
+    expect(feed.hasMore.value).toBe(true)
+
+    await feed.load(3)
+
+    expect(feed.posts.value).toEqual([])
+    expect(feed.hasMore.value).toBe(false)
+    expect(feed.failed.value).toBe(true)
+    // 没有 hasMore 就不会出现「加载更多」，也就不会拿旧游标去请求新话题
+    await feed.loadMore()
+    expect(mockedFetchPosts).toHaveBeenCalledTimes(2)
+  })
+
+  it('切换话题时旧响应晚到必须被丢弃（否则会出现 B 高亮却显示 A 的内容）', async () => {
+    const first = deferredPage()
+    const second = deferredPage()
+    mockedFetchPosts.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+
+    const feed = useFeed()
+    const loadA = feed.load(1)
+    const loadB = feed.load(2)
+
+    // 后发的 B 先返回
+    second.resolve({ items: [post(20)], nextCursor: null })
+    await loadB
+    // A 的响应晚到：必须被丢弃，不能覆盖 B 的列表
+    first.resolve({ items: [post(10)], nextCursor: null })
+    await loadA
+
+    expect(feed.topicId.value).toBe(2)
+    expect(feed.posts.value.map((item) => item.id)).toEqual([20])
+    expect(feed.loading.value).toBe(false)
+  })
+
+  it('加载更多在途时切话题：旧响应不得追加进新话题的列表', async () => {
+    const more = deferredPage()
+    mockedFetchPosts
+      .mockResolvedValueOnce({ items: [post(9)], nextCursor: '9' })
+      .mockReturnValueOnce(more.promise)
+      .mockResolvedValueOnce({ items: [post(30)], nextCursor: null })
+
+    const feed = useFeed()
+    await feed.load(1)
+
+    const loadingMore = feed.loadMore()
+    const switching = feed.load(2)
+
+    more.resolve({ items: [post(8)], nextCursor: null })
+    await loadingMore
+    await switching
+
+    expect(feed.topicId.value).toBe(2)
+    expect(feed.posts.value.map((item) => item.id)).toEqual([30])
   })
 })

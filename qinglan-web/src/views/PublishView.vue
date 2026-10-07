@@ -9,7 +9,7 @@ import BaseTextarea from '@/components/base/BaseTextarea.vue'
 import FormField from '@/components/base/FormField.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
 import TopicFilter from '@/components/TopicFilter.vue'
-import { useImageUpload } from '@/composables/useImageUpload'
+import { MAX_IMAGES_PER_POST, useImageUpload } from '@/composables/useImageUpload'
 import { usePublish } from '@/composables/usePublish'
 import { pushToast } from '@/composables/useToast'
 
@@ -44,11 +44,26 @@ onMounted(() => {
   void loadTopics()
 })
 
+/**
+ * 只把**本次新增**的地址按「当时的**列表**」合并进来。
+ * 不能在 await 前读快照再整份赋值：上传期间用户删掉的图会复活、连选两次会丢掉前一次的结果。
+ * 上限也在此刻按当时的列表再兜一次（上传途中删图会让 useImageUpload 里算的 remaining 偏大）。
+ */
 async function handleSelectImages(files: File[]): Promise<void> {
-  images.value = await addFiles(files, images.value)
+  const added = await addFiles(files, images.value)
+  if (!added.length) {
+    return
+  }
+  const merged = [...images.value, ...added.filter((url) => !images.value.includes(url))]
+  images.value = merged.slice(0, MAX_IMAGES_PER_POST)
 }
 
 async function handleSubmit(): Promise<void> {
+  // 图片还在上传时不允许提交：此时 images 里没有这些图，提交会发出缺图的帖子，
+  // 上传完成后页面已卸载，图被静默丢弃（对象存储里留孤儿）
+  if (uploadingImages.value) {
+    return
+  }
   const created = await submit()
   if (!created) {
     return
@@ -106,7 +121,7 @@ async function handleSubmit(): Promise<void> {
             class="mt-6"
             block
             :loading="submitting"
-            :disabled="!canSubmit"
+            :disabled="!canSubmit || uploadingImages"
             @click="handleSubmit"
           >
             发布

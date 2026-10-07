@@ -12,7 +12,7 @@ import type { Topic } from '@/types/post'
 
 const userStore = useUserStore()
 
-const { posts, topicId, loading, loadingMore, hasMore, load, refresh, loadMore, toggleLike } =
+const { posts, topicId, loading, loadingMore, hasMore, failed, load, refresh, loadMore, toggleLike } =
   useFeed()
 
 const topics = ref<Topic[]>([])
@@ -83,6 +83,17 @@ watch(topicId, () => {
         </div>
 
         <p v-if="loading" class="py-8 text-center text-sm text-muted">加载中…</p>
+
+        <!-- 加载失败与「真的没有内容」必须分成两屏：否则一次网络故障会被说成
+             「这里还没有内容」并引导用户去发帖。这里的文案是**状态说明**，
+             具体的请求错误信息仍只由 http 拦截器的 toast 给出（AGENTS.md 第七章），不重复渲染。 -->
+        <div
+          v-else-if="failed"
+          class="rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+        >
+          <p class="text-sm font-medium text-ink">内容没能加载出来</p>
+          <BaseButton class="mt-4" variant="ghost" size="sm" @click="refresh()">重试</BaseButton>
+        </div>
 
         <div
           v-else-if="!posts.length"

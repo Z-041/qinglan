@@ -22,6 +22,15 @@ function context(): AdminReviewContext {
   }
 }
 
+/** 手动控制何时 resolve，用来构造「响应乱序」的场景 */
+function deferredContext() {
+  let resolve: (value: AdminReviewContext) => void = () => {}
+  const promise = new Promise<AdminReviewContext>((r) => {
+    resolve = r
+  })
+  return { promise, resolve }
+}
+
 describe('useReviewContext', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -70,5 +79,43 @@ describe('useReviewContext', () => {
     await panel.reload()
 
     expect(mockedFetchAdminReviewContext).toHaveBeenCalledTimes(2)
+  })
+
+  it('快速点选不同目标时晚到的旧响应不得写回面板（否则会看 A 的数据处置 B）', async () => {
+    const first = deferredContext()
+    const second = deferredContext()
+    mockedFetchAdminReviewContext
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+
+    const panel = useReviewContext()
+    const openA = panel.open({ targetType: 'POST', targetId: 5 })
+    const openB = panel.open({ targetType: 'COMMENT', targetId: 6 })
+
+    // 后发的 B 先返回
+    second.resolve({ ...context(), targetType: 'COMMENT', targetId: 6, authorCreditScore: 60 })
+    await openB
+    // A 的响应晚到：面板必须仍是 B 的数据，否则管理员会对着 A 的信用分/举报数处置 B
+    first.resolve({ ...context(), targetType: 'POST', targetId: 5, authorCreditScore: 88 })
+    await openA
+
+    expect(panel.target.value?.targetId).toBe(6)
+    expect(panel.context.value?.targetId).toBe(6)
+    expect(panel.context.value?.authorCreditScore).toBe(60)
+    expect(panel.loading.value).toBe(false)
+  })
+
+  it('关闭面板后在飞的响应回来，不得把上下文写回', async () => {
+    const pending = deferredContext()
+    mockedFetchAdminReviewContext.mockReturnValue(pending.promise)
+
+    const panel = useReviewContext()
+    const opening = panel.open({ targetType: 'POST', targetId: 5 })
+    panel.close()
+    pending.resolve(context())
+    await opening
+
+    expect(panel.context.value).toBeNull()
+    expect(panel.loading.value).toBe(false)
   })
 })

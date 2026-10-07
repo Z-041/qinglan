@@ -57,8 +57,43 @@ const instance = axios.create({
   timeout: 10000,
 })
 
+/**
+ * localStorage 的安全读写。
+ *
+ * 浏览器禁用站点数据（或部分隐私模式）时，`localStorage` 的读写会抛 `SecurityError`。
+ * 而这里的调用点都在应用启动路径上——store 初始化读令牌、每个请求的拦截器读令牌——
+ * 裸调用会让整个应用挂不起来（白屏）。存储不可用时降级为「读到 null、写入忽略」，
+ * 表现为「未登录 + 登录态只在内存里」，而不是打不开。
+ *
+ * 放在本模块是因为它就近守着 `TOKEN_STORAGE_KEY`；前端目录结构由 AGENTS.md 第一章枚举，
+ * 不为此新建 utils/ 目录。
+ */
+export function readStoredValue(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+export function writeStoredValue(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // 存储不可用：静默降级为仅内存态
+  }
+}
+
+export function removeStoredValue(key: string): void {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // 同上
+  }
+}
+
 instance.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+  const token = readStoredValue(TOKEN_STORAGE_KEY)
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -74,7 +109,7 @@ instance.interceptors.response.use(
 
     if (status === 401) {
       // 令牌已失效：先清持久化，再交给应用层重置内存态（Pinia 里的令牌与档案）并跳认证页
-      localStorage.removeItem(TOKEN_STORAGE_KEY)
+      removeStoredValue(TOKEN_STORAGE_KEY)
       unauthorizedHandler?.()
     }
 

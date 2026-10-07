@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
+import BaseButton from '@/components/base/BaseButton.vue'
 import BaseCard from '@/components/base/BaseCard.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useUserLabels } from '@/composables/useUserLabels'
@@ -11,6 +12,7 @@ const auth = useAuth()
 const { roleLabel, statusLabel } = useUserLabels()
 
 const loading = ref(false)
+const failed = ref(false)
 
 /** 只展示对用户有意义的字段；内部数字 ID 等不面向用户 */
 const rows = computed(() => {
@@ -25,18 +27,25 @@ const rows = computed(() => {
   ]
 })
 
-onMounted(async () => {
+async function loadProfile(): Promise<void> {
   if (userStore.profile) {
     return
   }
   loading.value = true
+  failed.value = false
   try {
     await auth.loadProfile()
   } catch {
-    // 加载失败已由 http 拦截器统一弹窗（AGENTS.md 第七章），这里只需结束加载态
+    // 请求错误只由 http 拦截器 toast（AGENTS.md 第七章）；这里只置状态位，
+    // 让页面给出「重试」出口，而不是失败后除标题外一片空白
+    failed.value = true
   } finally {
     loading.value = false
   }
+}
+
+onMounted(() => {
+  void loadProfile()
 })
 </script>
 
@@ -45,6 +54,15 @@ onMounted(async () => {
     <h1 class="text-lg font-semibold text-ink">我的</h1>
 
     <p v-if="loading" class="mt-6 text-sm text-muted">加载中…</p>
+
+    <!-- 失败态只在确实拿不到档案时出现，文案是状态说明；请求错误信息本身仍只由拦截器 toast -->
+    <div
+      v-else-if="failed && !userStore.profile"
+      class="mt-6 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+    >
+      <p class="text-sm font-medium text-ink">资料没能加载出来</p>
+      <BaseButton class="mt-4" variant="ghost" size="sm" @click="loadProfile()">重试</BaseButton>
+    </div>
 
     <div
       v-else-if="userStore.profile"

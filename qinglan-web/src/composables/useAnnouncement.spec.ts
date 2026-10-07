@@ -42,6 +42,7 @@ const {
   reset,
   clearSkippedAnnouncements,
   noteScrolledToEnd,
+  deviceId,
 } = useAnnouncement()
 
 describe('useAnnouncement', () => {
@@ -168,6 +169,29 @@ describe('useAnnouncement', () => {
     const passed = mockedFetchPending.mock.calls[0][0]
     expect(passed).toBeTruthy()
     expect(localStorage.getItem(DEVICE_ID_STORAGE_KEY)).toBe(passed)
+  })
+
+  it('存储不可用（禁用站点数据）时 deviceId 不抛错且在会话内稳定', () => {
+    const getItem = vi
+      .spyOn(Storage.prototype, 'getItem')
+      .mockImplementation(() => {
+        throw new Error('SecurityError')
+      })
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('SecurityError')
+      })
+
+    try {
+      // 旧实现裸调 localStorage：这里会直接把异常抛到调用方（应用启动路径上就是白屏）
+      expect(() => deviceId()).not.toThrow()
+      // 且不能每次换一个 id——否则同一条公告会被反复当成「没读过」、弹个不停
+      expect(deviceId()).toBe(deviceId())
+    } finally {
+      getItem.mockRestore()
+      setItem.mockRestore()
+    }
   })
 
   // ---------------------------------------------------------- 失败时不能把用户锁死

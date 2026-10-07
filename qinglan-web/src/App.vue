@@ -87,8 +87,11 @@ watch(
       @sign-out="userStore.signOut()"
     />
 
-    <main :class="fullWidth ? 'flex-1' : 'ql-container flex-1 py-6 sm:py-10'">
-      <RouterView />
+    <main :class="fullWidth ? 'flex-1' : 'ql-container flex-1 py-10 max-sm:py-6'">
+      <!-- 按 path 强制重建：Vue Router 对「同一路由只换参数」默认复用组件实例，
+           于是 /posts/1 直接改成 /posts/2 时 setup 不会重跑、页面仍显示旧帖。
+           按 path 加 key 让参数变化等同一次重新进入，代价只是这类跳转多做一次挂载。 -->
+      <RouterView :key="route.path" />
     </main>
 
     <footer v-if="!isAdminArea" class="border-t border-line bg-surface">

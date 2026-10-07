@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 
 import { fetchPendingAnnouncement, markAnnouncementRead } from '@/api/announcement'
-import { ApiError } from '@/api/http'
+import { ApiError, readStoredValue, writeStoredValue } from '@/api/http'
 import type { PendingAnnouncement } from '@/types/announcement'
 
 /** 游客设备标识在 localStorage 中的键名（计划 D4） */
@@ -33,18 +33,28 @@ let shownAt = 0
 let deadlineAt = 0
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
+/** 存储不可用时的兜底：本次会话内保持同一个 id，避免每次调用都换一个（那会让已读记录永远对不上） */
+let memoryDeviceId: string | null = null
+
 /**
  * 读取（必要时生成并持久化）游客设备标识。
  *
- * 游客也要能被记录已读、跨刷新不重复弹（计划 D4），故必须落 localStorage。
+ * 游客也要能被记录已读、跨刷新不重复弹（计划 D4），故必须落 localStorage；
+ * 存储不可用（禁用站点数据）时退化为会话内稳定的内存值，功能降级但不至于每次弹同一条公告。
  */
 export function deviceId(): string {
-  let id = localStorage.getItem(DEVICE_ID_STORAGE_KEY)
-  if (!id) {
-    id = crypto.randomUUID()
-    localStorage.setItem(DEVICE_ID_STORAGE_KEY, id)
+  const stored = readStoredValue(DEVICE_ID_STORAGE_KEY)
+  if (stored) {
+    memoryDeviceId = stored
+    return stored
   }
-  return id
+  // 首次访问，或存储不可用（读不到）——后者要靠 memoryDeviceId 保持会话内稳定，
+  // 否则每次调用都换一个 id，同一条公告会被反复当成「没读过」
+  if (!memoryDeviceId) {
+    memoryDeviceId = crypto.randomUUID()
+  }
+  writeStoredValue(DEVICE_ID_STORAGE_KEY, memoryDeviceId)
+  return memoryDeviceId
 }
 
 /**

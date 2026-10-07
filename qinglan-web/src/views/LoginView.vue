@@ -74,7 +74,7 @@ async function handleBind(): Promise<void> {
 </script>
 
 <template>
-  <BaseCard class="mx-auto mt-4 w-full max-w-[440px] sm:mt-10">
+  <BaseCard class="mx-auto mt-10 w-full max-w-[440px] max-sm:mt-4">
     <div class="flex items-center gap-3">
       <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
         <svg

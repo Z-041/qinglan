@@ -17,6 +17,8 @@ export function usePostDetail(postId: number) {
   const loading = ref(false)
   const submitting = ref(false)
   const appealSubmitting = ref(false)
+  /** 正文/评论加载失败过。用于把「失败」渲染成带重试的屏，而不是一片空白 */
+  const failed = ref(false)
   /**
    * 本次会话内是否已提交过申诉。
    *
@@ -38,12 +40,14 @@ export function usePostDetail(postId: number) {
 
   async function load(): Promise<void> {
     loading.value = true
+    failed.value = false
     try {
       const [detail, list] = await Promise.all([fetchPostDetail(postId), fetchComments(postId)])
       post.value = detail
       comments.value = list
     } catch {
-      // 错误已由拦截器提示
+      // 错误已由拦截器提示；这里只置状态位，让 view 给出「重试」出口而不是留一片空白
+      failed.value = true
     } finally {
       loading.value = false
     }
@@ -134,6 +138,7 @@ export function usePostDetail(postId: number) {
     post,
     comments,
     loading,
+    failed,
     submitting,
     appealSubmitting,
     appealed,

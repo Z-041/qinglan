@@ -76,15 +76,30 @@ export function useUserManage() {
     hasMore.value = page.nextCursor !== null
   }
 
+  /** 请求序号：连续改筛选会有多个请求在飞，先发的不一定先到，过期响应必须丢弃 */
+  let requestSeq = 0
+
   /** 查询第一页。筛选条件变化后必须走这里，否则游标仍指向旧条件的结果集 */
   async function refresh(): Promise<void> {
+    const seq = ++requestSeq
     loading.value = true
+    // 先清干净再请求：否则本次失败时列表与游标会留在**旧筛选条件**的结果集上，
+    // 此时点「加载更多」就会拿「新筛选 + 旧游标」去请求（下面这句注释的要求本来只在成功路径上成立）
+    items.value = []
+    cursor = null
+    hasMore.value = false
     try {
-      applyPage(await fetchAdminUsers(toQuery(filters.value, null)), false)
+      const page = await fetchAdminUsers(toQuery(filters.value, null))
+      if (seq !== requestSeq) {
+        return
+      }
+      applyPage(page, false)
     } catch {
       // 错误已由拦截器提示
     } finally {
-      loading.value = false
+      if (seq === requestSeq) {
+        loading.value = false
+      }
     }
   }
 
@@ -92,9 +107,14 @@ export function useUserManage() {
     if (!hasMore.value || loading.value || loadingMore.value) {
       return
     }
+    const seq = requestSeq
     loadingMore.value = true
     try {
-      applyPage(await fetchAdminUsers(toQuery(filters.value, cursor)), true)
+      const page = await fetchAdminUsers(toQuery(filters.value, cursor))
+      if (seq !== requestSeq) {
+        return
+      }
+      applyPage(page, true)
     } catch {
       // 错误已由拦截器提示
     } finally {
