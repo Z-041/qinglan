@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import BaseButton from '@/components/base/BaseButton.vue'
 import type { ReviewAction, ReviewTargetType } from '@/types/review'
@@ -17,6 +17,27 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ action: [action: ReviewAction] }>()
+
+/**
+ * 本次点击触发的动作。
+ * 提交中所有按钮都要禁用（防重复处置），但 loading 只该落在被点的那个上——
+ * 否则点「通过」会让一整排按钮同时转圈，看不出在提交哪个。
+ */
+const pendingKey = ref<ReviewAction | null>(null)
+
+function handleClick(action: ReviewAction): void {
+  pendingKey.value = action
+  emit('action', action)
+}
+
+watch(
+  () => props.submitting,
+  (value) => {
+    if (!value) {
+      pendingKey.value = null
+    }
+  },
+)
 
 const ACTION_META: Record<ReviewAction, ActionMeta> = {
   approve: { key: 'approve', label: '通过', variant: 'primary' },
@@ -62,8 +83,9 @@ const actions = computed<ActionMeta[]>(() => {
       :key="action.key"
       :variant="action.variant"
       size="sm"
-      :loading="props.submitting"
-      @click="emit('action', action.key)"
+      :disabled="props.submitting"
+      :loading="props.submitting && pendingKey === action.key"
+      @click="handleClick(action.key)"
     >
       {{ action.label }}
     </BaseButton>

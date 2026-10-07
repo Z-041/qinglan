@@ -20,8 +20,11 @@ const topicInitial = computed(() => props.post.topicName.slice(0, 1))
 </script>
 
 <template>
-  <article v-if="isCompact" class="group relative transition hover:bg-primary-tint">
-    <RouterLink :to="`/posts/${props.post.id}`" class="block px-4 py-3 max-lg:py-3.5">
+  <!-- 互动条必须在链接**之外**：<a> 的内容模型不允许出现 <button> 这类交互元素。
+       结构合法后就不再需要靠 .stop/.prevent 兜住「点赞连带跳转」，行为由结构保证。
+       代价是底部互动条不再属于链接、不再是可点区域（T-21 记过这笔取舍）。 -->
+  <article v-if="isCompact" class="group relative flex flex-col transition hover:bg-primary-tint">
+    <RouterLink :to="`/posts/${props.post.id}`" class="px-4 pt-3 pb-2 max-lg:pt-3.5">
       <div class="flex gap-3">
         <span
           class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-sm font-semibold text-primary-deep"
@@ -53,51 +56,52 @@ const topicInitial = computed(() => props.post.topicName.slice(0, 1))
               class="aspect-square w-full rounded-md border border-line object-cover"
             />
           </div>
-
-          <div class="mt-2 flex items-center gap-4">
-            <!-- 这个按钮在 RouterLink（<a>）内部：不加 .prevent.stop 的话，点「赞」会冒泡到锚点，
-                 既触发 router.push 跳进详情页，浏览器也可能执行 <a> 的默认跳转。
-                 .stop 拦冒泡、.prevent 取消默认行为，两者都要，否则仍会导航。 -->
-            <button
-              type="button"
-              class="flex cursor-pointer items-center gap-1 text-xs transition"
-              :class="props.post.liked ? 'text-primary-deep' : 'text-muted hover:text-primary-deep'"
-              :aria-pressed="props.post.liked"
-              @click.prevent.stop="emit('toggle-like')"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                :fill="props.post.liked ? 'currentColor' : 'none'"
-                stroke="currentColor"
-                stroke-width="1.8"
-                class="size-4"
-                aria-hidden="true"
-              >
-                <path
-                  d="M12 20.3 4.8 13a4.6 4.6 0 0 1 6.5-6.5l.7.7.7-.7A4.6 4.6 0 0 1 19.2 13Z"
-                  stroke-linejoin="round"
-                />
-              </svg>
-              <span>{{ props.post.likeCount }}</span>
-            </button>
-
-            <span class="flex items-center gap-1 text-xs text-muted">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                class="size-4"
-                aria-hidden="true"
-              >
-                <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-5.4A8 8 0 1 1 21 12Z" stroke-linejoin="round" />
-              </svg>
-              <span>{{ props.post.commentCount }}</span>
-            </span>
-          </div>
         </div>
       </div>
     </RouterLink>
+
+    <div class="flex items-center gap-3 px-4 pb-3 max-lg:pb-3.5">
+      <!-- 占位块与话题首字同宽（size-9 + gap-3），让互动条对齐上面正文的起始位置 -->
+      <span class="size-9 shrink-0" aria-hidden="true" />
+      <div class="flex items-center gap-4">
+        <button
+          type="button"
+          class="flex cursor-pointer items-center gap-1 text-xs transition"
+          :class="props.post.liked ? 'text-primary-deep' : 'text-muted hover:text-primary-deep'"
+          :aria-pressed="props.post.liked"
+          @click="emit('toggle-like')"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            :fill="props.post.liked ? 'currentColor' : 'none'"
+            stroke="currentColor"
+            stroke-width="1.8"
+            class="size-4"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 20.3 4.8 13a4.6 4.6 0 0 1 6.5-6.5l.7.7.7-.7A4.6 4.6 0 0 1 19.2 13Z"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <span>{{ props.post.likeCount }}</span>
+        </button>
+
+        <span class="flex items-center gap-1 text-xs text-muted">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            class="size-4"
+            aria-hidden="true"
+          >
+            <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-5.4A8 8 0 1 1 21 12Z" stroke-linejoin="round" />
+          </svg>
+          <span>{{ props.post.commentCount }}</span>
+        </span>
+      </div>
+    </div>
   </article>
 
   <article v-else class="ql-card-interactive overflow-hidden">

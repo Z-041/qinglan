@@ -16,16 +16,23 @@ const { posts, topicId, loading, loadingMore, hasMore, failed, load, refresh, lo
   useFeed()
 
 const topics = ref<Topic[]>([])
+/**
+ * 话题拉取是否失败过。失败时话题筛选整块消失，不提示就等于「本来就没有话题」——
+ * 与发布页（同样以话题为前置）用同一套「提示 + 重试」口径。
+ */
+const topicsFailed = ref(false)
 
 /** 首条作头条大卡，其余进紧凑行列表；切换话题与加载更多后自动重算（追加不影响头条） */
 const featurePost = computed(() => posts.value[0])
 const compactPosts = computed(() => posts.value.slice(1))
 
 async function loadTopics(): Promise<void> {
+  topicsFailed.value = false
   try {
     topics.value = await fetchTopics()
   } catch {
-    // 话题筛选缺失不影响信息流本身，错误已由拦截器提示
+    // 话题筛选缺失不影响信息流本身，错误已由拦截器提示；这里只记状态位供页面给「重试」
+    topicsFailed.value = true
   }
 }
 
@@ -81,6 +88,12 @@ watch(topicId, () => {
         <div class="mb-4 hidden max-lg:block">
           <TopicFilter v-model="topicId" :topics="topics" />
         </div>
+
+        <!-- 放在主列而非侧栏：侧栏在窄屏整块隐藏，提示放这里各宽度都看得见、只渲染一份 -->
+        <p v-if="topicsFailed" class="mb-4 text-xs text-muted">
+          话题没能加载出来
+          <BaseButton class="ml-1" variant="ghost" size="sm" @click="loadTopics">重试</BaseButton>
+        </p>
 
         <p v-if="loading" class="py-8 text-center text-sm text-muted">加载中…</p>
 

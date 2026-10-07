@@ -54,10 +54,12 @@ function timeText(value: string): string {
 
     <ul v-else class="ql-card mt-5 divide-y divide-line overflow-hidden">
       <li v-for="item in items" :key="item.id">
-        <!-- 有 link 时整条是导航链接；无 link 时退化为普通块，两种都点击即标已读 -->
+        <!-- 有 link 时整条是导航链接；无 link 时退化为普通块，两种都点击即标已读。
+             `to` 只在有 link 时才是 RouterLink 的 prop，无 link 时会落到普通 div 上、
+             渲染成一个非标准属性，故用 `?? undefined` 交由 Vue 移除该属性。 -->
         <component
           :is="item.link ? RouterLink : 'div'"
-          :to="item.link"
+          :to="item.link ?? undefined"
           class="flex items-start gap-3 px-4 py-3.5 transition hover:bg-primary-tint"
           :class="item.readAt ? '' : 'bg-primary-tint'"
           @click="markRead(item.id)"

@@ -18,7 +18,6 @@ const MAX_LOAD_ATTEMPTS = 2
  * （与 useToast 同一手法——状态在模块作用域、导出 `useAnnouncement()` 取用）。
  */
 const current = ref<PendingAnnouncement | null>(null)
-const visible = ref(false)
 const remainingSeconds = ref(0)
 const scrolledToEnd = ref(false)
 const confirmed = ref(false)
@@ -105,11 +104,10 @@ function startCountdown(seconds: number): void {
   }
 }
 
-/** 复位全部状态 */
+/** 复位全部状态。弹窗的显隐只由 `current` 决定（原 `visible` 与它恒等，已移除避免两份真相） */
 function reset(): void {
   stopCountdown()
   current.value = null
-  visible.value = false
   remainingSeconds.value = 0
   scrolledToEnd.value = false
   confirmed.value = false
@@ -120,7 +118,6 @@ function reset(): void {
 /** 展示一条公告并开始倒计时；**一次只展示一条，绝不堆叠**（设计方案 5.5） */
 function present(announcement: PendingAnnouncement): void {
   current.value = announcement
-  visible.value = true
   scrolledToEnd.value = false
   confirmed.value = false
   submitting.value = false
@@ -288,7 +285,6 @@ async function forceClose(): Promise<void> {
 export function useAnnouncement() {
   return {
     current,
-    visible,
     remainingSeconds,
     scrolledToEnd,
     confirmed,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import BanUserDialog from '@/components/admin/BanUserDialog.vue'
 import CreditAdjustDialog from '@/components/admin/CreditAdjustDialog.vue'
@@ -59,6 +59,28 @@ function setCreditFilter(key: 'minCredit' | 'maxCredit', event: Event): void {
   filters.value[key] = (event.target as HTMLInputElement).value
 }
 
+/** 空串=不限；填了必须是 0-100 的整数（后端也会校验，这里前置拦住，免得多弹一次 400） */
+function creditBoundInvalid(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return false
+  }
+  const parsed = Number(trimmed)
+  return !Number.isInteger(parsed) || parsed < 0 || parsed > 100
+}
+
+const creditRangeInvalid = computed(
+  () => creditBoundInvalid(filters.value.minCredit) || creditBoundInvalid(filters.value.maxCredit),
+)
+
+/** 查询与刷新的统一入口：信用分越界时不发请求 */
+async function search(): Promise<void> {
+  if (creditRangeInvalid.value) {
+    return
+  }
+  await refresh()
+}
+
 /** 成功才关对话框；失败保持打开，错误由拦截器提示（同 Task 15） */
 async function handleBan(days: number, reason: string): Promise<void> {
   if (selected.value && (await ban(selected.value.id, { days, reason }))) {
@@ -95,10 +117,10 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
   <div class="flex flex-col gap-5">
     <div class="flex items-center justify-between">
       <h1 class="text-lg font-semibold text-ink">用户管理</h1>
-      <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">刷新</BaseButton>
+      <BaseButton variant="ghost" size="sm" :loading="loading" @click="search">刷新</BaseButton>
     </div>
 
-    <form class="ql-card flex flex-wrap items-end gap-3 p-4" @submit.prevent="refresh">
+    <form class="ql-card flex flex-wrap items-end gap-3 p-4" @submit.prevent="search">
       <label class="flex flex-col gap-1">
         <span class="ql-label">状态</span>
         <select v-model="filters.status" class="ql-field">
@@ -128,6 +150,7 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
           placeholder="含"
           @input="setCreditFilter('minCredit', $event)"
         />
+        <span v-if="creditBoundInvalid(filters.minCredit)" class="ql-error">须为 0-100 的整数</span>
       </label>
 
       <label class="flex flex-col gap-1">
@@ -141,6 +164,7 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
           placeholder="含"
           @input="setCreditFilter('maxCredit', $event)"
         />
+        <span v-if="creditBoundInvalid(filters.maxCredit)" class="ql-error">须为 0-100 的整数</span>
       </label>
 
       <label class="flex flex-col gap-1">
@@ -154,7 +178,14 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
       </label>
 
       <div class="flex gap-2">
-        <BaseButton html-type="submit" size="sm" :loading="loading">查询</BaseButton>
+        <BaseButton
+          html-type="submit"
+          size="sm"
+          :loading="loading"
+          :disabled="creditRangeInvalid"
+        >
+          查询
+        </BaseButton>
         <BaseButton variant="ghost" size="sm" @click="reset">重置</BaseButton>
       </div>
     </form>

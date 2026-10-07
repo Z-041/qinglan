@@ -41,7 +41,7 @@ describe('useDashboard', () => {
     expect(dashboard.loading.value).toBe(false)
   })
 
-  it('加载失败时 stats 保持 null，且不向外抛错（错误已由拦截器提示）', async () => {
+  it('加载失败时 stats 保持 null、置 failed，且不向外抛错（错误已由拦截器提示）', async () => {
     mockedFetchAdminStats.mockRejectedValue(new Error('网络异常'))
 
     const dashboard = useDashboard()
@@ -49,5 +49,18 @@ describe('useDashboard', () => {
 
     expect(dashboard.stats.value).toBeNull()
     expect(dashboard.loading.value).toBe(false)
+    // failed 供页面区分「加载失败」与「暂无数据」
+    expect(dashboard.failed.value).toBe(true)
+  })
+
+  it('已有数据后刷新失败不置 failed，保留旧数据（不用错误屏盖掉内容）', async () => {
+    mockedFetchAdminStats.mockResolvedValueOnce(stats()).mockRejectedValueOnce(new Error('网络异常'))
+
+    const dashboard = useDashboard()
+    await dashboard.load()
+    await dashboard.load()
+
+    expect(dashboard.failed.value).toBe(false)
+    expect(dashboard.stats.value?.content.totalPosts).toBe(10)
   })
 })

@@ -63,4 +63,20 @@ describe('ReviewActionBar', () => {
       expect((button.element as HTMLButtonElement).disabled).toBe(true)
     }
   })
+
+  it('提交中只有被点击的动作显示 loading，其余按钮只禁用不转圈', async () => {
+    const wrapper = mountBar('POST', 'PENDING')
+
+    const approve = wrapper.findAll('button').find((button) => button.text() === '通过')
+    await approve?.trigger('click')
+    await wrapper.setProps({ submitting: true })
+
+    const spinning = wrapper.findAll('button').filter((button) => button.find('.animate-spin').exists())
+    expect(spinning).toHaveLength(1)
+    expect(spinning[0].text()).toBe('通过')
+    // 其余按钮仍需禁用（防重复处置），只是不显示 loading
+    for (const button of wrapper.findAll('button')) {
+      expect((button.element as HTMLButtonElement).disabled).toBe(true)
+    }
+  })
 })

@@ -29,7 +29,6 @@ function pending(overrides: Partial<PendingAnnouncement> = {}): PendingAnnouncem
 
 const {
   current,
-  visible,
   remainingSeconds,
   confirmed,
   canClose,
@@ -140,7 +139,7 @@ describe('useAnnouncement', () => {
 
     await refreshPending()
 
-    expect(visible.value).toBe(false)
+    // 弹窗显隐只由 current 决定（原 visible 与它恒等，已移除）
     expect(current.value).toBeNull()
   })
 

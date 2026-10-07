@@ -29,7 +29,7 @@ function pending(overrides: Partial<PendingAnnouncement> = {}): PendingAnnouncem
   }
 }
 
-const { current, visible, remainingSeconds, scrolledToEnd, confirmed, openFromPrecondition } =
+const { current, remainingSeconds, scrolledToEnd, confirmed, openFromPrecondition } =
   useAnnouncement()
 const { clearSkippedAnnouncements } = useAnnouncement()
 
@@ -44,7 +44,6 @@ describe('AnnouncementModal', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     current.value = null
-    visible.value = false
     remainingSeconds.value = 0
     scrolledToEnd.value = false
     confirmed.value = false

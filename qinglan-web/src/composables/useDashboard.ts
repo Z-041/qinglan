@@ -10,17 +10,27 @@ import type { AdminStats } from '@/types/admin'
 export function useDashboard() {
   const stats = ref<AdminStats | null>(null)
   const loading = ref(false)
+  /**
+   * 首屏拉取是否失败过。用于把「加载失败」与「真的没有数据」分成两屏——
+   * 否则一次网络故障会被看板说成「暂无数据」。
+   */
+  const failed = ref(false)
 
   async function load(): Promise<void> {
     loading.value = true
+    failed.value = false
     try {
       stats.value = await fetchAdminStats()
     } catch {
-      // 错误已由拦截器提示
+      // 错误已由拦截器提示；已有数据时只保留旧数据（刷新失败不盖掉内容），
+      // 仅首屏为空才置失败态，由页面给出「重试」
+      if (stats.value === null) {
+        failed.value = true
+      }
     } finally {
       loading.value = false
     }
   }
 
-  return { stats, loading, load }
+  return { stats, loading, failed, load }
 }

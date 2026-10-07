@@ -7,7 +7,7 @@ import { useRouter } from 'vue-router'
 import { useUserLabels } from '@/composables/useUserLabels'
 import { useUserStore } from '@/stores/user'
 
-/** 侧边栏四项（spec 5.4）；name 与 Task 19 的路由名一一对应 */
+/** 侧边栏五项（spec 5.4）；name 与路由名一一对应 */
 const NAV_ITEMS = [
   { name: 'admin-dashboard', label: '看板' },
   { name: 'admin-review-queue', label: '审核队列' },

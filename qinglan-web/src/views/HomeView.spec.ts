@@ -79,4 +79,15 @@ describe('HomeView', () => {
 
     expect(wrapper.text()).toContain('认证后即可匿名发帖与互动')
   })
+
+  it('话题加载失败时给出提示与重试，而不是静默消失', async () => {
+    mockedFetchPosts.mockResolvedValue({ items: [], nextCursor: null })
+    mockedFetchTopics.mockRejectedValue(new Error('网络异常'))
+
+    const wrapper = mountHome()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('话题没能加载出来')
+    expect(wrapper.findAll('button').some((button) => button.text() === '重试')).toBe(true)
+  })
 })

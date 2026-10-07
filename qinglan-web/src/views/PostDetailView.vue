@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import BaseButton from '@/components/base/BaseButton.vue'
@@ -49,7 +49,15 @@ const commentText = ref('')
 const replyTo = ref<Comment | null>(null)
 const appealReason = ref('')
 
-/** contact 非空即服务端已判定可见，前端不再自行判断（不变量 #2） */
+/** 待删除的评论 id。非空即弹出二次确认——不用 window.confirm（原生框阻塞主线程、样式不可控） */
+const pendingDeleteId = ref<number | null>(null)
+const deleteDialogRef = ref<HTMLElement | null>(null)
+
+/**
+ * 联系方式可见性完全由服务端裁决（不变量 #2）：`contactVisible` 为真时后端才回填 `contact`，
+ * 即 `contact` 非空 ⟺ 可见。被处置隐藏（`contactVisibility=HIDDEN`）时对非作者同样返回 null，
+ * 与「作者根本没填」在前端不可区分——故已认证时不能武断地说「作者未提供」，那会是假信息。
+ */
 const contactText = computed(() => post.value?.contact ?? '')
 
 /** 举报入口只对已认证访问者出现：举报人取自登录态，游客点了也只会被弹去登录 */
@@ -92,10 +100,25 @@ async function handleComment(): Promise<void> {
   }
 }
 
-async function handleDeleteComment(commentId: number): Promise<void> {
-  if (!window.confirm('确定删除这条评论吗？')) {
+function requestDelete(commentId: number): void {
+  pendingDeleteId.value = commentId
+}
+
+// 确认框打开时把焦点收进去，ESC 才生效、键盘用户也不会把焦点留在背后页面上
+watch(pendingDeleteId, async (id) => {
+  if (id === null) {
     return
   }
+  await nextTick()
+  deleteDialogRef.value?.focus()
+})
+
+async function confirmDelete(): Promise<void> {
+  const commentId = pendingDeleteId.value
+  if (commentId === null) {
+    return
+  }
+  pendingDeleteId.value = null
   if (replyTo.value?.id === commentId) {
     replyTo.value = null
   }
@@ -223,7 +246,7 @@ async function handleAppeal(): Promise<void> {
               <p v-else-if="!userStore.isAuthenticated" class="text-xs text-muted">
                 <RouterLink class="text-primary-deep" to="/login">认证后</RouterLink>可查看联系方式
               </p>
-              <p v-else class="text-xs text-muted">作者未提供联系方式</p>
+              <p v-else class="text-xs text-muted">作者未提供联系方式，或已被管理员隐藏</p>
             </div>
 
             <div class="mt-4 flex items-center gap-4 border-t border-line pt-3">
@@ -272,7 +295,7 @@ async function handleAppeal(): Promise<void> {
                 :reportable="reportAllowed"
                 @toggle-like="toggleCommentLike"
                 @reply="startReply"
-                @delete="handleDeleteComment"
+                @delete="requestDelete"
                 @report="openCommentReport"
               />
             </ul>
@@ -343,6 +366,28 @@ async function handleAppeal(): Promise<void> {
         @close="closeReport"
         @submit="handleReportSubmit"
       />
+
+      <!-- 删除评论的二次确认：自绘弹层，语义与行为对齐 ReportDialog（遮罩/ESC 关闭，焦点收入层内） -->
+      <div
+        v-if="pendingDeleteId !== null"
+        ref="deleteDialogRef"
+        tabindex="-1"
+        class="fixed inset-0 z-overlay flex items-center justify-center bg-black/40 p-4 outline-none"
+        role="dialog"
+        aria-modal="true"
+        aria-label="删除评论"
+        @click.self="pendingDeleteId = null"
+        @keydown.escape="pendingDeleteId = null"
+      >
+        <div class="w-full max-w-sm rounded-xl border border-line bg-surface p-4 shadow-xl">
+          <p class="text-sm font-semibold text-ink">确定删除这条评论吗？</p>
+          <p class="mt-1 text-xs text-muted">删除后不可恢复；若是一级评论，其回复会一并删除。</p>
+          <div class="mt-4 flex justify-end gap-2">
+            <BaseButton variant="ghost" size="sm" @click="pendingDeleteId = null">取消</BaseButton>
+            <BaseButton variant="danger" size="sm" @click="confirmDelete">删除</BaseButton>
+          </div>
+        </div>
+      </div>
     </template>
   </section>
 </template>

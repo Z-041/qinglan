@@ -120,8 +120,14 @@ async function handleSubmit(): Promise<void> {
           </div>
 
           <div class="mt-5">
-            <span class="ql-label">图片（最多 9 张）</span>
-            <ImagePicker v-model="images" :uploading="uploadingImages" @select="handleSelectImages" />
+            <span class="ql-label">图片（最多 {{ MAX_IMAGES_PER_POST }} 张）</span>
+            <!-- 显式传 max：上限只认 useImageUpload 的常量，不让组件默认值与它各写一份 -->
+            <ImagePicker
+              v-model="images"
+              :max="MAX_IMAGES_PER_POST"
+              :uploading="uploadingImages"
+              @select="handleSelectImages"
+            />
           </div>
 
           <BaseButton

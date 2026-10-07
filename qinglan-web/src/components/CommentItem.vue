@@ -43,6 +43,7 @@ const emit = defineEmits<{
         class="flex cursor-pointer items-center gap-1 text-xs transition"
         :class="props.comment.liked ? 'text-primary-deep' : 'text-muted hover:text-primary-deep'"
         :aria-pressed="props.comment.liked"
+        :aria-label="`${props.comment.liked ? '取消点赞' : '点赞'} ${props.comment.anonymousCode} 的评论`"
         @click="emit('toggle-like', props.comment.id)"
       >
         <svg
@@ -65,6 +66,7 @@ const emit = defineEmits<{
         v-if="props.depth === 0"
         type="button"
         class="cursor-pointer text-xs text-muted transition hover:text-primary-deep"
+        :aria-label="`回复 ${props.comment.anonymousCode} 的评论`"
         @click="emit('reply', props.comment)"
       >
         回复
@@ -74,6 +76,7 @@ const emit = defineEmits<{
         v-if="props.reportable && !props.comment.mine"
         type="button"
         class="cursor-pointer text-xs text-muted transition hover:text-danger"
+        :aria-label="`举报 ${props.comment.anonymousCode} 的评论`"
         @click="emit('report', props.comment)"
       >
         举报
@@ -83,6 +86,7 @@ const emit = defineEmits<{
         v-if="props.comment.mine"
         type="button"
         class="cursor-pointer text-xs text-muted transition hover:text-danger"
+        aria-label="删除我的评论"
         @click="emit('delete', props.comment.id)"
       >
         删除
