@@ -1,3 +1,8 @@
+# =============================================================================
+# 配置模板（入库）。复制本文件为 application.yml（已被 .gitignore 忽略）后填入本地值：
+#   cp application.example.yml application.yml
+# application.yml 不要提交，真实密钥/密码只通过本地文件或环境变量提供。
+# =============================================================================
 server:
   port: 8080
   servlet:
@@ -39,17 +44,17 @@ spring:
       port: ${QINGLAN_REDIS_PORT:6379}
   servlet:
     multipart:
-      # 与 post 模块的单张图片上限保持一致，超出直接拒绝，不让请求进到业务层
       max-file-size: 5MB
       max-request-size: 10MB
 
 qinglan:
   crypto:
-    # 32 字节 Base64 编码的 AES-256 密钥，仅本地/测试配置提供，生产走环境变量
+    # 必填：32 字节 Base64 编码的 AES-256 密钥，缺失即启动失败；生产走环境变量
     aes-key: ${QINGLAN_CRYPTO_AES_KEY:}
-    # 用于邮箱/学号不可逆哈希的固定盐，必须长期保持不变，否则历史数据无法匹配
+    # 必填：邮箱/学号不可逆哈希的固定盐，必须长期保持不变，否则历史数据无法匹配
     email-pepper: ${QINGLAN_CRYPTO_EMAIL_PEPPER:}
   jwt:
+    # 必填：至少 32 字节的 Base64，缺失或过短会启动失败
     secret: ${QINGLAN_JWT_SECRET:}
     issuer: qinglan
     access-token-ttl: 2h
@@ -61,45 +66,33 @@ qinglan:
     code-length: 6
     max-verify-attempts: 5
     send-interval: 60s
-    # 校园邮箱域名白名单，必须显式配置；留空即拒绝所有邮箱（fail-closed）
+    # 必填：校园邮箱域名白名单（逗号分隔多个），留空即拒绝所有邮箱（fail-closed）
     allowed-email-domains: ${QINGLAN_AUTH_EMAIL_DOMAINS:}
-    # 仅限本地联调：为 true 时响应体回显验证码。生产必须保持 false
-    expose-code: false
+    # 仅本地联调可置 true（响应体回显验证码）；生产必须保持 false
+    expose-code: ${QINGLAN_AUTH_EXPOSE_CODE:false}
   post:
-    # 信用分低于该值不允许发帖（设计方案：违规扣分，低于阈值限制发帖）
     min-credit-to-post: 60
-    # 单个帖子的图片数量上限（设计方案：≤9 图）
     max-images-per-post: 9
   moderation:
-    # 本地硬拦截词库（classpath 资源，一行一词，# 开头为注释）
     sensitive-word-file: classpath:moderation/sensitive-words.txt
-    # 隐私信息正则，命中即拒绝发布。默认只拦身份证与银行卡；
-    # 学号规则刻意留空——\d{9,12} 会把 11 位手机号一起误拦，等确认真实格式后再在此追加，不改代码
     privacy-rules:
       - label: 身份证
         regex: '[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[0-9Xx]'
       - label: 银行卡
         regex: '(?<!\d)\d{16,19}(?!\d)'
   review:
-    # 待处理举报数达到该值时帖子自动下架，转人工复核（设计方案：N=3）
     auto-takedown-threshold: 3
-    # 申诉期限：自下架时刻起算，超期不再受理（设计方案：7 日内）
     appeal-window: 7d
   announcement:
-    # 强制阅读最少秒数默认值（服务端校验已读时长不得低于此值，不变量 #6）
     min-read-seconds: 5
-    # 每日公告发布上限，超限返回 429（风控：公告滥用）
     max-publishes-per-day: 5
-    # 标记已读按设备限流：这是匿名开放的写接口，没有上限就能被反复调用刷表
     max-reads-per-window: 30
     read-rate-window: 1m
   upload:
-    # 单个用户在窗口内的上传次数上限，防止刷爆对象存储
     max-per-window: 30
-    # 上传限流窗口；计数窗口从该用户第一次上传时开始计时
     window: 1m
   store:
-    # 短时效存储实现：memory=单机内存（本地/测试）；redis=集群共享（生产）
+    # memory=单机内存（本地/测试）；redis=集群共享（生产）
     type: ${QINGLAN_STORE_TYPE:memory}
   storage:
     # 本地开发用磁盘目录；生产切对象存储后本项不再生效
