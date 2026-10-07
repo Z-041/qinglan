@@ -23,8 +23,16 @@ const REASON_ACTIONS: Partial<Record<ReviewAction, { title: string; success: str
   'remove-comment': { title: '移除评论', success: '已移除评论' },
 }
 
-const { items, loading, loadingMore, hasMore, refresh, loadMore } = useReviewQueue()
-const { target, context, loading: contextLoading, open, close, reload } = useReviewContext()
+const { items, loading, loadingMore, hasMore, failed, refresh, loadMore } = useReviewQueue()
+const {
+  target,
+  context,
+  loading: contextLoading,
+  failed: contextFailed,
+  open,
+  close,
+  reload,
+} = useReviewContext()
 const {
   submitting,
   approvePost,
@@ -165,14 +173,19 @@ async function handleDismiss(reason: string): Promise<void> {
     </div>
 
     <section class="ql-card overflow-hidden">
-      <QueueTable :items="items" :loading="loading" @handle="handleSelect" />
+      <QueueTable :items="items" :loading="loading" :failed="failed" @handle="handleSelect" />
 
       <div v-if="hasMore" class="border-t border-line px-3 py-3 text-center">
         <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">加载更多</BaseButton>
       </div>
     </section>
 
-    <ReviewContextPanel v-model:open="panelOpen" :context="context" :loading="contextLoading">
+    <ReviewContextPanel
+      v-model:open="panelOpen"
+      :context="context"
+      :loading="contextLoading"
+      :failed="contextFailed"
+    >
       <ReviewActionBar
         v-if="context"
         :target-type="context.targetType"

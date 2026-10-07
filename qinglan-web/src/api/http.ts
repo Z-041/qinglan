@@ -92,8 +92,41 @@ export function removeStoredValue(key: string): void {
   }
 }
 
+/**
+ * 内存态令牌，是请求头的**权威来源**。
+ *
+ * 为什么不能只读 localStorage：存储不可用时 `writeStoredValue` 会静默失败，而 store 里的内存态
+ * 仍然被置上——于是「内存说已登录、请求却不带 Authorization」，每个请求都 401 → 被登出 → 再登录
+ * 还是同样结果，用户表现为「登录不进去」。以内存为准即可让两者始终一致，存储只负责跨刷新的持久化。
+ */
+let memoryToken: string | null = null
+
+/**
+ * 是否已经处理过一次 401。
+ *
+ * 页面首屏常并发多个请求，令牌失效时它们会**同时**返回 401。没有这道闸，每个 401 都会
+ * 弹一条 toast 并调一次 unauthorizedHandler（跳一次登录页），用户会看到提示闪成一片、
+ * 路由被反复 replace。重新拿到令牌（setAuthToken 传入非空值）后解除抑制。
+ */
+let unauthorizedHandled = false
+
+export function setAuthToken(token: string | null): void {
+  memoryToken = token
+  if (token) {
+    // 重新登录：下一次令牌失效仍需处理
+    unauthorizedHandled = false
+    writeStoredValue(TOKEN_STORAGE_KEY, token)
+  } else {
+    removeStoredValue(TOKEN_STORAGE_KEY)
+  }
+}
+
+export function getAuthToken(): string | null {
+  return memoryToken ?? readStoredValue(TOKEN_STORAGE_KEY)
+}
+
 instance.interceptors.request.use((config) => {
-  const token = readStoredValue(TOKEN_STORAGE_KEY)
+  const token = getAuthToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -108,9 +141,16 @@ instance.interceptors.response.use(
     const message = error.response?.data?.message ?? '网络异常，请稍后重试'
 
     if (status === 401) {
-      // 令牌已失效：先清持久化，再交给应用层重置内存态（Pinia 里的令牌与档案）并跳认证页
+      // 令牌已失效：内存态与持久化一并清掉，再交给应用层重置 Pinia 并跳认证页
+      memoryToken = null
       removeStoredValue(TOKEN_STORAGE_KEY)
-      unauthorizedHandler?.()
+      // 并发 401 只处理一次：否则 N 个请求同时失效会弹 N 条提示、跳 N 次登录页
+      if (!unauthorizedHandled) {
+        unauthorizedHandled = true
+        pushToast(message, 'error')
+        unauthorizedHandler?.()
+      }
+      return Promise.reject(new ApiError(code, message, status))
     }
 
     if (status === 428) {

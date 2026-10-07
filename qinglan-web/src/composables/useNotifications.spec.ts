@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { setAuthToken } from '@/api/http'
 import {
   fetchNotifications,
   fetchUnreadCount,
@@ -42,6 +43,9 @@ describe('useNotifications', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
+    // 令牌现在以 api/http 的内存态为准（跨刷新持久化只作兜底），该内存态在同一个测试文件内
+    // 不会自动复位：不清掉的话，前面「已登录」用例设过的令牌会漏进「未登录」用例
+    setAuthToken(null)
     vi.clearAllMocks()
   })
 

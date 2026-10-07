@@ -39,7 +39,9 @@ describe('QueueTable', () => {
     expect(text).toContain('帖子')
     expect(text).toContain('测试正文')
     expect(text).toContain('待审核')
-    expect(text).toContain('2')
+    // 按「渲染出的举报数单元格」定位，而不是断言整段文本里出现过「2」——
+    // 日期时间等也含数字，那种零头断言等于什么都没验证
+    expect(wrapper.findAll('td').some((cell) => cell.text() === '2')).toBe(true)
     expect(text).toContain('辱骂、人身攻击')
     expect(text).toContain('诈骗与欺诈')
   })

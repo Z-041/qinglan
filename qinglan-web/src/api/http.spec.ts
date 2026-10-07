@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useToast } from '@/composables/useToast'
 
-import instance, { httpGet, httpPost, setUnauthorizedHandler, TOKEN_STORAGE_KEY } from './http'
+import instance, {
+  httpGet,
+  httpPost,
+  setAuthToken,
+  setUnauthorizedHandler,
+  TOKEN_STORAGE_KEY,
+} from './http'
 
 const { toasts } = useToast()
 
@@ -73,6 +79,18 @@ describe('http 全局错误提示', () => {
 
     expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull()
     expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('并发 401 只处理一次：不重复弹提示、不重复跳转', async () => {
+    setAuthToken('fresh-token') // 模拟刚登录，解除上一次 401 的抑制
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+    stubHttpFailure(401, 'QL-401-001', '请先完成认证')
+
+    await Promise.allSettled([httpGet('/user/me'), httpGet('/notifications')])
+
+    expect(handler).toHaveBeenCalledTimes(1)
+    expect(toasts.map((toast) => toast.message)).toEqual(['请先完成认证'])
   })
 })
 

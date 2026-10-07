@@ -7,7 +7,7 @@ import BaseButton from '@/components/base/BaseButton.vue'
 import { useNotifications } from '@/composables/useNotifications'
 import { useNotificationStore } from '@/stores/notification'
 
-const { items, loading, loadingMore, hasMore, load, loadMore, markRead, markAllRead, refreshUnread } =
+const { items, loading, loadingMore, hasMore, failed, load, loadMore, markRead, markAllRead, refreshUnread } =
   useNotifications()
 
 const { unreadCount } = storeToRefs(useNotificationStore())
@@ -34,6 +34,16 @@ function timeText(value: string): string {
     </div>
 
     <p v-if="loading" class="py-8 text-center text-sm text-muted">加载中…</p>
+
+    <!-- 加载失败与「真的没有消息」必须分成两屏：否则一次网络故障会被说成「还没有消息」。
+         这里的文案是**状态说明**，具体错误信息仍只由 http 拦截器的 toast 给出。 -->
+    <div
+      v-else-if="failed"
+      class="mt-5 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+    >
+      <p class="text-sm font-medium text-ink">消息没能加载出来</p>
+      <BaseButton class="mt-4" variant="ghost" size="sm" @click="load()">重试</BaseButton>
+    </div>
 
     <div
       v-else-if="!items.length"

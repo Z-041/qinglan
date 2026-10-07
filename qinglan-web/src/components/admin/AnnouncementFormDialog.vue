@@ -76,12 +76,21 @@ const minReadValid = computed(() => {
   )
 })
 
+/** 结束时间必须晚于开始时间；留空表示长期有效。开始时间为空时交给 canSubmit 拦截 */
+const periodValid = computed(() => {
+  if (!endAt.value.trim() || !startAt.value.trim()) {
+    return true
+  }
+  return new Date(endAt.value).getTime() > new Date(startAt.value).getTime()
+})
+
 const canSubmit = computed(
   () =>
     title.value.trim().length > 0 &&
     content.value.trim().length > 0 &&
     startAt.value.trim().length > 0 &&
-    minReadValid.value,
+    minReadValid.value &&
+    periodValid.value,
 )
 
 /** datetime-local 是本地时间且不带时区，后端要的是 Instant，转 ISO-8601 UTC */
@@ -134,7 +143,11 @@ function handleSubmit(): void {
         <FormField label="生效开始">
           <input :value="startAt" type="datetime-local" class="ql-field" @input="onStartAtInput" />
         </FormField>
-        <FormField label="生效结束" hint="留空表示长期有效">
+        <FormField
+          label="生效结束"
+          :hint="periodValid ? '留空表示长期有效' : ''"
+          :error="periodValid ? '' : '结束时间必须晚于开始时间'"
+        >
           <input :value="endAt" type="datetime-local" class="ql-field" @input="onEndAtInput" />
         </FormField>
       </div>

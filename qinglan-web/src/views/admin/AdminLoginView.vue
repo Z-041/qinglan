@@ -7,6 +7,7 @@ import BaseCard from '@/components/base/BaseCard.vue'
 import BaseInput from '@/components/base/BaseInput.vue'
 import FormField from '@/components/base/FormField.vue'
 import { useAuth } from '@/composables/useAuth'
+import { useCodeCooldown } from '@/composables/useCodeCooldown'
 import { pushToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
 import type { UserRole } from '@/types/user'
@@ -21,6 +22,7 @@ const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const { sending, verifying, devCode, requestCode, verify } = useAuth()
+const { remaining: resendRemaining, start: startResendCooldown } = useCodeCooldown()
 
 const step = ref<'email' | 'code'>('email')
 const email = ref('')
@@ -46,11 +48,16 @@ function targetPath(): string {
 }
 
 async function handleSendCode(): Promise<void> {
+  if (resendRemaining.value > 0) {
+    return
+  }
   if ((await attempt(() => requestCode(email.value.trim()))) === null) {
     return
   }
   code.value = ''
   step.value = 'code'
+  // 发送成功才开始冷却：失败时用户应能立刻改邮箱重试
+  startResendCooldown()
 }
 
 async function handleVerify(): Promise<void> {
@@ -93,7 +100,9 @@ async function handleVerify(): Promise<void> {
         <FormField label="校园邮箱" hint="使用管理员账号绑定的校园邮箱">
           <BaseInput v-model="email" type="email" autocomplete="email" placeholder="name@qinglan.edu.cn" required />
         </FormField>
-        <BaseButton html-type="submit" block :loading="submitting">获取验证码</BaseButton>
+        <BaseButton html-type="submit" block :loading="submitting" :disabled="resendRemaining > 0">
+          {{ resendRemaining > 0 ? `请 ${resendRemaining}s 后再试` : '获取验证码' }}
+        </BaseButton>
       </form>
 
       <form v-else class="mt-6 flex flex-col gap-4" @submit.prevent="handleVerify">

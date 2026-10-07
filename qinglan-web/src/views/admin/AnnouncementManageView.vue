@@ -24,6 +24,8 @@ const loadingMore = ref(false)
 const hasMore = ref(false)
 const submitting = ref(false)
 const formOpen = ref(false)
+/** 首屏是否失败过。用于把「加载失败」与「还没有公告」分成两屏 */
+const failed = ref(false)
 
 /** 不放进 ref：只作为下一次请求的入参，变化不需要触发渲染 */
 let cursor: string | null = null
@@ -39,10 +41,17 @@ function applyPage(
 
 async function refresh(): Promise<void> {
   loading.value = true
+  failed.value = false
+  // 先清干净再请求：否则本次失败时列表与游标会留在上一次的结果集上，
+  // 此后点「加载更多」就会拿「新一次 + 旧游标」去请求
+  items.value = []
+  cursor = null
+  hasMore.value = false
   try {
     applyPage(await fetchAdminAnnouncements(null), false)
   } catch {
-    // 错误已由拦截器提示
+    // 错误已由拦截器提示；这里只记状态位，供表格区分「加载失败」与「没有公告」
+    failed.value = true
   } finally {
     loading.value = false
   }
@@ -141,7 +150,9 @@ async function handleRevoke(row: AdminAnnouncementItem): Promise<void> {
       <AnnouncementTable
         :items="items"
         :loading="loading"
+        :failed="failed"
         :can-operate="canOperate"
+        :submitting="submitting"
         @publish="handlePublish"
         @revoke="handleRevoke"
       />

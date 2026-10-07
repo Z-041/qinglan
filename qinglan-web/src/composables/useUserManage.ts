@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 import { adjustCredit, banUser, fetchAdminUsers, unbanUser } from '@/api/admin'
 import type {
@@ -66,6 +66,11 @@ export function useUserManage() {
   const loadingMore = ref(false)
   const hasMore = ref(false)
   const submitting = ref(false)
+  /**
+   * 首屏查询是否失败过。用于把「加载失败」与「真的没有符合条件的用户」分成两屏——
+   * 否则一次网络故障会被表格说成「没有符合条件的用户」。
+   */
+  const failed = ref(false)
 
   /** 不放进 ref：只作为下一次请求的入参，变化不需要触发渲染 */
   let cursor: string | null = null
@@ -79,10 +84,22 @@ export function useUserManage() {
   /** 请求序号：连续改筛选会有多个请求在飞，先发的不一定先到，过期响应必须丢弃 */
   let requestSeq = 0
 
+  /** 上一次**成功查询**所用的筛选快照。用来判断「筛选改了但还没查询」 */
+  const appliedFilters = ref<string | null>(null)
+
+  /**
+   * 筛选已改但未查询。此时列表里是旧条件的结果、游标也属于旧结果集，
+   * 若继续「加载更多」就会把两个条件的数据拼在一起（重复行 / 漏行）。
+   */
+  const filtersDirty = computed(
+    () => appliedFilters.value !== null && appliedFilters.value !== JSON.stringify(filters.value),
+  )
+
   /** 查询第一页。筛选条件变化后必须走这里，否则游标仍指向旧条件的结果集 */
   async function refresh(): Promise<void> {
     const seq = ++requestSeq
     loading.value = true
+    failed.value = false
     // 先清干净再请求：否则本次失败时列表与游标会留在**旧筛选条件**的结果集上，
     // 此时点「加载更多」就会拿「新筛选 + 旧游标」去请求（下面这句注释的要求本来只在成功路径上成立）
     items.value = []
@@ -94,8 +111,13 @@ export function useUserManage() {
         return
       }
       applyPage(page, false)
+      // 只有成功应用了第一页，才算「当前筛选已查询」
+      appliedFilters.value = JSON.stringify(filters.value)
     } catch {
-      // 错误已由拦截器提示
+      // 错误已由拦截器提示；只有当前这次请求才有权把状态置为失败
+      if (seq === requestSeq) {
+        failed.value = true
+      }
     } finally {
       if (seq === requestSeq) {
         loading.value = false
@@ -105,6 +127,10 @@ export function useUserManage() {
 
   async function loadMore(): Promise<void> {
     if (!hasMore.value || loading.value || loadingMore.value) {
+      return
+    }
+    // 筛选改而未查询：拒绝续页，否则会把新条件的数据接到旧结果后面
+    if (filtersDirty.value) {
       return
     }
     const seq = requestSeq
@@ -147,6 +173,8 @@ export function useUserManage() {
     loading,
     loadingMore,
     hasMore,
+    failed,
+    filtersDirty,
     submitting,
     refresh,
     loadMore,

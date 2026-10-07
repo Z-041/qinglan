@@ -11,8 +11,12 @@ const props = withDefaults(
      * 普通管理员只能建草稿，按钮置灰并由页面给出说明。
      */
     canOperate?: boolean
+    /** 首屏是否失败过。用于把「加载失败」与「还没有公告」分成两屏 */
+    failed?: boolean
+    /** 发布/撤回请求在途：期间禁用行内按钮，避免连点发出两次请求 */
+    submitting?: boolean
   }>(),
-  { loading: false, canOperate: false },
+  { loading: false, canOperate: false, failed: false, submitting: false },
 )
 
 const emit = defineEmits<{
@@ -87,7 +91,7 @@ function boolText(value: boolean): string {
             <button
               v-if="row.status === 'DRAFT'"
               type="button"
-              :disabled="!props.canOperate"
+              :disabled="!props.canOperate || props.submitting"
               class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-primary hover:text-primary-deep disabled:(cursor-not-allowed opacity-50)"
               @click="emit('publish', row)"
             >
@@ -96,7 +100,7 @@ function boolText(value: boolean): string {
             <button
               v-else-if="row.status === 'PUBLISHED'"
               type="button"
-              :disabled="!props.canOperate"
+              :disabled="!props.canOperate || props.submitting"
               class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-danger hover:text-danger-deep disabled:(cursor-not-allowed opacity-50)"
               @click="emit('revoke', row)"
             >
@@ -108,7 +112,7 @@ function boolText(value: boolean): string {
       </tr>
       <tr v-if="!props.items.length">
         <td colspan="9" class="px-3 py-10 text-center text-sm text-muted">
-          {{ props.loading ? '加载中…' : '还没有公告' }}
+          {{ props.loading ? '加载中…' : props.failed ? '加载失败，请点击「刷新」重试' : '还没有公告' }}
         </td>
       </tr>
     </tbody>

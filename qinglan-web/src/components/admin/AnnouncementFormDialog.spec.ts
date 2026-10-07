@@ -102,6 +102,20 @@ describe('AnnouncementFormDialog', () => {
     expect(wrapper.text()).toContain('请输入 0–60 的整数')
   })
 
+  it('生效结束早于或等于开始时间时禁用提交并给出错误文案', async () => {
+    const wrapper = mountDialog()
+    await wrapper.get('input[type="text"]').setValue('停水通知')
+    await wrapper.get('textarea').setValue('今晚 22:00 起停水')
+    const dateTimes = wrapper
+      .findAll('input')
+      .filter((element) => element.attributes('type') === 'datetime-local')
+    await dateTimes[0].setValue('2026-10-08T10:00')
+    await dateTimes[1].setValue('2026-10-08T09:00')
+
+    expect(buttonByText(wrapper, '提交草稿').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('结束时间必须晚于开始时间')
+  })
+
   it('把 open 透传给 el-dialog，并响应它抛出的关闭事件', async () => {
     const wrapper = mountDialog()
     const dialog = wrapper.findComponent(ElDialogStub)

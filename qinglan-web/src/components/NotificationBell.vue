@@ -16,7 +16,7 @@ const badgeText = computed(() => (props.unreadCount > 99 ? '99+' : String(props.
   <RouterLink
     class="relative inline-flex size-9 items-center justify-center rounded-lg text-muted transition hover:bg-primary-tint hover:text-primary-deep"
     to="/notifications"
-    aria-label="消息中心"
+    :aria-label="props.unreadCount > 0 ? `消息中心，${props.unreadCount} 条未读` : '消息中心'"
   >
     <svg
       viewBox="0 0 24 24"
@@ -33,6 +33,7 @@ const badgeText = computed(() => (props.unreadCount > 99 ? '99+' : String(props.
     </svg>
     <span
       v-if="props.unreadCount > 0"
+      aria-hidden="true"
       class="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-medium leading-4 text-white"
     >
       {{ badgeText }}

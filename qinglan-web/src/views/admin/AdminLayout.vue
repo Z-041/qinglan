@@ -58,10 +58,12 @@ function signOut(): void {
           </button>
         </header>
 
-        <main class="flex-1 p-6">
+        <!-- App.vue 的外层已是 <main> 地标；这里再用 <main> 会形成嵌套地标（非法且对读屏混乱），
+             故内层用普通 div 承载内容区 -->
+        <div class="flex-1 p-6">
           <!-- 管理端仅支持 PC，不做移动断点（AGENTS.md 第七章） -->
           <RouterView />
-        </main>
+        </div>
       </div>
     </div>
   </el-config-provider>

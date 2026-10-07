@@ -2,7 +2,7 @@
 import { useUserLabels } from '@/composables/useUserLabels'
 import type { AdminAppealItem } from '@/types/review'
 
-const props = defineProps<{ items: AdminAppealItem[]; loading?: boolean }>()
+const props = defineProps<{ items: AdminAppealItem[]; loading?: boolean; failed?: boolean }>()
 
 const emit = defineEmits<{ review: [item: AdminAppealItem] }>()
 
@@ -49,7 +49,7 @@ function takenDownText(reason: string | null): string {
       </tr>
       <tr v-if="!props.items.length">
         <td colspan="6" class="px-3 py-10 text-center text-sm text-muted">
-          {{ props.loading ? '加载中…' : '暂无待复审申诉' }}
+          {{ props.loading ? '加载中…' : props.failed ? '加载失败，请点击「刷新」重试' : '暂无待复审申诉' }}
         </td>
       </tr>
     </tbody>

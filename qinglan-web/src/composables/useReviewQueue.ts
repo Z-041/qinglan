@@ -26,9 +26,17 @@ export function useReviewQueue() {
   const loading = ref(false)
   const loadingMore = ref(false)
   const hasMore = ref(false)
+  /** 首屏是否失败过。用于把「加载失败」与「暂无待处理举报」分成两屏 */
+  const failed = ref(false)
 
   /** 不放进 ref：只作为下一次请求的入参，变化不需要触发渲染 */
   let cursor: string | null = null
+
+  /**
+   * 请求序号。处置成功后 refresh 与用户点「刷新」可能同时在飞，**先发的不一定先到**：
+   * 没有它的话，晚到的旧响应会把新结果覆盖掉。
+   */
+  let requestSeq = 0
 
   function applyPage(page: { items: AdminQueueItem[]; nextCursor: string | null }, append: boolean): void {
     items.value = append ? [...items.value, ...page.items] : page.items
@@ -38,13 +46,25 @@ export function useReviewQueue() {
 
   /** 处置成功后重拉第一页（spec 5.5：局部刷新，不整页 reload） */
   async function refresh(): Promise<void> {
+    const seq = ++requestSeq
     loading.value = true
+    failed.value = false
+    // 先清干净再请求：否则本次失败时列表与游标会留在上一次的结果集上，
+    // 此后点「加载更多」就会拿「新一次 + 旧游标」去请求
+    items.value = []
+    cursor = null
+    hasMore.value = false
     try {
       applyPage(await fetchAdminReviewQueue(null), false)
     } catch {
-      // 错误已由拦截器提示
+      // 错误已由拦截器提示；只有当前这次请求才有权把状态置为失败
+      if (seq === requestSeq) {
+        failed.value = true
+      }
     } finally {
-      loading.value = false
+      if (seq === requestSeq) {
+        loading.value = false
+      }
     }
   }
 
@@ -52,9 +72,15 @@ export function useReviewQueue() {
     if (!hasMore.value || loading.value || loadingMore.value) {
       return
     }
+    // 记下发起时的序号：期间若刷新过（requestSeq 会 +1），这次的响应必须丢弃
+    const seq = requestSeq
     loadingMore.value = true
     try {
-      applyPage(await fetchAdminReviewQueue(cursor), true)
+      const page = await fetchAdminReviewQueue(cursor)
+      if (seq !== requestSeq) {
+        return
+      }
+      applyPage(page, true)
     } catch {
       // 错误已由拦截器提示
     } finally {
@@ -62,5 +88,5 @@ export function useReviewQueue() {
     }
   }
 
-  return { items, loading, loadingMore, hasMore, refresh, loadMore }
+  return { items, loading, loadingMore, hasMore, failed, refresh, loadMore }
 }

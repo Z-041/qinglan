@@ -24,9 +24,17 @@ export function useNotifications() {
   const loading = ref(false)
   const loadingMore = ref(false)
   const hasMore = ref(false)
+  /** 首屏是否失败过。用于把「加载失败」与「还没有消息」分成两屏 */
+  const failed = ref(false)
 
   /** 不放进 ref：只作为下一次请求的入参，变化不需要触发渲染 */
   let cursor: string | null = null
+
+  /**
+   * 请求序号。标记已读后刷新与用户重新进入可能同时在飞，**先发的不一定先到**：
+   * 没有它的话，晚到的旧响应会把新结果覆盖掉。
+   */
+  let requestSeq = 0
 
   function applyPage(
     page: { items: NotificationItem[]; nextCursor: string | null },
@@ -38,13 +46,25 @@ export function useNotifications() {
   }
 
   async function load(): Promise<void> {
+    const seq = ++requestSeq
     loading.value = true
+    failed.value = false
+    // 先清干净再请求：否则本次失败时列表与游标会留在上一次的结果集上，
+    // 此后点「加载更多」就会拿「新一次 + 旧游标」去请求
+    items.value = []
+    cursor = null
+    hasMore.value = false
     try {
       applyPage(await fetchNotifications(null), false)
     } catch {
-      // 错误已由拦截器提示
+      // 错误已由拦截器提示；只有当前这次请求才有权把状态置为失败
+      if (seq === requestSeq) {
+        failed.value = true
+      }
     } finally {
-      loading.value = false
+      if (seq === requestSeq) {
+        loading.value = false
+      }
     }
   }
 
@@ -52,9 +72,15 @@ export function useNotifications() {
     if (!hasMore.value || loading.value || loadingMore.value) {
       return
     }
+    // 记下发起时的序号：期间若刷新过（requestSeq 会 +1），这次的响应必须丢弃
+    const seq = requestSeq
     loadingMore.value = true
     try {
-      applyPage(await fetchNotifications(cursor), true)
+      const page = await fetchNotifications(cursor)
+      if (seq !== requestSeq) {
+        return
+      }
+      applyPage(page, true)
     } catch {
       // 错误已由拦截器提示
     } finally {
@@ -106,5 +132,16 @@ export function useNotifications() {
     }
   }
 
-  return { items, loading, loadingMore, hasMore, load, loadMore, markRead, markAllRead, refreshUnread }
+  return {
+    items,
+    loading,
+    loadingMore,
+    hasMore,
+    failed,
+    load,
+    loadMore,
+    markRead,
+    markAllRead,
+    refreshUnread,
+  }
 }

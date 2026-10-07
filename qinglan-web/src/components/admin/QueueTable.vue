@@ -3,7 +3,7 @@ import { isReportOverdue } from '@/composables/useReviewQueue'
 import { useUserLabels } from '@/composables/useUserLabels'
 import type { AdminQueueItem } from '@/types/review'
 
-const props = defineProps<{ items: AdminQueueItem[]; loading?: boolean }>()
+const props = defineProps<{ items: AdminQueueItem[]; loading?: boolean; failed?: boolean }>()
 
 const emit = defineEmits<{ handle: [item: AdminQueueItem] }>()
 
@@ -60,7 +60,7 @@ const { targetTypeLabel, targetStatusLabel, reportReasonLabel } = useUserLabels(
       </tr>
       <tr v-if="!props.items.length">
         <td colspan="7" class="px-3 py-10 text-center text-sm text-muted">
-          {{ props.loading ? '加载中…' : '暂无待处理举报' }}
+          {{ props.loading ? '加载中…' : props.failed ? '加载失败，请点击「刷新」重试' : '暂无待处理举报' }}
         </td>
       </tr>
     </tbody>

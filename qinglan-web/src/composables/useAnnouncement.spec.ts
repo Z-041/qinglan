@@ -167,7 +167,8 @@ describe('useAnnouncement', () => {
     await loadNext()
 
     const passed = mockedFetchPending.mock.calls[0][0]
-    expect(passed).toBeTruthy()
+    // 断言到「是 UUID」这一层，而不是 toBeTruthy 这种无信息量的零头断言
+    expect(passed).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
     expect(localStorage.getItem(DEVICE_ID_STORAGE_KEY)).toBe(passed)
   })
 

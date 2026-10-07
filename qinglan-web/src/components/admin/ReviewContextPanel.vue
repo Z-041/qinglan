@@ -6,6 +6,8 @@ const props = defineProps<{
   open: boolean
   context: AdminReviewContext | null
   loading?: boolean
+  /** 上下文请求失败：给出说明而不是留一片空白抽屉 */
+  failed?: boolean
 }>()
 
 const emit = defineEmits<{ 'update:open': [value: boolean] }>()
@@ -21,6 +23,10 @@ const { targetTypeLabel, targetStatusLabel, reportReasonLabel } = useUserLabels(
     @update:model-value="emit('update:open', $event)"
   >
     <p v-if="props.loading && !props.context" class="text-sm text-muted">加载中…</p>
+
+    <p v-else-if="props.failed && !props.context" class="text-sm text-muted">
+      上下文没能加载出来，请关闭面板后重试
+    </p>
 
     <div v-else-if="props.context" class="flex flex-col gap-5">
       <dl class="flex flex-col gap-3 text-sm">

@@ -24,6 +24,7 @@ const {
   contact,
   images,
   submitting,
+  topicsFailed,
   selectedTopic,
   blockedReason,
   contactRequired,
@@ -84,6 +85,12 @@ async function handleSubmit(): Promise<void> {
           <div>
             <span class="ql-label">选择话题</span>
             <TopicFilter v-model="topicId" :topics="topics" :allow-all="false" />
+            <!-- 话题是发帖的前置：拉取失败时给出「重试」，否则话题区永远空白、
+                 发布按钮永远灰着却不说为什么（具体错误信息仍由拦截器 toast 给出） -->
+            <p v-if="topicsFailed" class="mt-2 text-xs text-muted">
+              话题没能加载出来
+              <BaseButton class="ml-1" variant="ghost" size="sm" @click="loadTopics">重试</BaseButton>
+            </p>
             <!-- 窄屏右栏隐藏，话题规则在表单内回显；PC 由右栏「话题规则」卡承担，避免同一屏重复 -->
             <div v-if="selectedTopic" class="hidden max-lg:block">
               <p class="ql-hint">话题规则：{{ selectedTopic.rules }}</p>

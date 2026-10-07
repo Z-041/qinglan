@@ -2,7 +2,7 @@
 import { useUserLabels } from '@/composables/useUserLabels'
 import type { AdminUserItem } from '@/types/admin'
 
-const props = defineProps<{ items: AdminUserItem[]; loading?: boolean }>()
+const props = defineProps<{ items: AdminUserItem[]; loading?: boolean; failed?: boolean }>()
 
 const emit = defineEmits<{
   ban: [item: AdminUserItem]
@@ -71,7 +71,7 @@ function dateText(value: string | null): string {
       </tr>
       <tr v-if="!props.items.length">
         <td colspan="6" class="px-3 py-10 text-center text-sm text-muted">
-          {{ props.loading ? '加载中…' : '没有符合条件的用户' }}
+          {{ props.loading ? '加载中…' : props.failed ? '加载失败，请点击「刷新」重试' : '没有符合条件的用户' }}
         </td>
       </tr>
     </tbody>

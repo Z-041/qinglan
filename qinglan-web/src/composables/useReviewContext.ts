@@ -16,6 +16,8 @@ export function useReviewContext() {
   const target = ref<ReviewTarget | null>(null)
   const context = ref<AdminReviewContext | null>(null)
   const loading = ref(false)
+  /** 上下文请求是否失败过。面板据此把「加载失败」与空白区分开，而不是留一片空抽屉 */
+  const failed = ref(false)
 
   /**
    * 请求序号。快速点选不同举报行时会有多个上下文请求在飞，**先发的不一定先到**：
@@ -28,6 +30,7 @@ export function useReviewContext() {
     const seq = ++requestSeq
     target.value = next
     context.value = null
+    failed.value = false
     loading.value = true
     try {
       const result = await fetchAdminReviewContext(next.targetType, next.targetId)
@@ -36,7 +39,10 @@ export function useReviewContext() {
         context.value = result
       }
     } catch {
-      // 错误已由拦截器提示
+      // 错误已由拦截器提示；只有当前这次请求才有权把状态置为失败
+      if (seq === requestSeq) {
+        failed.value = true
+      }
     } finally {
       if (seq === requestSeq) {
         loading.value = false
@@ -49,6 +55,7 @@ export function useReviewContext() {
     requestSeq += 1
     target.value = null
     context.value = null
+    failed.value = false
     loading.value = false
   }
 
@@ -59,5 +66,5 @@ export function useReviewContext() {
     }
   }
 
-  return { target, context, loading, open, close, reload }
+  return { target, context, loading, failed, open, close, reload }
 }

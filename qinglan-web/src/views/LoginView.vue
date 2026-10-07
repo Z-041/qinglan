@@ -7,11 +7,15 @@ import BaseCard from '@/components/base/BaseCard.vue'
 import BaseInput from '@/components/base/BaseInput.vue'
 import FormField from '@/components/base/FormField.vue'
 import { useAuth } from '@/composables/useAuth'
+import { useCodeCooldown } from '@/composables/useCodeCooldown'
 
 type Step = 'email' | 'code' | 'student'
 
 /** 与后端 qinglan.auth.code-ttl 默认值保持一致，仅用于文案提示 */
 const CODE_TTL_MINUTES = 5
+
+/** 与后端学号规则一致：4-24 位字母或数字 */
+const STUDENT_ID_PATTERN = /^[A-Za-z0-9]{4,24}$/
 
 const STEP_LABELS = ['校园邮箱', '验证码', '绑定学号'] as const
 const STEP_INDEX: Record<Step, number> = { email: 0, code: 1, student: 2 }
@@ -19,6 +23,7 @@ const STEP_INDEX: Record<Step, number> = { email: 0, code: 1, student: 2 }
 const router = useRouter()
 const route = useRoute()
 const { sending, verifying, binding, devCode, requestCode, verify, bind } = useAuth()
+const { remaining: resendRemaining, start: startResendCooldown } = useCodeCooldown()
 
 const step = ref<Step>('email')
 const email = ref('')
@@ -27,6 +32,8 @@ const studentId = ref('')
 
 const submitting = computed(() => sending.value || verifying.value || binding.value)
 const stepIndex = computed(() => STEP_INDEX[step.value])
+/** 学号只在客户端做与后端一致的格式预校验（真正拦截在服务端） */
+const studentIdValid = computed(() => STUDENT_ID_PATTERN.test(studentId.value.trim()))
 
 /**
  * 执行认证动作，失败返回 null。
@@ -46,11 +53,16 @@ function afterAuthenticated(): void {
 }
 
 async function handleSendCode(): Promise<void> {
+  if (resendRemaining.value > 0) {
+    return
+  }
   if ((await attempt(() => requestCode(email.value.trim()))) === null) {
     return
   }
   code.value = ''
   step.value = 'code'
+  // 发送成功才开始冷却：失败时用户应能立刻改邮箱重试
+  startResendCooldown()
 }
 
 async function handleVerify(): Promise<void> {
@@ -66,6 +78,9 @@ async function handleVerify(): Promise<void> {
 }
 
 async function handleBind(): Promise<void> {
+  if (!studentIdValid.value) {
+    return
+  }
   if ((await attempt(() => bind(studentId.value.trim()))) === null) {
     return
   }
@@ -122,7 +137,9 @@ async function handleBind(): Promise<void> {
           required
         />
       </FormField>
-      <BaseButton html-type="submit" block :loading="submitting">获取验证码</BaseButton>
+      <BaseButton html-type="submit" block :loading="submitting" :disabled="resendRemaining > 0">
+        {{ resendRemaining > 0 ? `请 ${resendRemaining}s 后再试` : '获取验证码' }}
+      </BaseButton>
     </form>
 
     <form v-else-if="step === 'code'" class="mt-6 flex flex-col gap-4" @submit.prevent="handleVerify">
@@ -141,10 +158,16 @@ async function handleBind(): Promise<void> {
     </form>
 
     <form v-else class="mt-6 flex flex-col gap-4" @submit.prevent="handleBind">
-      <FormField label="学号" hint="4-24 位字母或数字，绑定后不可更改">
+      <FormField
+        label="学号"
+        :hint="studentId && !studentIdValid ? '' : '4-24 位字母或数字，绑定后不可更改'"
+        :error="studentId && !studentIdValid ? '学号须为 4-24 位字母或数字' : ''"
+      >
         <BaseInput v-model="studentId" placeholder="请输入学号" required />
       </FormField>
-      <BaseButton html-type="submit" block :loading="submitting">完成认证</BaseButton>
+      <BaseButton html-type="submit" block :loading="submitting" :disabled="!studentIdValid">
+        完成认证
+      </BaseButton>
     </form>
   </BaseCard>
 </template>

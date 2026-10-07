@@ -9,7 +9,7 @@ import { useAppealQueue } from '@/composables/useAppealQueue'
 import { useReviewActions } from '@/composables/useReviewActions'
 import type { AdminAppealItem } from '@/types/review'
 
-const { items, loading, loadingMore, hasMore, refresh, loadMore } = useAppealQueue()
+const { items, loading, loadingMore, hasMore, failed, refresh, loadMore } = useAppealQueue()
 const { submitting, acceptAppeal, rejectAppeal } = useReviewActions()
 
 const dialogOpen = ref(false)
@@ -49,7 +49,7 @@ async function handleSubmit(approved: boolean, reason: string): Promise<void> {
     </div>
 
     <section class="ql-card overflow-hidden">
-      <AppealTable :items="items" :loading="loading" @review="openReview" />
+      <AppealTable :items="items" :loading="loading" :failed="failed" @review="openReview" />
 
       <div v-if="hasMore" class="border-t border-line px-3 py-3 text-center">
         <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">加载更多</BaseButton>

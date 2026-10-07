@@ -16,6 +16,8 @@ const {
   loading,
   loadingMore,
   hasMore,
+  failed,
+  filtersDirty,
   submitting,
   refresh,
   loadMore,
@@ -120,6 +122,8 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
         <input
           :value="filters.minCredit"
           type="number"
+          min="0"
+          max="100"
           class="ql-field"
           placeholder="含"
           @input="setCreditFilter('minCredit', $event)"
@@ -131,6 +135,8 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
         <input
           :value="filters.maxCredit"
           type="number"
+          min="0"
+          max="100"
           class="ql-field"
           placeholder="含"
           @input="setCreditFilter('maxCredit', $event)"
@@ -157,13 +163,23 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
       <UserTable
         :items="items"
         :loading="loading"
+        :failed="failed"
         @ban="openBan"
         @unban="handleUnban"
         @credit="openCredit"
       />
 
       <div v-if="hasMore" class="border-t border-line px-3 py-3 text-center">
-        <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">
+        <p v-if="filtersDirty" class="mb-2 text-xs text-muted">
+          筛选条件已修改，请先点击「查询」再继续加载
+        </p>
+        <BaseButton
+          variant="ghost"
+          size="sm"
+          :disabled="filtersDirty"
+          :loading="loadingMore"
+          @click="loadMore"
+        >
           加载更多
         </BaseButton>
       </div>

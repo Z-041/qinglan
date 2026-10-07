@@ -131,8 +131,10 @@ router.beforeEach(async (to) => {
       try {
         await useAuth().loadProfile()
       } catch {
-        // 多为 401，拦截器已清理登录态并跳向对应登录页；这里只决定去向
-        return { name: 'home' }
+        // 拿不到档案（多为 401，也可能网络故障）：此刻**无法确认**管理员身份，
+        // 应回管理端登录页并带上原目标，而不是把已持令牌的用户丢回首页——
+        // 那会让令牌失效的管理员以为「后台入口没了」，也覆盖掉拦截器已发出的跳转。
+        return { name: 'admin-login', query: { redirect: to.fullPath } }
       }
     }
     if (!isAdmin(userStore.profile?.role)) {

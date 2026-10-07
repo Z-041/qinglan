@@ -20,6 +20,11 @@ export function usePublish() {
   const images = ref<string[]>([])
 
   const submitting = ref(false)
+  /**
+   * 话题拉取是否失败过。话题是发帖的前置：失败时不提示就等于「选择话题」永远空白、
+   * 发布按钮永远灰着却不说为什么。
+   */
+  const topicsFailed = ref(false)
 
   const selectedTopic = computed(
     () => topics.value.find((topic) => topic.id === topicId.value) ?? null,
@@ -42,10 +47,12 @@ export function usePublish() {
   )
 
   async function loadTopics(): Promise<void> {
+    topicsFailed.value = false
     try {
       topics.value = await fetchTopics()
     } catch {
-      // 错误已由拦截器提示
+      // 错误已由拦截器提示；这里只记状态位，供页面给出「重试」
+      topicsFailed.value = true
     }
   }
 
@@ -77,6 +84,7 @@ export function usePublish() {
     contact,
     images,
     submitting,
+    topicsFailed,
     selectedTopic,
     blockedReason,
     contactRequired,

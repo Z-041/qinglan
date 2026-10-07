@@ -69,6 +69,15 @@ function remove(url: string): void {
       <span>{{ props.uploading ? '上传中' : '添加图片' }}</span>
     </button>
 
-    <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="handleFiles" />
+    <!-- accept 与后端 ImageType（JPEG / PNG / WEBP）白名单对齐：宽泛的 image/* 会让用户选中
+         GIF 等后端拒收的类型，白跑一次上传才收到错误提示 -->
+    <input
+      ref="fileInput"
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      multiple
+      class="hidden"
+      @change="handleFiles"
+    />
   </div>
 </template>

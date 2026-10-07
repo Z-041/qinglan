@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 
+import BaseButton from '@/components/base/BaseButton.vue'
 import BaseCard from '@/components/base/BaseCard.vue'
 import { useDashboard } from '@/composables/useDashboard'
 
@@ -65,13 +66,9 @@ onMounted(() => {
   <div class="flex flex-col gap-5">
     <div class="flex items-center justify-between">
       <h1 class="text-lg font-semibold text-ink">数据看板</h1>
-      <button
-        type="button"
-        class="cursor-pointer text-sm text-muted transition hover:text-primary-deep"
-        @click="load"
-      >
-        刷新
-      </button>
+      <!-- 用 BaseButton 而非裸 button：与其余管理端页面一致，且 loading 期间自动禁用，
+           避免连点打出多个请求 -->
+      <BaseButton variant="ghost" size="sm" :loading="loading" @click="load">刷新</BaseButton>
     </div>
 
     <p v-if="loading && !stats" class="text-sm text-muted">加载中…</p>

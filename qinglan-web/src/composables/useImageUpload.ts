@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 
 import { uploadImage } from '@/api/upload'
+import { pushToast } from '@/composables/useToast'
 
 /** 与后端 qinglan.post.max-images-per-post 保持一致 */
 export const MAX_IMAGES_PER_POST = 9
@@ -22,14 +23,27 @@ export function useImageUpload() {
    * 上一次刚传好的结果。合并交给调用方，在拿到返回值后基于**当时的**列表追加。
    */
   async function addFiles(files: File[], existing: string[]): Promise<string[]> {
-    const remaining = MAX_IMAGES_PER_POST - existing.length
-    if (!files.length || remaining <= 0) {
+    if (!files.length) {
       return []
+    }
+    const remaining = MAX_IMAGES_PER_POST - existing.length
+    if (remaining <= 0) {
+      // 已满还选图：必须说一声，否则用户以为图传上去了，直到发帖才发现少图
+      pushToast(`最多只能上传 ${MAX_IMAGES_PER_POST} 张图片`, 'error')
+      return []
+    }
+    const accepted = files.slice(0, remaining)
+    if (files.length > remaining) {
+      // 超出的部分不静默丢弃：明确告知忽略了几张
+      pushToast(
+        `最多 ${MAX_IMAGES_PER_POST} 张图片，已忽略超出的 ${files.length - remaining} 张`,
+        'error',
+      )
     }
     const added: string[] = []
     uploading.value = true
     try {
-      for (const file of files.slice(0, remaining)) {
+      for (const file of accepted) {
         const { url } = await uploadImage(file)
         // 同一次选择内去重；跨次重复由调用方按当时的列表判断
         if (!added.includes(url) && !existing.includes(url)) {
