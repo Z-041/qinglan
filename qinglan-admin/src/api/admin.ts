@@ -2,9 +2,13 @@ import { httpGet, httpPost } from '@shared/api/http'
 
 import type {
   AdminAnnouncementItem,
+  AdminAuditLogItem,
+  AdminMe,
   AdminStats,
   AdminUserQuery,
+  AuditLogQuery,
   BanUserPayload,
+  ChangeUserRolePayload,
   CreateAnnouncementPayload,
   CreditAdjustPayload,
 } from '@/types/admin'
@@ -71,4 +75,37 @@ export function publishAnnouncement(id: number): Promise<void> {
 /** 撤回公告（仅 SUPER_ADMIN）；撤回后不可再发布（决策 D7） */
 export function revokeAnnouncement(id: number): Promise<void> {
   return httpPost<void>(`/admin/announcements/${id}/revoke`)
+}
+
+// ------------------------------------------------------------------ P5 权限模型
+
+/**
+ * 当前管理端身份：角色 + 权限点（P5 7.2）。
+ * 只要求登录，不要求权限点——它回答的正是「我有哪些权限点」。
+ */
+export function fetchAdminMe(): Promise<AdminMe> {
+  return httpGet<AdminMe>('/admin/me')
+}
+
+/**
+ * 委员会成员（管理员 + 评议员）。
+ * 后端按 6 人上限约束，是有界集合，因此不分页。
+ */
+export function fetchCommittee(): Promise<UserProfile[]> {
+  return httpGet<UserProfile[]>('/admin/users/committee')
+}
+
+/** 下放 / 收回 / 互转角色（仅超管；只接受 ADMIN / REVIEWER / STUDENT） */
+export function changeUserRole(userId: number, payload: ChangeUserRolePayload): Promise<void> {
+  return httpPost<void>(`/admin/users/${userId}/role`, payload)
+}
+
+/** 审计日志：游标分页 + 可选动作 / 时间筛选（仅超管） */
+export function fetchAuditLogs(query: AuditLogQuery = {}): Promise<CursorPage<AdminAuditLogItem>> {
+  return httpGet<CursorPage<AdminAuditLogItem>>('/admin/audit-logs', {
+    cursor: query.cursor,
+    action: query.action,
+    from: query.from,
+    to: query.to,
+  })
 }

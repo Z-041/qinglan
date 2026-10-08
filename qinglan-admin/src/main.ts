@@ -11,6 +11,7 @@ import './styles/element-plus-vars.css'
 import App from './App.vue'
 import { setUnauthorizedHandler } from '@shared/api/http'
 import { useUserStore } from '@shared/stores/user'
+import { usePermissions } from './composables/usePermissions'
 import router from './router'
 
 const pinia = createPinia()
@@ -21,6 +22,8 @@ const app = createApp(App).use(pinia).use(router)
 const userStore = useUserStore(pinia)
 setUnauthorizedHandler(() => {
   userStore.signOut()
+  // 令牌已失效，权限点也必须清掉：它是模块级状态，留着会漏给下一个登录的账号
+  usePermissions().reset()
   const current = router.currentRoute.value
   if (current.name !== 'admin-login') {
     void router.replace({ name: 'admin-login', query: { redirect: current.fullPath } })

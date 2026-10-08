@@ -1,11 +1,59 @@
 import type { AnnouncementLevel } from '@shared/types/announcement'
 import type { UserProfile, UserRole, UserStatus } from '@shared/types/user'
+import type { AdminPermission } from '@/types/permission'
 
 /**
  * 公告等级直接复用学生端公告的类型（单一来源），管理端不再另造同枚举。
  * 决策 D14 相关的 DTO 差异只在字段形态，枚举取值两边一致。
  */
 export type { AnnouncementLevel }
+
+/** 与后端 user/dto/AdminMeResponse 一一对应（P5 7.2）：角色 + 权限点，前端据此渲染 */
+export interface AdminMe {
+  userId: number
+  role: UserRole
+  permissions: AdminPermission[]
+}
+
+/**
+ * 与后端 user/dto/AssignableRole 一一对应。
+ * 刻意不含 SUPER_ADMIN：超管唯一且是初始账号，前端也不该提供这个选项。
+ */
+export type AssignableRole = 'ADMIN' | 'REVIEWER' | 'STUDENT'
+
+/** 与后端 user/dto/ChangeUserRoleRequest 一一对应 */
+export interface ChangeUserRolePayload {
+  role: AssignableRole
+  reason: string
+}
+
+/** 与后端 common/audit/AuditTargetType 一致 */
+export type AuditTargetType = 'USER' | 'POST' | 'COMMENT' | 'ANNOUNCEMENT'
+
+/**
+ * 与后端 review/dto/AdminAuditLogItemResponse 一一对应（P5 7.5）。
+ *
+ * 不含任何身份明文：操作人只以 id 出现（不变量 #3，超管也不例外）。
+ */
+export interface AdminAuditLogItem {
+  id: number
+  targetType: AuditTargetType
+  targetId: number
+  /** 审计动作码（AuditAction 枚举名），界面按码映射中文 */
+  action: string
+  operatorId: number
+  reason: string | null
+  createdAt: string
+}
+
+/** 审计日志查询条件：全部可选，空串表示不限 */
+export interface AuditLogQuery {
+  cursor?: string | null
+  action?: string | null
+  /** ISO-8601 字符串，后端按 Instant 解析 */
+  from?: string | null
+  to?: string | null
+}
 
 /** 与后端 user/dto/AdminUserQuery 一一对应：全部可选且可组合，游标原样回传 */
 export interface AdminUserQuery {

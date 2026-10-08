@@ -1,0 +1,186 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+
+import { changeUserRole, fetchCommittee } from '@/api/admin'
+import BaseButton from '@shared/components/base/BaseButton.vue'
+import BaseCard from '@shared/components/base/BaseCard.vue'
+import { pushToast } from '@shared/composables/useToast'
+import { useUserLabels } from '@shared/composables/useUserLabels'
+import type { AssignableRole } from '@/types/admin'
+import type { UserProfile } from '@shared/types/user'
+
+/** 与后端 UserRole.MAX_COMMITTEE_SIZE 一致；仅用于文案「已用 N / 6」 */
+const MAX_COMMITTEE_SIZE = 6
+
+/** 可下放的角色：与后端 AssignableRole 一致，刻意不含 SUPER_ADMIN */
+const ASSIGNABLE_OPTIONS: { value: AssignableRole; label: string }[] = [
+  { value: 'ADMIN', label: '管理员' },
+  { value: 'REVIEWER', label: '学生评议员' },
+]
+
+const { roleLabel, statusLabel } = useUserLabels()
+
+const members = ref<UserProfile[]>([])
+const loading = ref(false)
+const failed = ref(false)
+const submitting = ref(false)
+
+const targetUserId = ref('')
+const targetRole = ref<AssignableRole>('REVIEWER')
+
+/** 在册人数由后端名单长度决定，不在前端另算——两边各算一次必然漂移 */
+const used = computed(() => members.value.filter((member) => member.role !== 'SUPER_ADMIN').length)
+const full = computed(() => used.value >= MAX_COMMITTEE_SIZE)
+
+async function load(): Promise<void> {
+  loading.value = true
+  failed.value = false
+  try {
+    members.value = await fetchCommittee()
+  } catch {
+    // 错误已由拦截器提示；这里只区分「加载失败」与「暂无成员」
+    failed.value = true
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  void load()
+})
+
+/** 权限变更必须留下理由：它是审计里唯一能回答「为什么是他」的字段 */
+async function promptReason(title: string): Promise<string | null> {
+  try {
+    const result = await ElMessageBox.prompt('理由会写入审计日志，事后可追溯', title, {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      inputPlaceholder: '理由',
+      inputValidator: (value: string) => (value.trim().length > 0 ? true : '理由不能为空'),
+    })
+    return result.value.trim()
+  } catch {
+    // 用户取消不是错误，静默返回
+    return null
+  }
+}
+
+async function submitChange(userId: number, role: AssignableRole, title: string): Promise<boolean> {
+  const reason = await promptReason(title)
+  if (reason === null) {
+    return false
+  }
+  submitting.value = true
+  try {
+    await changeUserRole(userId, { role, reason })
+    pushToast(role === 'STUDENT' ? '已收回管理权限' : '已下放权限', 'info')
+    await load()
+    return true
+  } catch {
+    // 错误（名额已满 / 不可动超管 / 不能改自己）已由拦截器提示
+    return false
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function grant(): Promise<void> {
+  const parsed = Number(targetUserId.value.trim())
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    pushToast('请填写有效的用户 ID', 'error')
+    return
+  }
+  if (await submitChange(parsed, targetRole.value, '下放管理权限')) {
+    targetUserId.value = ''
+  }
+}
+
+async function revoke(member: UserProfile): Promise<void> {
+  await submitChange(member.id, 'STUDENT', `收回权限（userId=${member.id}）`)
+}
+</script>
+
+<template>
+  <div class="flex flex-col gap-5">
+    <div class="flex items-center justify-between">
+      <h1 class="text-lg font-semibold text-ink">权限管理</h1>
+      <BaseButton variant="ghost" size="sm" :loading="loading" @click="load">刷新</BaseButton>
+    </div>
+
+    <p class="text-sm text-muted">
+      管理员与学生评议员共同组成处置表决委员会，合计上限 {{ MAX_COMMITTEE_SIZE }} 人；
+      超级管理员唯一且不可被下放或收回。
+    </p>
+
+    <BaseCard>
+      <h2 class="text-sm font-medium text-muted">下放管理权限</h2>
+      <p class="mt-1 text-xs text-muted">
+        <!-- 不变量 #3：后台看不到学号与邮箱，因此只能按用户 ID 操作 -->
+        出于隐私要求后台看不到学号与邮箱，请填写目标用户的 ID（可由本人提供）。
+      </p>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <el-input v-model="targetUserId" class="w-[160px]" placeholder="用户 ID" inputmode="numeric" />
+        <el-select v-model="targetRole" class="w-[160px]">
+          <el-option
+            v-for="option in ASSIGNABLE_OPTIONS"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </el-select>
+        <BaseButton variant="primary" size="sm" :disabled="submitting || full" @click="grant">
+          授予
+        </BaseButton>
+        <span v-if="full" class="text-xs text-danger-deep">
+          名额已满（{{ used }} / {{ MAX_COMMITTEE_SIZE }}），请先收回其他成员的权限
+        </span>
+      </div>
+    </BaseCard>
+
+    <section class="ql-card overflow-hidden">
+      <div class="flex items-center justify-between border-b border-line px-3 py-2.5">
+        <span class="text-sm font-medium text-ink">委员会成员</span>
+        <span class="text-xs text-muted">{{ used }} / {{ MAX_COMMITTEE_SIZE }}</span>
+      </div>
+      <table class="w-full border-collapse text-sm">
+        <thead>
+          <tr class="border-b border-line text-left text-xs text-muted">
+            <th class="px-3 py-2.5 font-medium">用户 ID</th>
+            <th class="px-3 py-2.5 font-medium">角色</th>
+            <th class="px-3 py-2.5 font-medium">状态</th>
+            <th class="px-3 py-2.5 font-medium">信用分</th>
+            <th class="px-3 py-2.5 font-medium">加入时间</th>
+            <th class="px-3 py-2.5 font-medium">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="member in members" :key="member.id" class="border-b border-line last:border-0">
+            <td class="px-3 py-3">{{ member.id }}</td>
+            <td class="px-3 py-3">{{ roleLabel(member.role) }}</td>
+            <td class="px-3 py-3">{{ statusLabel(member.status) }}</td>
+            <td class="px-3 py-3">{{ member.creditScore }}</td>
+            <td class="px-3 py-3">{{ new Date(member.createdAt).toLocaleString() }}</td>
+            <td class="px-3 py-3">
+              <!-- 超管不可被收回：后端也会拒（唯一超管是后台的最后一道保险） -->
+              <button
+                v-if="member.role !== 'SUPER_ADMIN'"
+                type="button"
+                class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-danger hover:text-danger-deep disabled:cursor-not-allowed"
+                :disabled="submitting"
+                @click="revoke(member)"
+              >
+                收回权限
+              </button>
+              <span v-else class="text-xs text-muted">不可变更</span>
+            </td>
+          </tr>
+          <tr v-if="!members.length">
+            <td colspan="6" class="px-3 py-10 text-center text-sm text-muted">
+              {{ loading ? '加载中…' : failed ? '加载失败，请点击「刷新」重试' : '暂无成员' }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+</template>

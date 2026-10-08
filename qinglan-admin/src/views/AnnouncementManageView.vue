@@ -10,13 +10,18 @@ import {
 import AnnouncementFormDialog from '@/components/admin/AnnouncementFormDialog.vue'
 import AnnouncementTable from '@/components/admin/AnnouncementTable.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import { useUserStore } from '@shared/stores/user'
+import { usePermissions } from '@/composables/usePermissions'
 import type { AdminAnnouncementItem, CreateAnnouncementPayload } from '@/types/admin'
 
-const userStore = useUserStore()
+const { can } = usePermissions()
 
-/** 发布/撤回仅 SUPER_ADMIN（P4 决策 D8）；普通管理员只能建草稿 */
-const canOperate = computed(() => userStore.profile?.role === 'SUPER_ADMIN')
+/**
+ * 发布 / 撤回仅超管（P4 决策 D8，P5 权限点 ANNOUNCEMENT_MANAGE）。
+ *
+ * 判权限点而不是判角色：角色差异只体现在后端下发的权限点上，
+ * 页面里不再出现 `role === 'SUPER_ADMIN'` 这类硬编码（P5 设计 9.1）。
+ */
+const canOperate = computed(() => can('ANNOUNCEMENT_MANAGE'))
 
 const items = ref<AdminAnnouncementItem[]>([])
 const loading = ref(false)

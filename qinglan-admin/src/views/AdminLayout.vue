@@ -5,26 +5,29 @@ import { useRouter } from 'vue-router'
 
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useUserStore } from '@shared/stores/user'
-
-/** 侧边栏六项（spec 5.4）；name 与路由名一一对应 */
-const NAV_ITEMS = [
-  { name: 'admin-dashboard', label: '看板' },
-  { name: 'admin-pending-posts', label: '待审帖子' },
-  { name: 'admin-review-queue', label: '审核队列' },
-  { name: 'admin-appeals', label: '申诉复审' },
-  { name: 'admin-users', label: '用户管理' },
-  { name: 'admin-announcements', label: '公告管理' },
-] as const
+import { usePermissions } from '@/composables/usePermissions'
+import { visibleNavItems } from '@/router/navItems'
 
 const router = useRouter()
 const userStore = useUserStore()
 const { profile } = storeToRefs(userStore)
 const { roleLabel } = useUserLabels()
+const { permissions, reset } = usePermissions()
+
+/**
+ * 菜单按权限点过滤（P5 设计 9.1）。
+ *
+ * 不在这里写 `role === 'SUPER_ADMIN'` 这类判断：菜单与权限的对应关系在 `navItems.ts`
+ * 一处维护，角色差异只体现在后端下发的权限点上。
+ */
+const navItems = computed(() => visibleNavItems(permissions.value))
 
 const roleText = computed(() => (profile.value ? roleLabel(profile.value.role) : ''))
 
 function signOut(): void {
   userStore.signOut()
+  // 权限点是模块级状态，换账号必须清掉，否则上一份权限会漏给下一个人
+  reset()
   void router.replace({ name: 'admin-login' })
 }
 </script>
@@ -36,7 +39,7 @@ function signOut(): void {
       <p class="px-5 py-5 text-sm font-semibold text-ink">青栏管理后台</p>
       <nav class="flex flex-1 flex-col gap-1 px-2">
         <RouterLink
-          v-for="item in NAV_ITEMS"
+          v-for="item in navItems"
           :key="item.name"
           :to="{ name: item.name }"
           class="rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-primary-tint hover:text-ink [&.router-link-exact-active]:bg-primary-soft [&.router-link-exact-active]:font-medium [&.router-link-exact-active]:text-primary-deep"

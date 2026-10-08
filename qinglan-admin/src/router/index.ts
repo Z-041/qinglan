@@ -4,11 +4,18 @@ import { useAuth } from '@shared/composables/useAuth'
 import { pushToast } from '@shared/composables/useToast'
 import { useUserStore } from '@shared/stores/user'
 import { isAdminRole } from '@shared/types/user'
+import { usePermissions } from '@/composables/usePermissions'
+import type { AdminPermission } from '@/types/permission'
 
 declare module 'vue-router' {
   interface RouteMeta {
-    /** 需要管理员角色（ADMIN / SUPER_ADMIN） */
+    /** 需要管理员角色（ADMIN / SUPER_ADMIN）；学生评议员也在此列 */
     requiresAdmin?: boolean
+    /**
+     * 该页面所需的权限点（P5）。菜单已按权限过滤，这里兜的是「手输 URL」这条路——
+     * 前端拦一道只是体验，真正的防线是后端端点上的注解。
+     */
+    permission?: AdminPermission
   }
 }
 
@@ -34,31 +41,49 @@ const router = createRouter({
           path: 'dashboard',
           name: 'admin-dashboard',
           component: () => import('@/views/DashboardView.vue'),
+          meta: { permission: 'STATS_VIEW' },
         },
         {
           path: 'pending-posts',
           name: 'admin-pending-posts',
           component: () => import('@/views/PendingPostQueueView.vue'),
+          meta: { permission: 'MODERATION_VIEW' },
         },
         {
           path: 'review-queue',
           name: 'admin-review-queue',
           component: () => import('@/views/ReviewQueueView.vue'),
+          meta: { permission: 'MODERATION_VIEW' },
         },
         {
           path: 'appeals',
           name: 'admin-appeals',
           component: () => import('@/views/AppealQueueView.vue'),
+          meta: { permission: 'APPEAL_REVIEW' },
         },
         {
           path: 'users',
           name: 'admin-users',
           component: () => import('@/views/UserManageView.vue'),
+          meta: { permission: 'USER_MANAGE' },
         },
         {
           path: 'announcements',
           name: 'admin-announcements',
           component: () => import('@/views/AnnouncementManageView.vue'),
+          meta: { permission: 'ANNOUNCEMENT_DRAFT' },
+        },
+        {
+          path: 'permissions',
+          name: 'admin-permissions',
+          component: () => import('@/views/PermissionManageView.vue'),
+          meta: { permission: 'ROLE_GRANT' },
+        },
+        {
+          path: 'audit-logs',
+          name: 'admin-audit-logs',
+          component: () => import('@/views/AuditLogView.vue'),
+          meta: { permission: 'AUDIT_READ' },
         },
       ],
     },
@@ -90,6 +115,25 @@ router.beforeEach(async (to) => {
     userStore.signOut()
     pushToast('无权访问管理后台', 'error')
     return { name: 'admin-login' }
+  }
+
+  // P5：页面级权限点。菜单已按权限过滤，这里兜的是「手输 URL / 旧书签」这条路
+  const permissionState = usePermissions()
+  if (!permissionState.loaded.value) {
+    try {
+      await permissionState.load()
+    } catch {
+      // 拿不到权限点就无法判断能进哪个页面：清掉身份回登录页，
+      // 而不是把一个「什么都点不动」的空壳后台放进去
+      permissionState.reset()
+      userStore.signOut()
+      return { name: 'admin-login', query: { redirect: to.fullPath } }
+    }
+  }
+  const required = to.meta.permission
+  if (required && !permissionState.can(required)) {
+    pushToast('当前账号没有该页面的权限', 'error')
+    return { name: 'admin-dashboard' }
   }
   return true
 })
