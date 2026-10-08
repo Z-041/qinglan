@@ -1,6 +1,7 @@
 package com.qinglan.announcement.dto;
 
 import com.qinglan.announcement.entity.AnnouncementLevel;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -42,4 +43,16 @@ public record CreateAnnouncementRequest(
 
         Long supersedesId
 ) {
+
+    /**
+     * 结束时间必须晚于开始时间。
+     *
+     * <p>否则草稿能正常发布、管理端看起来也「已发布」，但生效判定
+     * （{@code startAt <= now < endAt}）永远为假，用户侧一条都收不到——属于静默失效，
+     * 事后很难归因。跨字段约束放在 DTO：它属参数校验范畴，不该等到业务层才发现。</p>
+     */
+    @AssertTrue(message = "结束时间必须晚于开始时间")
+    public boolean isTimeRangeValid() {
+        return startAt == null || endAt == null || endAt.isAfter(startAt);
+    }
 }

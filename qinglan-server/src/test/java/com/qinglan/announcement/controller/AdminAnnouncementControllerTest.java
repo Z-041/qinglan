@@ -102,6 +102,19 @@ class AdminAnnouncementControllerTest {
     }
 
     @Test
+    @DisplayName("结束时间早于开始时间返回 400：否则公告发布后永远不生效（R-32）")
+    void shouldRejectEndAtBeforeStartAt() throws Exception {
+        authenticateAsSuperAdmin();
+
+        mockMvc.perform(post("/api/admin/announcements")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"紧急公告\",\"content\":\"正文\",\"level\":\"URGENT\","
+                                + "\"startAt\":\"2026-10-07T00:00:00Z\",\"endAt\":\"2026-10-06T00:00:00Z\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("QL-400-001"));
+    }
+
+    @Test
     @DisplayName("合法建草稿返回 200，且操作人取自登录态")
     void shouldCreateDraftSuccessfully() throws Exception {
         authenticateAsSuperAdmin();
