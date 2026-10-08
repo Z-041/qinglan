@@ -30,6 +30,12 @@ const failed = ref(false)
 /** 不放进 ref：只作为下一次请求的入参，变化不需要触发渲染 */
 let cursor: string | null = null
 
+/**
+ * 请求序号。发布/撤回之后的 refresh 与用户点「刷新」可能同时在飞，**先发的不一定先到**：
+ * 没有它的话，晚到的旧响应会把新结果覆盖掉，列表与游标随之错位。
+ */
+let requestSeq = 0
+
 function applyPage(
   page: { items: AdminAnnouncementItem[]; nextCursor: string | null },
   append: boolean,
@@ -40,6 +46,7 @@ function applyPage(
 }
 
 async function refresh(): Promise<void> {
+  const seq = ++requestSeq
   loading.value = true
   failed.value = false
   // 先清干净再请求：否则本次失败时列表与游标会留在上一次的结果集上，
@@ -48,12 +55,21 @@ async function refresh(): Promise<void> {
   cursor = null
   hasMore.value = false
   try {
-    applyPage(await fetchAdminAnnouncements(null), false)
+    const page = await fetchAdminAnnouncements(null)
+    // 过期响应必须丢弃，否则旧结果会覆盖新结果
+    if (seq !== requestSeq) {
+      return
+    }
+    applyPage(page, false)
   } catch {
     // 错误已由拦截器提示；这里只记状态位，供表格区分「加载失败」与「没有公告」
-    failed.value = true
+    if (seq === requestSeq) {
+      failed.value = true
+    }
   } finally {
-    loading.value = false
+    if (seq === requestSeq) {
+      loading.value = false
+    }
   }
 }
 
@@ -61,9 +77,15 @@ async function loadMore(): Promise<void> {
   if (!hasMore.value || loading.value || loadingMore.value) {
     return
   }
+  // 记下发起时的序号：期间若刷新过（requestSeq 会 +1），这次的响应必须丢弃
+  const seq = requestSeq
   loadingMore.value = true
   try {
-    applyPage(await fetchAdminAnnouncements(cursor), true)
+    const page = await fetchAdminAnnouncements(cursor)
+    if (seq !== requestSeq) {
+      return
+    }
+    applyPage(page, true)
   } catch {
     // 错误已由拦截器提示
   } finally {

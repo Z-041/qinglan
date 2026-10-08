@@ -47,6 +47,15 @@ const { targetTypeLabel, targetStatusLabel, reportReasonLabel } = useUserLabels(
           >
             {{ reportReasonLabel(reason) }}
           </span>
+          <!-- 举报人填的补充说明：选「其他」时这是唯一线索，故与理由一并展示 -->
+          <p
+            v-for="detail in row.details"
+            :key="detail"
+            class="max-w-[320px] truncate text-xs text-muted"
+            :title="detail"
+          >
+            {{ detail }}
+          </p>
         </td>
         <td class="px-3 py-3">
           <button

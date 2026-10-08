@@ -17,6 +17,7 @@ function item(targetId: number, overrides: Partial<AdminQueueItem> = {}): AdminQ
     reportCount: 3,
     firstReportedAt: '2026-10-06T00:00:00Z',
     reasons: ['ABUSE'],
+    details: [],
     ...overrides,
   }
 }

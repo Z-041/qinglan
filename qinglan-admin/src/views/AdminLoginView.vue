@@ -11,6 +11,7 @@ import { useCodeCooldown } from '@shared/composables/useCodeCooldown'
 import { pushToast } from '@shared/composables/useToast'
 import { useUserStore } from '@shared/stores/user'
 import { isAdminRole } from '@shared/types/user'
+import { resolveAdminRedirect } from '@/router/redirect'
 
 /** 与后端 qinglan.auth.code-ttl 默认值保持一致，仅用于文案提示 */
 const CODE_TTL_MINUTES = 5
@@ -37,11 +38,6 @@ async function attempt<T>(action: () => Promise<T>): Promise<T | null> {
   } catch {
     return null
   }
-}
-
-function targetPath(): string {
-  const redirect = route.query.redirect
-  return typeof redirect === 'string' && redirect.startsWith('/admin') ? redirect : '/admin/dashboard'
 }
 
 async function handleSendCode(): Promise<void> {
@@ -73,7 +69,7 @@ async function handleVerify(): Promise<void> {
     pushToast('该账号没有管理后台权限', 'error')
     return
   }
-  void router.replace(targetPath())
+  void router.replace(resolveAdminRedirect(route.query.redirect))
 }
 </script>
 

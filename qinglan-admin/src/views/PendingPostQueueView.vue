@@ -18,7 +18,6 @@ const {
   failed: contextFailed,
   open,
   close,
-  reload,
 } = useReviewContext()
 const { submitting, approvePost, rejectPost } = useReviewActions()
 
@@ -40,11 +39,16 @@ function handleSelect(row: AdminPendingPostItem): void {
   void open({ targetType: 'POST', targetId: row.postId })
 }
 
-/** 处置成功后的统一收尾：关面板、提示、刷新队列与上下文 */
+/**
+ * 处置成功后的收尾：关面板、提示、刷新队列。
+ *
+ * 不刷新上下文：面板一关，`panelOpen` 的 watch 就会 close() 并作废在飞的请求，
+ * 此时 reload() 的响应必被丢弃，只会白发一次请求。
+ */
 async function afterHandled(message: string): Promise<void> {
   panelOpen.value = false
   pushToast(message, 'info')
-  await Promise.all([refresh(), reload()])
+  await refresh()
 }
 
 async function handleApprove(): Promise<void> {

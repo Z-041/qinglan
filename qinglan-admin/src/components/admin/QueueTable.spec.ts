@@ -13,6 +13,7 @@ function item(overrides: Partial<AdminQueueItem> = {}): AdminQueueItem {
     reportCount: 2,
     firstReportedAt: '2026-10-01T00:00:00Z',
     reasons: ['ABUSE', 'FRAUD'],
+    details: [],
     ...overrides,
   }
 }
@@ -44,6 +45,16 @@ describe('QueueTable', () => {
     expect(wrapper.findAll('td').some((cell) => cell.text() === '2')).toBe(true)
     expect(text).toContain('辱骂、人身攻击')
     expect(text).toContain('诈骗与欺诈')
+  })
+
+  it('渲染举报人填写的补充说明：理由选「其他」时这是唯一线索', () => {
+    const wrapper = mount(QueueTable, {
+      props: { items: [item({ reasons: ['OTHER'], details: ['疑似中介在拉群', '还发了外链'] })] },
+    })
+
+    expect(wrapper.text()).toContain('其他')
+    expect(wrapper.text()).toContain('疑似中介在拉群')
+    expect(wrapper.text()).toContain('还发了外链')
   })
 
   it('首报超过 24 小时的行标红', () => {

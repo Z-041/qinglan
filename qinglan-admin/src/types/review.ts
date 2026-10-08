@@ -18,6 +18,11 @@ export interface AdminQueueItem {
   reportCount: number
   firstReportedAt: string
   reasons: ReportReason[]
+  /**
+   * 举报人填写的补充说明（已去重、只含非空项）。
+   * 理由选「其他」时它是唯一线索，此前只入库不出参、管理端读不到。
+   */
+  details: string[]
 }
 
 /**

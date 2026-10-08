@@ -41,7 +41,12 @@ export function useAppealQueue() {
     cursor = null
     hasMore.value = false
     try {
-      applyPage(await fetchAdminAppeals(null), false)
+      const page = await fetchAdminAppeals(null)
+      // 过期响应必须丢弃：复审后的 refresh 与用户点「刷新」可能同时在飞，先发的不一定先到
+      if (seq !== requestSeq) {
+        return
+      }
+      applyPage(page, false)
     } catch {
       // 错误已由拦截器提示；只有当前这次请求才有权把状态置为失败
       if (seq === requestSeq) {

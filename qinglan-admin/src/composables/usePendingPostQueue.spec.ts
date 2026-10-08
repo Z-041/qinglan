@@ -87,4 +87,25 @@ describe('usePendingPostQueue', () => {
     expect(queue.hasMore.value).toBe(false)
     expect(queue.failed.value).toBe(true)
   })
+
+  it('并发刷新时丢弃先发的过期响应，旧结果不得覆盖新结果', async () => {
+    let resolveFirst!: (page: { items: AdminPendingPostItem[]; nextCursor: string | null }) => void
+    mockedFetchAdminPendingPosts
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveFirst = resolve
+      }))
+      .mockResolvedValueOnce({ items: [pendingPost(2)], nextCursor: null })
+
+    const queue = usePendingPostQueue()
+    const first = queue.refresh()
+    const second = queue.refresh()
+    await second
+
+    // 先发的那次此时才返回：序号已过期，必须被丢弃
+    resolveFirst({ items: [pendingPost(1)], nextCursor: 'stale' })
+    await first
+
+    expect(queue.items.value.map((row) => row.postId)).toEqual([2])
+    expect(queue.hasMore.value).toBe(false)
+  })
 })
