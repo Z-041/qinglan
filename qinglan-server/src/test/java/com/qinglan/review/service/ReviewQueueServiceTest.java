@@ -89,6 +89,8 @@ class ReviewQueueServiceTest {
         when(reportRepository.findByTargetTypeAndTargetIdInAndStatus(
                 ReviewTargetType.POST, List.of(1L), ReportStatus.PENDING))
                 .thenReturn(List.of(report(ReviewTargetType.POST, 1L, ReportReason.ABUSE),
+                        reportWithDetail(ReviewTargetType.POST, 1L, ReportReason.OTHER, "疑似中介在拉群"),
+                        reportWithDetail(ReviewTargetType.POST, 1L, ReportReason.OTHER, "疑似中介在拉群"),
                         report(ReviewTargetType.POST, 1L, ReportReason.ADVERTISEMENT),
                         report(ReviewTargetType.POST, 1L, ReportReason.ABUSE)));
         when(reportRepository.findByTargetTypeAndTargetIdInAndStatus(
@@ -105,11 +107,16 @@ class ReviewQueueServiceTest {
         assertThat(postItem.reportCount()).isEqualTo(3);
         assertThat(postItem.firstReportedAt()).isEqualTo(BASE);
         // 去重且保序：ABUSE 只出现一次
-        assertThat(postItem.reasons()).containsExactly(ReportReason.ABUSE, ReportReason.ADVERTISEMENT);
+        assertThat(postItem.reasons())
+                .containsExactly(ReportReason.ABUSE, ReportReason.OTHER, ReportReason.ADVERTISEMENT);
+        // 补充说明同样去重后出参：重复的两条只留一条，管理端才读得到「其他」的说明
+        assertThat(postItem.details()).containsExactly("疑似中介在拉群");
 
         ReviewQueueItemResponse commentItem = page.items().get(1);
         assertThat(commentItem.targetStatus()).isEqualTo("PUBLISHED");
         assertThat(commentItem.reasons()).containsExactly(ReportReason.PRIVACY);
+        // 没填说明时是空列表，不是 null（前端无需判空）
+        assertThat(commentItem.details()).isEmpty();
     }
 
     @Test
@@ -243,6 +250,12 @@ class ReviewQueueServiceTest {
 
     private static Report report(ReviewTargetType targetType, long targetId, ReportReason reason) {
         return Report.submit(targetType, targetId, 900L, reason, null);
+    }
+
+    /** 带补充说明的举报：理由选「其他」时说明是唯一线索，必须能出现在队列出参里 */
+    private static Report reportWithDetail(
+            ReviewTargetType targetType, long targetId, ReportReason reason, String detail) {
+        return Report.submit(targetType, targetId, 901L, reason, detail);
     }
 
     private static Comment comment(long id, String content) {

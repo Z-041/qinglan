@@ -96,7 +96,8 @@ class AdminReviewControllerTest {
     void shouldReturnQueueWithStringCursor() throws Exception {
         when(reviewQueueService.queue("2:1000:1")).thenReturn(CursorPage.of(
                 List.of(new ReviewQueueItemResponse(ReviewTargetType.POST, POST_ID, "摘要", "APPROVED",
-                        2, Instant.parse("2026-10-06T00:00:00Z"), List.of(ReportReason.ABUSE))),
+                        2, Instant.parse("2026-10-06T00:00:00Z"), List.of(ReportReason.OTHER),
+                        List.of("疑似中介在拉群"))),
                 "3:2000:1"));
 
         mockMvc.perform(get("/api/admin/review-queue").param("cursor", "2:1000:1"))
@@ -104,6 +105,8 @@ class AdminReviewControllerTest {
                 .andExpect(jsonPath("$.code").value("QL-000-000"))
                 .andExpect(jsonPath("$.data.items[0].targetId").value(POST_ID))
                 .andExpect(jsonPath("$.data.items[0].reportCount").value(2))
+                // 举报人填的补充说明必须能读到：理由选「其他」时它是唯一线索
+                .andExpect(jsonPath("$.data.items[0].details[0]").value("疑似中介在拉群"))
                 .andExpect(jsonPath("$.data.nextCursor").value("3:2000:1"));
     }
 

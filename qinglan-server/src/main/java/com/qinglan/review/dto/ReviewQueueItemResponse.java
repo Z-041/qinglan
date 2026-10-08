@@ -18,6 +18,8 @@ import java.util.List;
  * @param reportCount     待处理举报数
  * @param firstReportedAt 首条举报时间
  * @param reasons         去重后的举报理由，按首次出现顺序
+ * @param details         去重后的举报补充说明（非空项）：举报理由选「其他」时说明即唯一线索，
+ *                        此前只入库不出参，管理员在任何界面都读不到
  */
 public record ReviewQueueItemResponse(
         ReviewTargetType targetType,
@@ -26,6 +28,7 @@ public record ReviewQueueItemResponse(
         String targetStatus,
         int reportCount,
         Instant firstReportedAt,
-        List<ReportReason> reasons
+        List<ReportReason> reasons,
+        List<String> details
 ) {
 }

@@ -129,8 +129,11 @@ public class ReviewService {
     /**
      * 恢复可见（TakenDown → Approved）。申诉通过走同一条路径。
      *
-     * <p>不回溯举报：被恢复说明原举报不成立，但那些举报早在前置处置时就已结案，
-     * 此处不再改动它们的状态，避免把已结案的记录反复改写。</p>
+     * <p><b>同时结案该帖的待处理举报</b>：恢复即「认定原举报不成立」，因此把待处理举报置为
+     * {@code DISMISSED} 并原子回退 {@code report_count}。不清这一步会留下两个后果（R-31）：
+     * 自动降级路径刻意把举报留在 PENDING，恢复后计数仍 ≥ 阈值，于是下一条举报立刻让帖子
+     * 再次自动下架，「恢复」形同虚设；且队列里会长期挂着一条 targetStatus=APPROVED 的行。
+     * 手工下架路径的举报在 {@link #takeDown} 时已结案，这里自然成为空操作。</p>
      *
      * <p><b>幂等</b>：已是可见态时直接返回，不迁移也不写审计。申诉存在「作者申诉后、
      * 复审前另一位管理员已手工恢复」的窗口，若此处仍硬走状态机，复审通过会因为
@@ -144,8 +147,17 @@ public class ReviewService {
             return;
         }
         post.transitionTo(new ReviewState.Approved(operatorId, Instant.now()));
+        int dismissed = dismissPendingReports(postId, operatorId);
+        if (dismissed > 0) {
+            // 必须最后调用：flushAutomatically 落定上面的状态迁移与举报结案，再 clearAutomatically 清一级缓存
+            postRepository.adjustReportCount(postId, -dismissed);
+        }
         auditLogService.record(AuditTargetType.POST, postId, AuditAction.POST_RESTORE, operatorId, reason);
-        log.info("恢复帖子 postId={}，操作人 operatorId={}", postId, operatorId);
+        if (dismissed > 0) {
+            // 结案举报是恢复的副作用，单独留一条痕迹，便于回查「谁把举报判成不成立」
+            auditLogService.record(AuditTargetType.POST, postId, AuditAction.REPORT_DISMISS, operatorId, reason);
+        }
+        log.info("恢复帖子 postId={} 结案举报数={}，操作人 operatorId={}", postId, dismissed, operatorId);
     }
 
     /**
@@ -254,6 +266,23 @@ public class ReviewService {
                 targetType, targetId, ReportStatus.PENDING);
         pending.forEach(report -> report.uphold(operatorId));
         notifyReporters(pending, REPORT_UPHELD_TITLE, targetType, targetId, operatorId);
+        return pending.size();
+    }
+
+    /**
+     * 把某帖所有待处理举报置为「不成立」并反馈举报人，返回结案条数。
+     *
+     * <p>与 {@link #dismissReports} 的区别：没有待处理举报时返回 0 而不抛错——它是
+     * {@link #restore} 的副作用（手工下架路径本就没有待处理举报），不是管理员的独立诉求。</p>
+     */
+    private int dismissPendingReports(Long postId, Long operatorId) {
+        List<Report> pending = reportRepository.findByTargetTypeAndTargetIdAndStatus(
+                ReviewTargetType.POST, postId, ReportStatus.PENDING);
+        if (pending.isEmpty()) {
+            return 0;
+        }
+        pending.forEach(report -> report.dismiss(operatorId));
+        notifyReporters(pending, REPORT_DISMISSED_TITLE, ReviewTargetType.POST, postId, operatorId);
         return pending.size();
     }
 

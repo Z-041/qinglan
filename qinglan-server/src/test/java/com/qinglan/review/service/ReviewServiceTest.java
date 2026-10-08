@@ -232,6 +232,40 @@ class ReviewServiceTest {
     }
 
     @Test
+    @DisplayName("恢复可见时结案待处理举报并回退计数，否则下一条举报会立刻再次自动下架（R-31）")
+    void shouldDismissPendingReportsWhenRestoring() {
+        Post takenDown = takenDownPost();
+        TestFixtures.setReportCount(takenDown, 3);
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(takenDown));
+        when(reportRepository.findByTargetTypeAndTargetIdAndStatus(
+                ReviewTargetType.POST, POST_ID, ReportStatus.PENDING))
+                .thenReturn(List.of(postReport(301L), postReport(302L), postReport(303L)));
+
+        reviewService.restore(POST_ID, OPERATOR_ID, "误判");
+
+        // 计数回退到 0：自动降级路径保留下来的 3 条待处理举报必须一起结案
+        verify(postRepository).adjustReportCount(POST_ID, -3);
+        verify(auditLogService).record(AuditTargetType.POST, POST_ID,
+                AuditAction.POST_RESTORE, OPERATOR_ID, "误判");
+        verify(auditLogService).record(AuditTargetType.POST, POST_ID,
+                AuditAction.REPORT_DISMISS, OPERATOR_ID, "误判");
+    }
+
+    @Test
+    @DisplayName("手工下架路径的举报早已结案：恢复时不动计数，也不写多余的驳回审计")
+    void shouldNotTouchReportCountWhenNothingPendingOnRestore() {
+        Post takenDown = takenDownPost();
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(takenDown));
+        // 仓储默认返回空集合：没有待处理举报
+
+        reviewService.restore(POST_ID, OPERATOR_ID, "误判");
+
+        assertThat(takenDown.getStatus()).isEqualTo(PostStatus.APPROVED);
+        verify(postRepository, never()).adjustReportCount(any(), anyInt());
+        verify(auditLogService, never()).record(any(), any(), eq(AuditAction.REPORT_DISMISS), any(), any());
+    }
+
+    @Test
     @DisplayName("隐藏联系方式：只改可见性、不清空值（处罚可能被撤销），并写审计")
     void shouldHideContactWithoutWipingValue() {
         Post post = approvedPost();

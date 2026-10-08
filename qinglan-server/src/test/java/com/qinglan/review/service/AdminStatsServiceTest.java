@@ -1,5 +1,6 @@
 package com.qinglan.review.service;
 
+import com.qinglan.common.audit.AuditAction;
 import com.qinglan.common.audit.AuditLogRepository;
 import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.repository.PostRepository;
@@ -13,16 +14,20 @@ import com.qinglan.user.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -58,8 +63,8 @@ class AdminStatsServiceTest {
         when(userRepository.countByStatusIn(anyCollection())).thenReturn(3L);
         when(postRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(any(), any())).thenReturn(1L);
         when(userRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(any(), any())).thenReturn(2L);
-        when(auditLogRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(any(), any()))
-                .thenReturn(6L);
+        when(auditLogRepository.countByActionInAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                anyCollection(), any(), any())).thenReturn(6L);
 
         AdminStatsResponse stats = adminStatsService.overview();
 
@@ -82,8 +87,8 @@ class AdminStatsServiceTest {
     @Test
     @DisplayName("近 7 日无数据时补 0，仍为 7 项")
     void shouldFillZeroForEmptyDays() {
-        when(auditLogRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(any(), any()))
-                .thenReturn(0L);
+        when(auditLogRepository.countByActionInAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                anyCollection(), any(), any())).thenReturn(0L);
         when(postRepository.countByStatusIn(anyCollection())).thenReturn(0L);
         when(userRepository.countByStatusIn(anyCollection())).thenReturn(0L);
 
@@ -93,5 +98,27 @@ class AdminStatsServiceTest {
         assertThat(stats.moderation().last7DaysHandled())
                 .allSatisfy(day -> assertThat(day.count()).isZero());
         assertThat(stats.moderation().todayHandled()).isZero();
+    }
+
+    @Test
+    @DisplayName("处置数只统计治理动作：普通用户浏览联系方式（CONTACT_VIEW）不计入（R-31）")
+    void shouldCountOnlyModerationActions() {
+        when(auditLogRepository.countByActionInAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                anyCollection(), any(), any())).thenReturn(0L);
+        when(postRepository.countByStatusIn(anyCollection())).thenReturn(0L);
+        when(userRepository.countByStatusIn(anyCollection())).thenReturn(0L);
+
+        adminStatsService.overview();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Collection<AuditAction>> actions = ArgumentCaptor.forClass(Collection.class);
+        verify(auditLogRepository, atLeastOnce())
+                .countByActionInAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                        actions.capture(), any(), any());
+
+        // CONTACT_VIEW 由浏览行为触发、量级远高于真实处置，计入会让「今日处置」失真
+        assertThat(actions.getValue())
+                .contains(AuditAction.POST_TAKEDOWN, AuditAction.REPORT_DISMISS, AuditAction.BAN)
+                .doesNotContain(AuditAction.CONTACT_VIEW, AuditAction.ANNOUNCEMENT_PUBLISH);
     }
 }

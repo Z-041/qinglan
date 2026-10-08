@@ -80,10 +80,10 @@ public class ReviewQueueService {
 
         Map<Long, Post> posts = loadPosts(page);
         Map<Long, Comment> comments = loadComments(page);
-        Map<String, List<ReportReason>> reasons = loadReasons(page);
+        Map<String, ReportSummary> summaries = loadReportSummaries(page);
 
         List<ReviewQueueItemResponse> items = page.stream()
-                .map(row -> toItem(row, posts, comments, reasons))
+                .map(row -> toItem(row, posts, comments, summaries))
                 .toList();
         String nextCursor = hasMore ? formatCursor(page.get(page.size() - 1)) : null;
         return CursorPage.of(items, nextCursor);
@@ -109,33 +109,43 @@ public class ReviewQueueService {
                 .collect(Collectors.toMap(Comment::getId, comment -> comment));
     }
 
-    /** 指标题理由需要按目标去重（同一目标可能被多人用同一理由举报），用有序集合保序 */
-    private Map<String, List<ReportReason>> loadReasons(List<ReviewQueueRow> page) {
-        Map<String, Set<ReportReason>> collected = new HashMap<>();
-        collectReasons(ReviewTargetType.POST, targetIds(page, ReviewTargetType.POST), collected);
-        collectReasons(ReviewTargetType.COMMENT, targetIds(page, ReviewTargetType.COMMENT), collected);
-        Map<String, List<ReportReason>> reasons = new HashMap<>();
-        collected.forEach((target, values) -> reasons.put(target, List.copyOf(values)));
-        return reasons;
+    /**
+     * 一页之内按目标装配举报摘要：理由码与补充说明都去重（同一目标可能被多人用同一理由举报），
+     * 各自用有序集合保序。两次批量查询覆盖帖子与评论两类目标，无逐行查询。
+     */
+    private Map<String, ReportSummary> loadReportSummaries(List<ReviewQueueRow> page) {
+        Map<String, Set<ReportReason>> reasons = new HashMap<>();
+        Map<String, Set<String>> details = new HashMap<>();
+        collect(ReviewTargetType.POST, targetIds(page, ReviewTargetType.POST), reasons, details);
+        collect(ReviewTargetType.COMMENT, targetIds(page, ReviewTargetType.COMMENT), reasons, details);
+
+        Map<String, ReportSummary> summaries = new HashMap<>();
+        reasons.forEach((target, values) -> summaries.put(target,
+                new ReportSummary(List.copyOf(values), List.copyOf(details.getOrDefault(target, Set.of())))));
+        return summaries;
     }
 
-    private void collectReasons(ReviewTargetType targetType, List<Long> targetIds,
-                                Map<String, Set<ReportReason>> sink) {
+    private void collect(ReviewTargetType targetType, List<Long> targetIds,
+                         Map<String, Set<ReportReason>> reasonSink, Map<String, Set<String>> detailSink) {
         if (targetIds.isEmpty()) {
             return;
         }
         List<Report> reports = reportRepository
                 .findByTargetTypeAndTargetIdInAndStatus(targetType, targetIds, ReportStatus.PENDING);
         for (Report report : reports) {
-            sink.computeIfAbsent(key(targetType, report.getTargetId()), ignored -> new LinkedHashSet<>())
-                    .add(report.getReasonCode());
+            String target = key(targetType, report.getTargetId());
+            reasonSink.computeIfAbsent(target, ignored -> new LinkedHashSet<>()).add(report.getReasonCode());
+            String detail = report.getDetail();
+            if (detail != null && !detail.isBlank()) {
+                detailSink.computeIfAbsent(target, ignored -> new LinkedHashSet<>()).add(detail);
+            }
         }
     }
 
     private ReviewQueueItemResponse toItem(ReviewQueueRow row, Map<Long, Post> posts,
                                            Map<Long, Comment> comments,
-                                           Map<String, List<ReportReason>> reasons) {
-        List<ReportReason> rowReasons = reasons.getOrDefault(key(row.targetType(), row.targetId()), List.of());
+                                           Map<String, ReportSummary> summaries) {
+        ReportSummary summary = summaries.getOrDefault(key(row.targetType(), row.targetId()), ReportSummary.EMPTY);
         return switch (row.targetType()) {
             case POST -> {
                 Post post = posts.get(row.targetId());
@@ -146,7 +156,8 @@ public class ReviewQueueService {
                         post == null ? null : post.getStatus().name(),
                         (int) row.reportCount(),
                         row.firstReportedAt(),
-                        rowReasons);
+                        summary.reasons(),
+                        summary.details());
             }
             case COMMENT -> {
                 Comment comment = comments.get(row.targetId());
@@ -157,9 +168,15 @@ public class ReviewQueueService {
                         comment == null ? null : comment.getStatus().name(),
                         (int) row.reportCount(),
                         row.firstReportedAt(),
-                        rowReasons);
+                        summary.reasons(),
+                        summary.details());
             }
         };
+    }
+
+    /** 一个目标的举报摘要：去重的理由码 + 去重的补充说明（举报人选「其他」时填写的说明） */
+    private record ReportSummary(List<ReportReason> reasons, List<String> details) {
+        private static final ReportSummary EMPTY = new ReportSummary(List.of(), List.of());
     }
 
     private List<Long> targetIds(List<ReviewQueueRow> page, ReviewTargetType targetType) {
