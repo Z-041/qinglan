@@ -1,0 +1,20 @@
+/*
+ * Element Plus 主题映射（管理端专用）。
+ *
+ * 原在 shared 的 styles/main.css 里由全站加载——学生端不加载任何 Element Plus 组件、
+ * 这些变量等于惰性，但语义上属于管理端。拆分后移到本应用，学生端产物里不再出现 `--el-` 前缀。
+ *
+ * light-N / dark-2 是 Element Plus 自身的推导口径（主色与白/黑按 N/10 混合），
+ * 用 color-mix 表达，避免把中间色硬编码成十六进制。
+ * `--ql-primary` 等基础变量来自 shared 的 styles/main.css，本文件只做映射。
+ */
+html:root {
+  --el-color-primary: var(--ql-primary);
+  --el-color-primary-light-3: color-mix(in srgb, var(--ql-primary) 70%, #fff);
+  --el-color-primary-light-5: color-mix(in srgb, var(--ql-primary) 50%, #fff);
+  --el-color-primary-light-7: color-mix(in srgb, var(--ql-primary) 30%, #fff);
+  --el-color-primary-light-8: color-mix(in srgb, var(--ql-primary) 20%, #fff);
+  --el-color-primary-light-9: color-mix(in srgb, var(--ql-primary) 10%, #fff);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--ql-primary) 80%, #000);
+  --el-border-radius-base: 8px;
+}

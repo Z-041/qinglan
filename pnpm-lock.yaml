@@ -8,11 +8,8 @@ importers:
 
   .: {}
 
-  qinglan-web:
+  qinglan-admin:
     dependencies:
-      axios:
-        specifier: ^1.8.4
-        version: 1.20.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
       element-plus:
         specifier: ^2.14.7
         version: 2.14.7(vue@3.5.43(typescript@5.8.3))
@@ -68,6 +65,64 @@ importers:
       unplugin-vue-components:
         specifier: ^32.1.0
         version: 32.1.0(esbuild@0.25.12)(rollup@4.64.1)(vite@6.4.4(@types/node@22.20.5)(jiti@2.7.0))(vue@3.5.43(typescript@5.8.3))
+      vite:
+        specifier: ^6.2.1
+        version: 6.4.4(@types/node@22.20.5)(jiti@2.7.0)
+      vitest:
+        specifier: ^3.1.0
+        version: 3.2.7(@types/node@22.20.5)(jiti@2.7.0)(jsdom@26.1.0(supports-color@7.2.0))(supports-color@7.2.0)
+      vue-tsc:
+        specifier: ^2.2.8
+        version: 2.2.12(typescript@5.8.3)
+
+  qinglan-web:
+    dependencies:
+      pinia:
+        specifier: ^3.0.1
+        version: 3.0.4(typescript@5.8.3)(vue@3.5.43(typescript@5.8.3))
+      vue:
+        specifier: ^3.5.13
+        version: 3.5.43(typescript@5.8.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.6.4(vue@3.5.43(typescript@5.8.3))
+    devDependencies:
+      '@types/node':
+        specifier: ^22.13.10
+        version: 22.20.5
+      '@unocss/reset':
+        specifier: ^66.10.5
+        version: 66.10.5
+      '@vitejs/plugin-vue':
+        specifier: ^5.2.3
+        version: 5.2.4(vite@6.4.4(@types/node@22.20.5)(jiti@2.7.0))(vue@3.5.43(typescript@5.8.3))
+      '@vue/eslint-config-typescript':
+        specifier: ^14.5.0
+        version: 14.9.0(eslint-plugin-vue@10.11.1(@typescript-eslint/parser@8.71.1(eslint@9.39.4(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.8.3))(eslint@9.39.4(jiti@2.7.0)(supports-color@7.2.0))(vue-eslint-parser@10.4.1(eslint@9.39.4(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)))(eslint@9.39.4(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.8.3)
+      '@vue/test-utils':
+        specifier: ^2.4.6
+        version: 2.5.1(@vue/compiler-dom@3.5.43)(@vue/server-renderer@3.5.43)(vue@3.5.43(typescript@5.8.3))
+      eslint:
+        specifier: ^9.22.0
+        version: 9.39.4(jiti@2.7.0)(supports-color@7.2.0)
+      eslint-plugin-vue:
+        specifier: ^10.0.0
+        version: 10.11.1(@typescript-eslint/parser@8.71.1(eslint@9.39.4(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.8.3))(eslint@9.39.4(jiti@2.7.0)(supports-color@7.2.0))(vue-eslint-parser@10.4.1(eslint@9.39.4(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0))
+      jiti:
+        specifier: ^2.4.2
+        version: 2.7.0
+      jsdom:
+        specifier: ^26.0.0
+        version: 26.1.0(supports-color@7.2.0)
+      typescript:
+        specifier: ~5.8.2
+        version: 5.8.3
+      typescript-eslint:
+        specifier: ^8.26.0
+        version: 8.71.1(eslint@9.39.4(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.8.3)
+      unocss:
+        specifier: ^66.10.5
+        version: 66.10.5(cac@7.0.0)(rollup@4.64.1)(srvx@1.0.5)(vite@6.4.4(@types/node@22.20.5)(jiti@2.7.0))
       vite:
         specifier: ^6.2.1
         version: 6.4.4(@types/node@22.20.5)(jiti@2.7.0)

@@ -23,11 +23,22 @@ const router = useRouter()
 const authenticated = computed(() => userStore.isAuthenticated)
 
 /**
+ * 内容容器是否放宽：由路由 meta.wide 声明
+ * （首页/详情/发布/我的用 ql-shell = 1200px，登录页与消息中心仍是 ql-container）。
+ *
+ * 头部与 main 的宽度**必须由同一个判断驱动**：头部容器 1200px 而内容容器 720px 时，
+ * 1440px 视口下头部 logo 左边缘在 x=144、内容左边缘在 x=376，两者错开 232px。
+ *
+ * 拆分后这里不再需要排除 /admin 子树——管理端已独立成应用。
+ */
+const fullWidth = computed(() => route.meta.wide === true)
+
+/**
  * 前台退出登录。
  *
  * 必须显式导航：路由守卫只在**导航时**运行，只清登录态而不跳转的话，用户会停在一个
  * 已经不可用的页面上——`/profile` 会只剩标题（档案已清空，三个分支都不命中），
- * `/publish` 会停在一张提交不了的表单上。管理端退出是有跳转的，两边行为必须一致。
+ * `/publish` 会停在一张提交不了的表单上。
  *
  * 去向分两种：需要认证的页面回首页；游客本就能浏览的页面（首页、详情）留在原地，
  * 由 `authenticated` 驱动自动切成游客态，不打断浏览。
@@ -38,22 +49,6 @@ function handleSignOut(): void {
     void router.replace('/')
   }
 }
-
-/**
- * 管理端（/admin 子树）自带 AdminLayout：PC 满宽、自带侧边栏，
- * 不能再套学生端的 ql-container（max-w-[720px]）与学生端吸顶栏/页脚，
- * 否则后台页面会被压成 720px 宽并在上方多出一条学生端导航。
- */
-const isAdminArea = computed(() => route.path.startsWith('/admin'))
-
-/**
- * 内容容器是否放宽：管理端自带 AdminLayout；其余页面由路由 meta.wide 声明
- * （首页/详情/发布/我的用 ql-shell = 1200px，登录页仍是 720px 的 ql-container）。
- *
- * 头部与 main 的宽度**必须由同一个判断驱动**：头部容器 1200px 而内容容器 720px 时，
- * 1440px 视口下头部 logo 左边缘在 x=144、内容左边缘在 x=376，两者错开 232px（改造前同为 720px）。
- */
-const fullWidth = computed(() => isAdminArea.value || route.meta.wide === true)
 
 /**
  * 登录态变化必须重新拉待读公告。原因：游客按 `device_id` 判已读、账号按 `user_id` 判，
@@ -78,17 +73,12 @@ watch(
 )
 
 /**
- * 进入任意学生端页面都拉一次待读公告（设计方案 5.5「进入任意页面请求 pending」）。
- * 管理端不渲染公告弹窗（见模板的 `v-if="!isAdminArea"`），故进入管理端时清掉状态，
- * 离开时由本 watcher 再拉，避免出现「弹窗在管理端后台读秒、回到学生端突然弹出」。
+ * 进入任意页面都拉一次待读公告（设计方案 5.5「进入任意页面请求 pending」）。
+ * 拆分后管理端不再经过本组件，`resetAnnouncements()` 的分支随之删除。
  */
 watch(
   () => route.path,
   () => {
-    if (isAdminArea.value) {
-      resetAnnouncements()
-      return
-    }
     void refreshPending()
   },
 )
@@ -97,7 +87,6 @@ watch(
 <template>
   <div class="flex min-h-screen flex-col">
     <AppHeader
-      v-if="!isAdminArea"
       :authenticated="authenticated"
       :role="profile?.role ?? null"
       :wide="fullWidth"
@@ -112,11 +101,11 @@ watch(
       <RouterView :key="route.path" />
     </main>
 
-    <footer v-if="!isAdminArea" class="border-t border-line bg-surface">
+    <footer class="border-t border-line bg-surface">
       <p class="ql-container py-5 text-center text-xs text-muted">青栏 · 只面向本校认证学生的匿名社区</p>
     </footer>
 
-    <AnnouncementModal v-if="!isAdminArea" />
+    <AnnouncementModal />
     <ToastHost />
   </div>
 </template>

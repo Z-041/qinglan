@@ -156,7 +156,15 @@ instance.interceptors.response.use(
     if (status === 428) {
       // 强制阅读：把响应体携带的公告快照交给公告弹窗直接渲染，且**不再 toast**——
       // 弹窗本身就是提示，再 toast 会出现「弹窗 + 提示」两遍（AGENTS.md 第七章）。
-      preconditionRequiredHandler?.(error.response?.data?.data)
+      //
+      // 但必须先确认「确实有人接」：管理端不发帖、因而**不注册**该处理器（428 由发帖触发），
+      // 若直接 `handler?.(...)` 就会既无弹窗也无提示、用户以为点了没反应。
+      // 故未注册时退化为 toast——把「管理端不会遇到 428」这一假设变成代码保证。
+      if (preconditionRequiredHandler) {
+        preconditionRequiredHandler(error.response?.data?.data)
+      } else {
+        pushToast(message, 'error')
+      }
     } else {
       pushToast(message, 'error')
     }

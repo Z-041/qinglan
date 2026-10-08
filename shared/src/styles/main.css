@@ -37,20 +37,3 @@
 
   color-scheme: light;
 }
-
-/*
- * Element Plus 主题映射。
- * 变量是全局声明，但学生端不加载任何 Element Plus 组件，等于惰性，不影响学生端 bundle。
- * light-N / dark-2 是 Element Plus 自身的推导口径（主色与白/黑按 N/10 混合），
- * 用 color-mix 表达，避免把中间色硬编码成十六进制。
- */
-html:root {
-  --el-color-primary: var(--ql-primary);
-  --el-color-primary-light-3: color-mix(in srgb, var(--ql-primary) 70%, #fff);
-  --el-color-primary-light-5: color-mix(in srgb, var(--ql-primary) 50%, #fff);
-  --el-color-primary-light-7: color-mix(in srgb, var(--ql-primary) 30%, #fff);
-  --el-color-primary-light-8: color-mix(in srgb, var(--ql-primary) 20%, #fff);
-  --el-color-primary-light-9: color-mix(in srgb, var(--ql-primary) 10%, #fff);
-  --el-color-primary-dark-2: color-mix(in srgb, var(--ql-primary) 80%, #000);
-  --el-border-radius-base: 8px;
-}

@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { fetchAdminStats } from '@/api/admin'
-import DashboardView from '@/views/admin/DashboardView.vue'
+import DashboardView from '@/views/DashboardView.vue'
 import type { AdminStats } from '@/types/admin'
 
 vi.mock('@/api/admin', () => ({ fetchAdminStats: vi.fn() }))
