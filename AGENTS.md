@@ -230,6 +230,7 @@ Skill 由**全局安装**提供（仓库内不再保留 `coding-skills/` 副本�
 - 所有输入视为不可信：DTO 加 `@Valid`，长度与范围都要校验
 - 上传文件校验类型与大小，存对象存储，不存应用服务器本地磁盘
 - 接口必须有权限注解；管理员接口单独角色，且默认拒绝
+  - 令牌是无状态的、角色在签发时即固定，所以**账号级禁令（封禁/黑名单）必须在每个写入口重新判定**：业务写入口调 `UserService.requireUsableById`，管理端写入口由 `AdminWriteGuardFilter`（`/api/admin/**` 的非 GET）统一兜住，不得移除。只读入口放行，以保留被禁令账号的浏览能力
 - 导出、批量查询接口必须分页 + 权限校验，禁止无限制全表扫描
 - 不得在错误信息中回显内部堆栈、SQL、手机号、学号
 - **安全响应头不得回退**：后端 API 响应必须带 CSP（`default-src 'none'`）、`X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Permissions-Policy`，由 `SecurityConfig.headers` 统一下发，测试见 `SecuritySkeletonTest`；前端 SPA 由 `vite.config.ts` 插件在**构建期**注入 CSP `meta`（dev 不注入，否则与 Vite HMR 冲突）。**后端 CSP 取 `'none'` 的前提是「后端只返回 JSON 与图片、不托管 SPA 页面」——若将来改由后端直接托管静态页面，必须同步放宽该策略，否则页面自身的脚本与样式会被自身响应头拦死。** `frame-ancestors` 写在 `meta` 里会被浏览器忽略，SPA 的防嵌套响应头须由托管服务器补（见 `修复记录.txt` T-14）。

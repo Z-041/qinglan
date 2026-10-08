@@ -3,6 +3,7 @@ package com.qinglan.auth.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.web.ApiResponse;
+import com.qinglan.user.service.UserService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -36,6 +37,7 @@ import java.nio.charset.StandardCharsets;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final UserService userService;
     private final ObjectMapper objectMapper;
 
     @Bean
@@ -78,7 +80,11 @@ public class SecurityConfig {
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(authenticationEntryPoint())
                         .accessDeniedHandler(accessDeniedHandler()))
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                // 紧跟在认证过滤器之后：此时才能拿到 principal，而角色又从令牌静态得来，
+                // 所以管理端写操作必须在这里复查一次账号是否仍然可用（被封禁的管理员不得继续处置）
+                .addFilterAfter(new AdminWriteGuardFilter(userService, accessDeniedHandler()),
+                        JwtAuthenticationFilter.class);
         return http.build();
     }
 
