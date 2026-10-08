@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
-import BaseButton from '@/components/base/BaseButton.vue'
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import { useAnnouncement } from '@/composables/useAnnouncement'
 
 /**

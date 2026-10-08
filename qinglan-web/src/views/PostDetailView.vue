@@ -2,9 +2,9 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
-import BaseButton from '@/components/base/BaseButton.vue'
-import BaseCard from '@/components/base/BaseCard.vue'
-import BaseTextarea from '@/components/base/BaseTextarea.vue'
+import BaseButton from '@shared/components/base/BaseButton.vue'
+import BaseCard from '@shared/components/base/BaseCard.vue'
+import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import CommentItem from '@/components/CommentItem.vue'
 import ReportDialog from '@/components/ReportDialog.vue'
 import { usePostDetail } from '@/composables/usePostDetail'

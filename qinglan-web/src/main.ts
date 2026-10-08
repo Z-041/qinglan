@@ -3,7 +3,7 @@ import { createApp } from 'vue'
 
 import '@unocss/reset/tailwind.css'
 import 'virtual:uno.css'
-import './styles/main.css'
+import '@shared/styles/main.css'
 
 import App from './App.vue'
 import { setPreconditionRequiredHandler, setUnauthorizedHandler } from '@shared/api/http'

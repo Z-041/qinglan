@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 
-import BaseButton from '@/components/base/BaseButton.vue'
-import BaseTextarea from '@/components/base/BaseTextarea.vue'
+import BaseButton from '@shared/components/base/BaseButton.vue'
+import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import { useUserLabels } from '@/composables/useUserLabels'
 import type { ReportReason } from '@/types/review'
 

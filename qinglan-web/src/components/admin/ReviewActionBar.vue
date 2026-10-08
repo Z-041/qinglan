@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
-import BaseButton from '@/components/base/BaseButton.vue'
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import type { ReviewAction, ReviewTargetType } from '@/types/review'
 
 interface ActionMeta {

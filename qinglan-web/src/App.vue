@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import AnnouncementModal from '@/components/AnnouncementModal.vue'
 import AppHeader from '@/components/AppHeader.vue'
-import ToastHost from '@/components/ToastHost.vue'
+import ToastHost from '@shared/components/ToastHost.vue'
 import { useAnnouncement } from '@/composables/useAnnouncement'
 import { useNotifications } from '@/composables/useNotifications'
 import { useNotificationStore } from '@/stores/notification'

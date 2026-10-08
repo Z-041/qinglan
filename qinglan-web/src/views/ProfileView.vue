@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
-import BaseButton from '@/components/base/BaseButton.vue'
-import BaseCard from '@/components/base/BaseCard.vue'
+import BaseButton from '@shared/components/base/BaseButton.vue'
+import BaseCard from '@shared/components/base/BaseCard.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useUserLabels } from '@/composables/useUserLabels'
 import { useUserStore } from '@/stores/user'

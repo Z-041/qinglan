@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 
 import { fetchTopics } from '@/api/topic'
-import BaseButton from '@/components/base/BaseButton.vue'
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import HomeSidebar from '@/components/HomeSidebar.vue'
 import PostCard from '@/components/PostCard.vue'
 import TopicFilter from '@/components/TopicFilter.vue'

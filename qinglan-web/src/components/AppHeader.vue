@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import BaseButton from '@/components/base/BaseButton.vue'
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
 import { useUserLabels } from '@/composables/useUserLabels'
 import type { UserRole } from '@shared/types/user'

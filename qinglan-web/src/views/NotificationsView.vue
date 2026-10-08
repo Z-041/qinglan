@@ -3,7 +3,7 @@ import { storeToRefs } from 'pinia'
 import { onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 
-import BaseButton from '@/components/base/BaseButton.vue'
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import { useNotifications } from '@/composables/useNotifications'
 import { useNotificationStore } from '@/stores/notification'
 

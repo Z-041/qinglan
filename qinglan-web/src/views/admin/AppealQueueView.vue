@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 
 import AppealReviewDialog from '@/components/admin/AppealReviewDialog.vue'
 import AppealTable from '@/components/admin/AppealTable.vue'
-import BaseButton from '@/components/base/BaseButton.vue'
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import { pushToast } from '@shared/composables/useToast'
 import { useAppealQueue } from '@/composables/useAppealQueue'
 import { useReviewActions } from '@/composables/useReviewActions'
