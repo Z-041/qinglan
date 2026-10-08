@@ -17,6 +17,123 @@
 
 
 --------------------------------------------------------------------------------
+R-31 全链路审查：补齐 2 处功能缺陷、2 处安全缺口、5 处健壮性与索引缺口
+--------------------------------------------------------------------------------
+[2026-10-08]  类型：审查 + 缺陷修复  状态：已交付
+来源：用户要求「审查所有链路看看有没有缺陷或漏洞，把它们补全」。
+方法：四个只读子代理并行铺开（内容与审核链路 / 认证与安全 / 前端三包 / 数据层与待办），
+      每条候选**都由我回源码复核后才动手**，不采信未复现的结论。结果是 9 条确认项。
+
+一、功能缺陷（P1）
+  F1 428 拦截范围错了：`PostService.create` 调 `announcementService.findPending(authorId, null)`，
+     而该方法**不按级别过滤**（只按 status/生效窗口，级别仅用于排序）。于是**任意一条未读普通
+     公告都会挡住全站发帖**，与设计方案 5.4「是否启用此拦截由 level=URGENT 决定，普通公告不
+     拦截」相反（不变量 #6 也只写「未读紧急公告」；ErrorCode 文案就是「存在未读的紧急公告」）。
+     修：仓储 `findPending` 增加 `levels` 入参；`AnnouncementService` 拆成 `findPending`（弹窗，
+     全级别）与 `findPendingUrgent`（仅发帖 gate）；PostService 改调后者。
+     测试：AnnouncementServiceTest 加「gate 只查 URGENT」、AnnouncementRepositoryTest 加 2 例
+     （只查 URGENT 时普通公告被排除 / 只有普通公告未读时 gate 为空而弹窗口径仍取得到）、
+     PostServiceTest 加「只问紧急口径」的合同断言。
+
+  F2 「恢复可见」不清举报计数，恢复后一次新举报就再次自动下架：
+     `restore` 只改状态；而自动降级路径（举报数达阈值）**刻意把举报留在 PENDING 且不降计数**
+     （ReportService 注释写明）。于是 3 人举报 → 自动下架 → 管理员恢复 → 计数仍是 3，任何一人
+     再举报一次就再次触发 `autoTakeDownIfNeeded`，「恢复」形同虚设；队列里还会长期挂着一条
+     targetStatus=APPROVED 的行。`restore` 的原注释假设「举报早在前置处置时已结案」，该前提
+     对手工下架路径成立、对自动降级路径不成立。
+     修：restore 顺带把该帖待处理举报结案为 DISMISSED 并按条数原子回退 report_count（空则不减、
+     不写多余审计），同时反馈举报人——与 takeDown/upholdReports/dismissReports 同一口径。
+     手工下架路径本就是空操作，行为不变。申诉通过走 restore，同样受益。
+     测试：ReviewServiceTest 加 2 例（结案并回退计数 / 无待处理举报时不动计数）。
+
+二、安全缺口（P1）
+  F3 管理端写入口不复查账号状态：令牌是无状态的、角色在签发时固定，而业务模块
+     （发帖/评论/举报/申诉/上传）都在写入口调 `requireUsableById`（UserService 注释明确要求
+     「每个写入口都要重新校验一次」），**管理端点没有这一步**——被封禁的管理员在令牌剩余有效期
+     （默认 2h）内仍能封禁他人、下架内容、发公告，权限撤回有一个最长 2 小时的窗口。
+     修：新增 `AdminWriteGuardFilter`（auth/security，紧跟认证过滤器）——`/api/admin/**` 的非
+     GET/HEAD/OPTIONS 请求先复查操作人是否可用，不可用即走 SecurityConfig 既有的
+     AccessDeniedHandler 返回统一的 403 JSON（过滤器里抛 BizException 不会被 @ControllerAdvice
+     接住，故不抛异常；具体原因不回显）。只拦写：与「封禁学生仍可浏览」同口径（经验 #13）。
+     不新增跨模块方向（auth → user 早已在白名单内）。
+     测试：AdminWriteGuardFilterTest 5 例（封禁拒绝、可用放行、读放行、未认证交给授权规则、
+     非管理前缀不管）。
+
+  F4 匿名「标记已读」接口的限流维度可被客户端伪造：限流主体是 `deviceId`，而 deviceId 完全由
+     请求方提供（只校验字符格式），轮换 deviceId 即每次独立配额，可对同一条公告无限插入
+     announcement_read 行。属资源放大，不涉及机密或完整性。**未修**：真正的修法要引入不受客户端
+     控制的维度（按来源 IP，且需要部署侧的信任代理约定，否则 X-Forwarded-For 一样可伪造），
+     属部署/架构决策，记入 T-26。
+
+三、健壮性与数据层（P2）
+  F5 看板「处置数」把浏览行为算进去：`AdminStatsService` 的今日与近 7 日处置数直接数 review_log
+     全部行，而「已认证用户查看帖子联系方式」每次都会写一条 CONTACT_VIEW（量级远高于真实处置），
+     数字被淹没。
+     修：仓储改为按动作集合计数（`countByActionInAndCreatedAt...`），服务定义 HANDLED_ACTIONS
+     （排除 CONTACT_VIEW 与 ANNOUNCEMENT_*）。测试：AdminStatsServiceTest 加 1 例，用
+     ArgumentCaptor 断言集合内容。
+
+  F6 举报补充说明只写不读：`report.detail` 入库了，但出参 DTO（队列/上下文）都不含它，全仓
+     `getDetail()` 零引用。举报理由选「其他」时说明是唯一线索，管理员在任何界面都读不到——
+     与 R-30 同类的「写了没入口」。
+     修：`ReviewQueueItemResponse` 增加 `details`（去重、只含非空项、复用既有批量查询不新增查询）；
+     前端 QueueTable 在理由下方渲染。测试：ReviewQueueServiceTest 断言去重、AdminReviewControllerTest
+     断言出参、QueueTable.spec 断言渲染。
+
+  F7 缺失索引（造数实测出计划，不是凭感觉加的）：新增 V5__add_query_indexes.sql 六个索引。
+     造数环境（review_log 5 万 / post 2 万 / comment 3 万 / report 3 万 / user 5 千）EXPLAIN 前后：
+       Q1 看板处置数（每次加载 8 次 count）：type=index 扫 49880 → type=range
+       Q2 待审队列：id 序索引 + filesort → 单状态走 idx_post_pending 且无排序
+       Q3 评论回复：type=ALL 全表扫 30010 + filesort → type=range rows=3
+       Q4 审核队列聚合：type=index 扫 30051 → type=ref
+       Q5 用户管理列表：type=ALL 4892 + filesort → Backward index scan rows=21
+       Q6 同一举报人的其他举报：扫 uk 索引 30051 → type=range rows=3
+     结论里的两个保留：Q2 在 status IN (PENDING, REVIEWING) 时优化器仍可能选 idx_post_feed
+     （IN 多值的代价模型，且造数里 REVIEWING 为 0 行属极端分布）；本文件在造数环境的结论已按
+     经验 #32 标注局限，生产上线放低峰期并复核 EXPLAIN。
+     落地验证：qinglan_test 的 flyway_schema_history 出现 version=5 success=1，六个索引均存在。
+
+  F8 前端请求竞态：4 个列表 composable（useReviewQueue / useAppealQueue /
+     usePendingPostQueue / useNotifications）的 refresh/load **在成功路径漏了序号判断**——
+     注释声称「丢弃过期响应」，实际 `applyPage(await ...)` 无条件写入；处置后的 refresh 与「刷新」
+     并发时，先发后到的旧响应会覆盖新结果、游标随之错位。AnnouncementManageView 更是一整页
+     没有序号（发布/撤回后的 refresh 与在飞的 loadMore 可交叉）。
+     修：await 之后、applyPage 之前补序号判断；AnnouncementManageView 补齐同一套。
+     测试：usePendingPostQueue.spec 与 useNotifications.spec 各加 1 例并发用例（修前必红）。
+
+  F9 管理端登录回跳失效且 fallback 拼错 base：守卫传的 redirect 是**不带 base** 的 fullPath
+     （如 /users），而 AdminLoginView 用 `startsWith('/admin')` 判断 → 恒为假、回跳被丢弃；
+     fallback 写 `/admin/dashboard` 又被 `createWebHistory('/admin/')` 再拼一次成
+     `/admin/admin/dashboard`（靠 catch-all 兜回看板）。两个坑都只在浏览器里看得见。
+     修：抽 `router/redirect.ts` 的 `resolveAdminRedirect`（顺带挡掉 `//evil.com` 这类开放重定向），
+     视图改用它。测试：新增 redirect.spec 4 例。
+
+  F10 PendingPostQueueView 处置后白发一次请求：先置 panelOpen=false 触发 watch 的 close()
+     （作废在飞请求），随后又调 reload()，其响应必被丢弃。修：不再 reload（面板已关）。
+
+四、已核实但未修的（均为产品/部署决策，记入 T-26）
+  - BLACKLISTED 状态无任何写入入口（只读判定存在），且 `banUntil` 会把 BLACKLISTED 覆盖成 BANNED
+  - 处置不自动扣信用分（设计方案第 109 行写了「下架 → 扣信用分」，但没给扣分值）
+  - 通知未按目标聚合 / 红点无实时推送 / supersedes_id 无闭环（既有 T-15/T-16/T-18）
+  - 帖子的编辑与删除（设计方案 MVP 列了，后端无端点）
+  - 举报弹窗焦点陷阱、7 个组件缺 spec（既有 T-22/T-23）
+  - 验证码发送无 IP/全局维度限流（真实投递接 SMTP 后才会成问题）
+  - 本地 application.yml 的 expose-code 默认 true：文件已被 gitignore，属本地联调便利；
+    若要防误部署，应加「非本地 profile 且 expose-code=true 即启动失败」的守卫，属部署决策
+
+验证（真跑）
+  - 后端 ./mvnw test：309 个用例全过（较审查前 +12）
+  - 前端三包 lint / typecheck / test / build 全绿：shared 9 文件/37 用例、qinglan-web 20/117、
+    qinglan-admin 19/104
+  - V5 迁移在 qinglan_test 实跑成功（flyway_schema_history version=5 success=1），六个索引均落地
+  - 索引结论来自造数环境的 EXPLAIN 前后对比，环境与局限已写进 V5 文件头
+
+遗留
+  - F4（匿名已读的限流维度）、四节的未修项见 T-26
+  - 本次未做浏览器端到端；审查覆盖的是「代码链路」而非「实机交互」，UI 级问题仍需实测（T-25/T-24）
+
+
+--------------------------------------------------------------------------------
 R-30 「主帖先审后发」只有状态机、没有管理端入口：新帖落 PENDING 后无人能看到与放行
 --------------------------------------------------------------------------------
 [2026-10-08]  类型：功能缺口补齐  状态：已交付
@@ -1551,6 +1668,20 @@ T-25  待审队列尚缺两处收尾（R-30 遗留）
       「待审帖子」是否出现在看板之后、列表能否渲染出待审帖、抽屉里「通过 / 驳回」是否可用、
       驳回时理由为空的校验是否生效
 
+T-26  R-31 全链路审查里「已核实但未修」的项（每条都是产品/部署决策，不是遗漏）
+      ①匿名「标记已读」（POST /api/announcements/{id}/read）的限流维度是客户端自报的 deviceId，
+      轮换即可绕过、并对同一公告无限插入已读行。修法要引入不受客户端控制的维度（建议按来源 IP），
+      前提是部署侧先定好「信任哪一跳代理」，否则 X-Forwarded-For 同样可伪造
+      ②BLACKLISTED 状态没有任何写入入口（只有判定），且 User.banUntil 会把 BLACKLISTED 覆盖成
+      BANNED、到期后自动恢复可用——若要上黑名单功能，先统一「永久 vs 限时」的语义
+      ③处置不自动扣信用分：设计方案第 109 行写了「下架 → 扣信用分」，但没给扣分值，需产品定规则
+      （目前只有管理员手工调分）
+      ④帖子的编辑与删除：设计方案 MVP 列过，后端无端点（属功能范围，需产品确认是否本期做）
+      ⑤验证码发送没有 IP / 全局维度限流：接入真实 SMTP 后才会成为骚扰面，接 SMTP 前必须一起做
+      ⑥本地 application.yml 的 expose-code 默认 true（文件已 gitignore）：若要防误部署，加一条
+      「非本地 profile 且 expose-code=true 即启动失败」的守卫；属部署决策
+      ⑦F4 未修项的补充：以上第①条同时需要一个「同一 deviceId 不再无上限新增」的兜底思路
+
 说明：T-05（P3–P4 未开始）已由 R-24 完成并移出（P3 管理后台在上一轮交付，P4 打磨上线见 R-24，
 其交付留痕的缺失已记入 R-24 的「遗留」）；T-06（未激活徽标填充色）已由 R-18 解决并移出；
 T-09（软删残留 like_record）已由 R-15 解决并移出；T-12（R-19 复核 E–O 共 10 项）已由 R-20
@@ -1769,3 +1900,17 @@ T-09（软删残留 like_record）已由 R-15 解决并移出；T-12（R-19 复�
     裁决之后它去哪（可见性 / 通知）。判据可以很土但很硬：让一个新用户按正常操作自己走到终点。
     延伸：既有的同类面板（这里是举报队列）不能被当成「审核入口已具备」——两个来源不同的流程
     （举报驱动 vs 先审后发）各有各的入口，不能互相顶替。
+
+42. 「有没有索引」要问「查询形态与现有索引前缀是否匹配」，不能靠感觉或表格行数。R-31 的六处缺口
+    全部是先读出 Repository 的 where/order by，再与索引前缀逐一对照找出来的；真正的证据来自造数
+    后的 EXPLAIN：同一张表在造数前 type=index（看起来「用上索引了」），造数后才露出它扫了 49880 行
+    属于全索引扫描，而另一处干脆是 type=ALL + Using filesort。空表上的 EXPLAIN 在这个问题上会给出
+    误导性的乐观结论（与经验 #32 同源，但方向相反：32 说的是别把空表结论当成功效，这里说的是空表
+    根本暴露不了缺口）。补充两条：一、结论必须写清「在什么数据量下、哪些查询、加索引前后分别是什么
+    plan」，否则后来者无法复核；二、加了索引不等于优化器一定选它——status IN (两个值) 这种形态可能
+    仍走旧索引 + filesort，要把这个保留一并写进迁移文件头。
+
+43. 审计结论必须回源码复核，且要区分「缺陷」与「当事人在当时有意留下的取舍」。R-31 里子代理报了
+    十余条，逐条读代码后收敛为 9 条；其中「BLACKLISTED 无入口」「处置不扣分」「通知不聚合」等其实
+    早已躺在待办里，属产品未定的取舍，不是新发现的漏洞——把它们混进修复清单会平白改动产品行为。
+    做法：报告里把「已确认缺陷」与「已核实但需决策」分成两节，后者的每条都写清「为什么不擅自改」。
