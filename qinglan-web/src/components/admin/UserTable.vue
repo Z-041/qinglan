@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useUserLabels } from '@/composables/useUserLabels'
+import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminUserItem } from '@/types/admin'
 
 const props = defineProps<{ items: AdminUserItem[]; loading?: boolean; failed?: boolean }>()

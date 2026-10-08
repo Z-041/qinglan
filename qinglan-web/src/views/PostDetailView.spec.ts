@@ -28,7 +28,7 @@ vi.mock('@/api/comment', () => ({
   unlikeComment: vi.fn(),
 }))
 
-vi.mock('@/api/review', () => ({
+vi.mock('@shared/api/report', () => ({
   createReport: vi.fn(),
   submitAppeal: vi.fn(),
 }))

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useUserLabels } from '@/composables/useUserLabels'
+import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminAppealItem } from '@/types/review'
 
 const props = defineProps<{ items: AdminAppealItem[]; loading?: boolean; failed?: boolean }>()

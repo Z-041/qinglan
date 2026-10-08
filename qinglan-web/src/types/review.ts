@@ -1,39 +1,12 @@
 /**
- * 与后端 review/entity/ReviewTargetType 一一对应。
- * 帖子与评论是仅有的两类可举报目标。
+ * 管理端审核体系的类型（举报队列 / 审核上下文 / 处置 / 复审）。
+ *
+ * 学生端用到的 `ReportReason`、`ReviewTargetType` 与举报/申诉请求体已切到
+ * `@shared/types/review-common`——因为共享的 `useUserLabels` 依赖那两个枚举把理由码映射成中文。
+ * 本文件只保留管理端专属的部分。
  */
-export type ReviewTargetType = 'POST' | 'COMMENT'
 
-/**
- * 与后端 review/entity/ReportReason 一一对应。
- * 举报理由与管理员处置的违规类型共用同一套枚举，故文案映射在 `useUserLabels` 里只写一份。
- */
-export type ReportReason =
-  | 'ADVERTISEMENT'
-  | 'PORNOGRAPHY'
-  | 'ABUSE'
-  | 'PRIVACY'
-  | 'FRAUD'
-  | 'ILLEGAL'
-  | 'IRRELEVANT'
-  | 'OTHER'
-
-/**
- * 与后端 review/dto/CreateReportRequest 一一对应。
- * 举报人取自登录态，请求体里不带任何举报人字段（不变量 #1 引申）。
- */
-export interface CreateReportRequest {
-  targetType: ReviewTargetType
-  targetId: number
-  reasonCode: ReportReason
-  detail?: string | null
-}
-
-/** 与后端 review/dto/SubmitAppealRequest 一一对应；作者对已下架帖子申诉，每帖限一次 */
-export interface SubmitAppealRequest {
-  postId: number
-  reason: string
-}
+import type { ReportReason, ReviewTargetType } from '@shared/types/review-common'
 
 /** 与后端 review/dto/ReviewQueueItemResponse 一一对应（管理端举报队列） */
 export interface AdminQueueItem {

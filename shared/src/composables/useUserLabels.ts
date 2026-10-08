@@ -1,4 +1,4 @@
-import type { ReportReason, ReviewTargetType } from '@/types/review'
+import type { ReportReason, ReviewTargetType } from '@shared/types/review-common'
 import type { UserRole, UserStatus } from '@shared/types/user'
 
 /** 后端以英文枚举下发角色，界面不得直接展示，统一在此转成中文 */

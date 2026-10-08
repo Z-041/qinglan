@@ -1,4 +1,4 @@
-import type { AnnouncementLevel } from './announcement'
+import type { AnnouncementLevel } from '@shared/types/announcement'
 import type { UserProfile, UserRole, UserStatus } from '@shared/types/user'
 
 /**

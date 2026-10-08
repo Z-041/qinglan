@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createComment, deleteComment, fetchComments, likeComment, unlikeComment } from '@/api/comment'
 import { fetchPostDetail, likePost, unlikePost } from '@/api/post'
-import { submitAppeal } from '@/api/review'
+import { submitAppeal } from '@shared/api/report'
 import { usePostDetail } from '@/composables/usePostDetail'
 import type { Comment } from '@/types/comment'
 import type { PostDetail } from '@/types/post'
@@ -21,7 +21,7 @@ vi.mock('@/api/post', () => ({
   unlikePost: vi.fn(),
 }))
 
-vi.mock('@/api/review', () => ({
+vi.mock('@shared/api/report', () => ({
   createReport: vi.fn(),
   submitAppeal: vi.fn(),
 }))

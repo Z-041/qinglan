@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 
-import { createReport } from '@/api/review'
-import type { ReportReason, ReviewTargetType } from '@/types/review'
+import { createReport } from '@shared/api/report'
+import type { ReportReason, ReviewTargetType } from '@shared/types/review-common'
 
 /** 举报对象：目标类型 + id + 弹层文案（让用户确认自己在举报什么） */
 export interface ReportTarget {

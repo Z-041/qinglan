@@ -5,8 +5,9 @@ import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseInput from '@shared/components/base/BaseInput.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
-import { useUserLabels } from '@/composables/useUserLabels'
-import type { ReportReason, TakeDownPayload } from '@/types/review'
+import { useUserLabels } from '@shared/composables/useUserLabels'
+import type { ReportReason } from '@shared/types/review-common'
+import type { TakeDownPayload } from '@/types/review'
 
 /** 与后端 TakeDownPostRequest 的 @Max(3650) 对齐 */
 const MAX_BAN_DAYS = 3650

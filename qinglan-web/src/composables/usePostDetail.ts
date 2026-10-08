@@ -2,7 +2,7 @@ import { ref } from 'vue'
 
 import { createComment, deleteComment, fetchComments, likeComment, unlikeComment } from '@/api/comment'
 import { fetchPostDetail, likePost, unlikePost } from '@/api/post'
-import { submitAppeal as requestAppeal } from '@/api/review'
+import { submitAppeal as requestAppeal } from '@shared/api/report'
 import type { Comment } from '@/types/comment'
 import type { PostDetail } from '@/types/post'
 

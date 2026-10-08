@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { useUserLabels } from '@/composables/useUserLabels'
+import { useUserLabels } from '@shared/composables/useUserLabels'
 
 const { roleLabel, statusLabel, reportReasonLabel, reviewReasonText } = useUserLabels()
 

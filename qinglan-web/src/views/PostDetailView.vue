@@ -10,10 +10,10 @@ import ReportDialog from '@/components/ReportDialog.vue'
 import { usePostDetail } from '@/composables/usePostDetail'
 import { useReport } from '@/composables/useReport'
 import { useToast } from '@shared/composables/useToast'
-import { useUserLabels } from '@/composables/useUserLabels'
+import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useUserStore } from '@shared/stores/user'
 import type { Comment } from '@/types/comment'
-import type { ReportReason } from '@/types/review'
+import type { ReportReason } from '@shared/types/review-common'
 
 const route = useRoute()
 const userStore = useUserStore()

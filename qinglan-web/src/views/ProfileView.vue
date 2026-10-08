@@ -4,7 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
 import { useAuth } from '@shared/composables/useAuth'
-import { useUserLabels } from '@/composables/useUserLabels'
+import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useUserStore } from '@shared/stores/user'
 
 const userStore = useUserStore()

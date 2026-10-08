@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { isReportOverdue } from '@/composables/useReviewQueue'
-import { useUserLabels } from '@/composables/useUserLabels'
+import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminQueueItem } from '@/types/review'
 
 const props = defineProps<{ items: AdminQueueItem[]; loading?: boolean; failed?: boolean }>()

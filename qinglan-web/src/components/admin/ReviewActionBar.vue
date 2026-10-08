@@ -2,7 +2,8 @@
 import { computed, ref, watch } from 'vue'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import type { ReviewAction, ReviewTargetType } from '@/types/review'
+import type { ReviewTargetType } from '@shared/types/review-common'
+import type { ReviewAction } from '@/types/review'
 
 interface ActionMeta {
   key: ReviewAction

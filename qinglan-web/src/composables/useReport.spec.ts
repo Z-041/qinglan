@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createReport } from '@/api/review'
+import { createReport } from '@shared/api/report'
 import { useReport } from '@/composables/useReport'
 
-vi.mock('@/api/review', () => ({ createReport: vi.fn(), submitAppeal: vi.fn() }))
+vi.mock('@shared/api/report', () => ({ createReport: vi.fn(), submitAppeal: vi.fn() }))
 
 const mockedCreateReport = vi.mocked(createReport)
 

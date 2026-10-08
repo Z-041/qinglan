@@ -1,7 +1,8 @@
 import { ref } from 'vue'
 
 import { fetchAdminReviewContext } from '@/api/review'
-import type { AdminReviewContext, ReviewTargetType } from '@/types/review'
+import type { ReviewTargetType } from '@shared/types/review-common'
+import type { AdminReviewContext } from '@/types/review'
 
 export interface ReviewTarget {
   targetType: ReviewTargetType

@@ -3,8 +3,8 @@ import { nextTick, ref, watch } from 'vue'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
-import { useUserLabels } from '@/composables/useUserLabels'
-import type { ReportReason } from '@/types/review'
+import { useUserLabels } from '@shared/composables/useUserLabels'
+import type { ReportReason } from '@shared/types/review-common'
 
 const props = withDefaults(
   defineProps<{

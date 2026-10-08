@@ -1,8 +1,5 @@
-/**
- * 与后端 announcement/entity/AnnouncementLevel 一致。
- * 声明顺序即优先级顺序，`URGENT` 最高（待读查询按此取一条）。
- */
-export type AnnouncementLevel = 'URGENT' | 'NORMAL' | 'ACTIVITY'
+// 级别枚举是双端共用的（管理端公告列表与新建表单也在用），定义已下沉到 shared。
+import type { AnnouncementLevel } from '@shared/types/announcement'
 
 /**
  * 与后端 announcement/dto/PendingAnnouncementResponse 一一对应。

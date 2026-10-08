@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useUserLabels } from '@/composables/useUserLabels'
+import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminReviewContext } from '@/types/review'
 
 const props = defineProps<{

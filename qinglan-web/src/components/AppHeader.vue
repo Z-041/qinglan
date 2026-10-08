@@ -3,7 +3,7 @@ import { computed } from 'vue'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
-import { useUserLabels } from '@/composables/useUserLabels'
+import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { UserRole } from '@shared/types/user'
 
 const props = withDefaults(

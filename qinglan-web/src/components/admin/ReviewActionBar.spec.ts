@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import ReviewActionBar from '@/components/admin/ReviewActionBar.vue'
-import type { ReviewTargetType } from '@/types/review'
+import type { ReviewTargetType } from '@shared/types/review-common'
 
 function mountBar(targetType: ReviewTargetType, targetStatus: string, submitting = false) {
   return mount(ReviewActionBar, { props: { targetType, targetStatus, submitting } })

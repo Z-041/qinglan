@@ -1,32 +1,19 @@
 import { httpGet, httpPost } from '@shared/api/http'
 
 import type { CursorPage } from '@shared/types/api'
+// ReviewTargetType 双端共用（学生端举报也用它），故来自 shared
+import type { ReviewTargetType } from '@shared/types/review-common'
 import type {
   AdminAppealItem,
   AdminQueueItem,
   AdminReviewContext,
-  CreateReportRequest,
   DismissReportsPayload,
   ReasonPayload,
-  ReviewTargetType,
-  SubmitAppealRequest,
   TakeDownPayload,
 } from '@/types/review'
 
-/**
- * 举报帖子或评论。
- *
- * 同一用户对同一目标仅一次（不变量 #4）：重复举报后端回 409，前端不拦截，
- * 由拦截器把后端的提示原样弹给用户。
- */
-export function createReport(payload: CreateReportRequest): Promise<void> {
-  return httpPost<void>('/reports', payload)
-}
-
-/** 作者对已下架帖子申诉：每帖限一次、限下架后 7 日内 */
-export function submitAppeal(payload: SubmitAppealRequest): Promise<void> {
-  return httpPost<void>('/appeals', payload)
-}
+// createReport / submitAppeal 由学生端发起，已切到 `@shared/api/report`；
+// 本文件只保留管理端的队列与处置接口。
 
 // ------------------------------------------------------------------ 管理端
 
