@@ -77,6 +77,13 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
             """)
     List<Announcement> findAdminPage(@Param("cursor") Long cursor, Pageable limit);
 
-    /** 当日发布数：用于发布频率上限（计划 D9） */
-    long countByStatusAndPublishedAtGreaterThanEqual(AnnouncementStatus status, Instant from);
+    /**
+     * 当日**发布过**的公告数（不限当前状态），用于发布频率上限（计划 D9）。
+     *
+     * <p>刻意不带 {@code status} 条件：撤回会把状态改成 {@code REVOKED}，若只数
+     * {@code status = PUBLISHED}，「发布 → 撤回 → 再发布」就能让当日计数回落，上限形同虚设。
+     * 上限约束的是**发布这个动作**的次数，故按 {@code published_at} 判定——撤回后仍计入；
+     * 从未发布过的草稿 {@code published_at} 为 null，自然不计入。</p>
+     */
+    long countByPublishedAtGreaterThanEqual(Instant from);
 }

@@ -9,8 +9,8 @@ import type {
   AdminQueueItem,
   AdminReviewContext,
   DismissReportsPayload,
+  ProposalDispositionPayload,
   ReasonPayload,
-  TakeDownPayload,
 } from '@/types/review'
 
 // createReport / submitAppeal 由学生端发起，已切到 `@shared/api/report`；
@@ -52,8 +52,15 @@ export function rejectPost(postId: number, payload: ReasonPayload): Promise<void
   return httpPost<void>(`/admin/posts/${postId}/reject`, payload)
 }
 
-export function takeDownPost(postId: number, payload: TakeDownPayload): Promise<void> {
-  return httpPost<void>(`/admin/posts/${postId}/take-down`, payload)
+/**
+ * 下架：二期起改为**发起处置提案**（P5 决策 D5），返回提案号，由委员会表决通过后系统才真正下架。
+ * 原 `banDays`（下架并封禁）已随接口移除，封禁改由用户管理页单独执行。
+ */
+export function takeDownPost(
+  postId: number,
+  payload: ProposalDispositionPayload,
+): Promise<{ proposalId: number }> {
+  return httpPost<{ proposalId: number }>(`/admin/posts/${postId}/take-down`, payload)
 }
 
 /** 恢复可见；申诉通过走后端 AppealService，不直接调本接口 */
@@ -61,8 +68,12 @@ export function restorePost(postId: number, payload: ReasonPayload): Promise<voi
   return httpPost<void>(`/admin/posts/${postId}/restore`, payload)
 }
 
-export function hidePostContact(postId: number, payload: ReasonPayload): Promise<void> {
-  return httpPost<void>(`/admin/posts/${postId}/hide-contact`, payload)
+/** 隐藏联系方式：二期起改为发起提案（不变量 #2 的处置侧） */
+export function hidePostContact(
+  postId: number,
+  payload: ProposalDispositionPayload,
+): Promise<{ proposalId: number }> {
+  return httpPost<{ proposalId: number }>(`/admin/posts/${postId}/hide-contact`, payload)
 }
 
 /** 撤销隐藏：纠正「隐藏」的误判，联系方式恢复为认证用户可见 */
@@ -70,8 +81,12 @@ export function showPostContact(postId: number, payload: ReasonPayload): Promise
   return httpPost<void>(`/admin/posts/${postId}/show-contact`, payload)
 }
 
-export function removeComment(commentId: number, payload: ReasonPayload): Promise<void> {
-  return httpPost<void>(`/admin/comments/${commentId}/remove`, payload)
+/** 移除评论：二期起改为发起提案——评论先发后审，这是唯一的兜底处置手段 */
+export function removeComment(
+  commentId: number,
+  payload: ProposalDispositionPayload,
+): Promise<{ proposalId: number }> {
+  return httpPost<{ proposalId: number }>(`/admin/comments/${commentId}/remove`, payload)
 }
 
 /** 驳回举报，按目标一次结清 */
@@ -79,9 +94,12 @@ export function dismissReports(payload: DismissReportsPayload): Promise<void> {
   return httpPost<void>('/admin/reports/dismiss', payload)
 }
 
-/** 维持下架：确认举报成立并结案该帖全部待处理举报（不改内容状态） */
-export function upholdReports(postId: number, payload: ReasonPayload): Promise<void> {
-  return httpPost<void>(`/admin/posts/${postId}/uphold-reports`, payload)
+/** 维持下架：二期起改为发起提案（确认违规成立、结案该帖待处理举报） */
+export function upholdReports(
+  postId: number,
+  payload: ProposalDispositionPayload,
+): Promise<{ proposalId: number }> {
+  return httpPost<{ proposalId: number }>(`/admin/posts/${postId}/uphold-reports`, payload)
 }
 
 export function acceptAppeal(appealId: number, payload: ReasonPayload): Promise<void> {

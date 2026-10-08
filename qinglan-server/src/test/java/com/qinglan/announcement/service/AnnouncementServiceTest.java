@@ -283,8 +283,7 @@ class AnnouncementServiceTest {
     void shouldPublishDraft() {
         Announcement draft = draft(ANNOUNCEMENT_ID, 5);
         when(announcementRepository.findById(ANNOUNCEMENT_ID)).thenReturn(Optional.of(draft));
-        when(announcementRepository.countByStatusAndPublishedAtGreaterThanEqual(
-                eq(AnnouncementStatus.PUBLISHED), any(Instant.class))).thenReturn(0L);
+        when(announcementRepository.countByPublishedAtGreaterThanEqual(any(Instant.class))).thenReturn(0L);
 
         service.publish(OPERATOR_ID, ANNOUNCEMENT_ID);
 
@@ -322,8 +321,7 @@ class AnnouncementServiceTest {
     void shouldRejectWhenDailyPublishLimitReached() {
         when(announcementRepository.findById(ANNOUNCEMENT_ID))
                 .thenReturn(Optional.of(draft(ANNOUNCEMENT_ID, 5)));
-        when(announcementRepository.countByStatusAndPublishedAtGreaterThanEqual(
-                eq(AnnouncementStatus.PUBLISHED), any(Instant.class))).thenReturn(5L);
+        when(announcementRepository.countByPublishedAtGreaterThanEqual(any(Instant.class))).thenReturn(5L);
 
         assertThatThrownBy(() -> service.publish(OPERATOR_ID, ANNOUNCEMENT_ID))
                 .isInstanceOf(BizException.class)
@@ -355,8 +353,7 @@ class AnnouncementServiceTest {
     void shouldAuditOnPublish() {
         when(announcementRepository.findById(ANNOUNCEMENT_ID))
                 .thenReturn(Optional.of(draft(ANNOUNCEMENT_ID, 5)));
-        when(announcementRepository.countByStatusAndPublishedAtGreaterThanEqual(
-                eq(AnnouncementStatus.PUBLISHED), any(Instant.class))).thenReturn(0L);
+        when(announcementRepository.countByPublishedAtGreaterThanEqual(any(Instant.class))).thenReturn(0L);
 
         service.publish(OPERATOR_ID, ANNOUNCEMENT_ID);
 

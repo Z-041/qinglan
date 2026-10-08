@@ -181,6 +181,17 @@ public class UserService {
     }
 
     /**
+     * 在册委员会人数（管理员 + 评议员）。
+     *
+     * <p>P5 二期：提案创建时用它做表决分母快照（{@code snapshot_size}），之后不再变化——
+     * 用计数而非 {@link #listCommittee()} 的 size，避免为了一个数把整张名单读出来。</p>
+     */
+    @Transactional(readOnly = true)
+    public long countCommittee() {
+        return userRepository.countByRoleIn(COMMITTEE_ROLES);
+    }
+
+    /**
      * 委员会成员（管理员 + 评议员），按加入时间升序。
      *
      * <p>不外泄身份：{@link UserProfileResponse} 只有 id / 角色 / 状态 / 信用分 / 时间，

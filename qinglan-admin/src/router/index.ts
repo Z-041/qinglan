@@ -56,6 +56,12 @@ const router = createRouter({
           meta: { permission: 'MODERATION_VIEW' },
         },
         {
+          path: 'proposals',
+          name: 'admin-proposals',
+          component: () => import('@/views/ProposalListView.vue'),
+          meta: { permission: 'PROPOSAL_VOTE' },
+        },
+        {
           path: 'appeals',
           name: 'admin-appeals',
           component: () => import('@/views/AppealQueueView.vue'),
@@ -78,6 +84,12 @@ const router = createRouter({
           name: 'admin-permissions',
           component: () => import('@/views/PermissionManageView.vue'),
           meta: { permission: 'ROLE_GRANT' },
+        },
+        {
+          path: 'arbitration',
+          name: 'admin-arbitration',
+          component: () => import('@/views/ArbitrationView.vue'),
+          meta: { permission: 'PROPOSAL_ARBITRATE' },
         },
         {
           path: 'audit-logs',

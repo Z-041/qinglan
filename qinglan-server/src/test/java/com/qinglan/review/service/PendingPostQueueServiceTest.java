@@ -4,7 +4,9 @@ import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.entity.Post;
+import com.qinglan.post.entity.PostImage;
 import com.qinglan.post.entity.PostStatus;
+import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.review.dto.PendingPostItemResponse;
 import com.qinglan.support.TestFixtures;
@@ -29,7 +31,9 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -52,11 +56,14 @@ class PendingPostQueueServiceTest {
     @Mock
     private PostRepository postRepository;
 
+    @Mock
+    private PostImageRepository postImageRepository;
+
     @InjectMocks
     private PendingPostQueueService pendingPostQueueService;
 
     @Test
-    @DisplayName("没有待审帖子时返回空页与空游标")
+    @DisplayName("没有待审帖子时返回空页与空游标，不产生多余的图片装配查询")
     void shouldReturnEmptyPageWhenQueueEmpty() {
         stubFirstPage(List.of());
 
@@ -64,6 +71,7 @@ class PendingPostQueueServiceTest {
 
         assertThat(page.items()).isEmpty();
         assertThat(page.nextCursor()).isNull();
+        verifyNoInteractions(postImageRepository);
     }
 
     @Test
@@ -88,9 +96,43 @@ class PendingPostQueueServiceTest {
 
         assertThat(item.postId()).isEqualTo(7L);
         assertThat(item.preview()).isEqualTo("测试正文");
+        // 无图时是空列表而非 null（前端无需判空）
+        assertThat(item.images()).isEmpty();
         assertThat(item.targetStatus()).isEqualTo(PostStatus.PENDING.name());
         assertThat(item.submittedAt()).isEqualTo(BASE);
         assertThat(item.reportCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("带图帖子按 sortOrder 返回全部图片 URL，且整页只批量查一次（杜绝 N+1）")
+    void shouldReturnAllImagesInOrderWithSingleBatchQuery() {
+        Post first = TestFixtures.pendingPost(7L, 100L, 1L, "带图帖子");
+        TestFixtures.setCreatedAt(first, BASE);
+        Post second = TestFixtures.pendingPost(8L, 101L, 1L, "另一帖子");
+        TestFixtures.setCreatedAt(second, BASE.plusSeconds(1));
+        stubFirstPage(List.of(first, second));
+        when(postImageRepository.findByPostIdInOrderBySortOrderAsc(List.of(7L, 8L))).thenReturn(List.of(
+                image(7L, "/uploads/a.jpg", 0),
+                image(7L, "/uploads/b.jpg", 1),
+                image(8L, "/uploads/c.jpg", 0)));
+
+        List<PendingPostItemResponse> items = pendingPostQueueService.queue(null).items();
+
+        assertThat(items.get(0).images()).containsExactly("/uploads/a.jpg", "/uploads/b.jpg");
+        assertThat(items.get(1).images()).containsExactly("/uploads/c.jpg");
+        // 整页一次批量查询，而不是逐帖一次
+        verify(postImageRepository, times(1)).findByPostIdInOrderBySortOrderAsc(anyList());
+    }
+
+    @Test
+    @DisplayName("无图帖子返回空列表而不是 null")
+    void shouldReturnEmptyImagesWhenPostHasNoImage() {
+        Post post = TestFixtures.pendingPost(7L, 100L, 1L, "纯文字");
+        TestFixtures.setCreatedAt(post, BASE);
+        stubFirstPage(List.of(post));
+        // 仓储默认返回空集合：该帖无图
+
+        assertThat(pendingPostQueueService.queue(null).items().get(0).images()).isEmpty();
     }
 
     @Test
@@ -201,5 +243,9 @@ class PendingPostQueueServiceTest {
         Post post = TestFixtures.pendingPost(id, 100L, 1L, "测试正文");
         TestFixtures.setCreatedAt(post, createdAt);
         return post;
+    }
+
+    private static PostImage image(long postId, String url, int sortOrder) {
+        return PostImage.of(postId, url, sortOrder);
     }
 }

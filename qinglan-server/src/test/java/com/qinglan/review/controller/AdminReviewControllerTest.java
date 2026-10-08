@@ -4,14 +4,19 @@ import com.qinglan.auth.security.JwtService;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.review.dto.AdminAppealItemResponse;
 import com.qinglan.review.dto.AdminReviewContextResponse;
+import com.qinglan.review.dto.CreateProposalRequest;
 import com.qinglan.review.dto.PendingPostItemResponse;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
-import com.qinglan.review.dto.TakeDownPostRequest;
+import com.qinglan.review.dto.ReviewQueueProposalResponse;
+import com.qinglan.review.entity.ProposalAction;
+import com.qinglan.review.entity.ProposalStatus;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReviewTargetType;
+import com.qinglan.review.entity.VoteDecision;
 import com.qinglan.review.service.AppealQueueService;
 import com.qinglan.review.service.AppealService;
 import com.qinglan.review.service.PendingPostQueueService;
+import com.qinglan.review.service.ProposalService;
 import com.qinglan.review.service.ReviewContextService;
 import com.qinglan.review.service.ReviewQueueService;
 import com.qinglan.review.service.ReviewService;
@@ -36,8 +41,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -79,6 +87,9 @@ class AdminReviewControllerTest {
     private PendingPostQueueService pendingPostQueueService;
 
     @MockitoBean
+    private ProposalService proposalService;
+
+    @MockitoBean
     private JwtService jwtService;
 
     @AfterEach
@@ -101,10 +112,12 @@ class AdminReviewControllerTest {
     @Test
     @DisplayName("队列返回游标分页，且 nextCursor 是字符串（前端原样回传）")
     void shouldReturnQueueWithStringCursor() throws Exception {
-        when(reviewQueueService.queue("2:1000:1")).thenReturn(CursorPage.of(
-                List.of(new ReviewQueueItemResponse(ReviewTargetType.POST, POST_ID, "摘要", "APPROVED",
+        authenticateAsAdmin();
+        when(reviewQueueService.queue("2:1000:1", OPERATOR_ID)).thenReturn(CursorPage.of(
+                List.of(new ReviewQueueItemResponse(ReviewTargetType.POST, POST_ID, "摘要",
+                        List.of("/uploads/a.jpg", "/uploads/b.jpg"), "APPROVED",
                         2, Instant.parse("2026-10-06T00:00:00Z"), List.of(ReportReason.OTHER),
-                        List.of("疑似中介在拉群"))),
+                        List.of("疑似中介在拉群"), null)),
                 "3:2000:1"));
 
         mockMvc.perform(get("/api/admin/review-queue").param("cursor", "2:1000:1"))
@@ -112,21 +125,51 @@ class AdminReviewControllerTest {
                 .andExpect(jsonPath("$.code").value("QL-000-000"))
                 .andExpect(jsonPath("$.data.items[0].targetId").value(POST_ID))
                 .andExpect(jsonPath("$.data.items[0].reportCount").value(2))
+                // 全部图片按序出参：管理员放行前必须看得见图
+                .andExpect(jsonPath("$.data.items[0].images[0]").value("/uploads/a.jpg"))
+                .andExpect(jsonPath("$.data.items[0].images[1]").value("/uploads/b.jpg"))
                 // 举报人填的补充说明必须能读到：理由选「其他」时它是唯一线索
                 .andExpect(jsonPath("$.data.items[0].details[0]").value("疑似中介在拉群"))
+                // 没有进行中提案时该字段为 null，前端无需判空
+                .andExpect(jsonPath("$.data.items[0].proposal").doesNotExist())
                 .andExpect(jsonPath("$.data.nextCursor").value("3:2000:1"));
+    }
+
+    @Test
+    @DisplayName("队列行带进行中提案的进度，且只回我自己那一票（决策 D8）")
+    void shouldReturnQueueItemWithProposalProgress() throws Exception {
+        authenticateAsAdmin();
+        when(reviewQueueService.queue(null, OPERATOR_ID)).thenReturn(CursorPage.of(
+                List.of(new ReviewQueueItemResponse(ReviewTargetType.POST, POST_ID, "摘要", List.of(),
+                        "APPROVED",
+                        1, Instant.parse("2026-10-06T00:00:00Z"), List.of(ReportReason.ABUSE),
+                        List.of(),
+                        new ReviewQueueProposalResponse(12L, ProposalAction.TAKE_DOWN, ProposalStatus.OPEN,
+                                2, 4, 3, VoteDecision.AGREE))),
+                null));
+
+        mockMvc.perform(get("/api/admin/review-queue"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].proposal.proposalId").value(12))
+                .andExpect(jsonPath("$.data.items[0].proposal.agreeCount").value(2))
+                .andExpect(jsonPath("$.data.items[0].proposal.needed").value(4))
+                .andExpect(jsonPath("$.data.items[0].proposal.myDecision").value("AGREE"))
+                // 不暴露任何投票人身份
+                .andExpect(jsonPath("$.data.items[0].proposal.votes").doesNotExist())
+                .andExpect(jsonPath("$.data.items[0].proposal.voterId").doesNotExist());
     }
 
     @Test
     @DisplayName("不带游标即取首页，游标参数对服务层为空")
     void shouldRequestFirstPageWhenCursorAbsent() throws Exception {
-        when(reviewQueueService.queue(null)).thenReturn(CursorPage.empty());
+        authenticateAsAdmin();
+        when(reviewQueueService.queue(null, OPERATOR_ID)).thenReturn(CursorPage.empty());
 
         mockMvc.perform(get("/api/admin/review-queue"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isEmpty());
 
-        verify(reviewQueueService).queue(null);
+        verify(reviewQueueService).queue(null, OPERATOR_ID);
     }
 
     // ------------------------------------------------------------------ 待审帖子
@@ -135,7 +178,7 @@ class AdminReviewControllerTest {
     @DisplayName("待审队列返回游标分页，且行内不含作者身份字段")
     void shouldReturnPendingPostsWithoutAuthorIdentity() throws Exception {
         when(pendingPostQueueService.queue(null)).thenReturn(CursorPage.of(
-                List.of(new PendingPostItemResponse(POST_ID, "待审正文", "PENDING",
+                List.of(new PendingPostItemResponse(POST_ID, "待审正文", List.of("/uploads/p.jpg"), "PENDING",
                         Instant.parse("2026-10-06T00:00:00Z"), 0)),
                 "1000:1"));
 
@@ -143,6 +186,8 @@ class AdminReviewControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("QL-000-000"))
                 .andExpect(jsonPath("$.data.items[0].postId").value(POST_ID))
+                // 全部图片按序出参：管理员放行前必须看得见图
+                .andExpect(jsonPath("$.data.items[0].images[0]").value("/uploads/p.jpg"))
                 .andExpect(jsonPath("$.data.items[0].targetStatus").value("PENDING"))
                 .andExpect(jsonPath("$.data.items[0].authorId").doesNotExist())
                 .andExpect(jsonPath("$.data.items[0].anonymousCode").doesNotExist())
@@ -190,6 +235,65 @@ class AdminReviewControllerTest {
     // ------------------------------------------------------------------ 处置
 
     @Test
+    @DisplayName("下架改为发起提案：动作由 URL 隐含，操作人取自登录态")
+    void shouldProposeTakeDownWithOperatorFromPrincipal() throws Exception {
+        authenticateAsAdmin();
+        when(proposalService.create(any(), any())).thenReturn(12L);
+
+        mockMvc.perform(post("/api/admin/posts/{postId}/take-down", POST_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reasonCode\":\"ABUSE\",\"detail\":\"人身攻击\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.proposalId").value(12));
+
+        ArgumentCaptor<CreateProposalRequest> captor = ArgumentCaptor.forClass(CreateProposalRequest.class);
+        verify(proposalService).create(captor.capture(), eq(OPERATOR_ID));
+        assertThat(captor.getValue().action()).isEqualTo(ProposalAction.TAKE_DOWN);
+        assertThat(captor.getValue().targetType()).isEqualTo(ReviewTargetType.POST);
+        assertThat(captor.getValue().targetId()).isEqualTo(POST_ID);
+        assertThat(captor.getValue().reasonCode()).isEqualTo(ReportReason.ABUSE);
+        assertThat(captor.getValue().detail()).isEqualTo("人身攻击");
+    }
+
+    @Test
+    @DisplayName("移除评论改为发起提案：目标类型由动作推导为 COMMENT")
+    void shouldProposeCommentRemoval() throws Exception {
+        authenticateAsAdmin();
+        when(proposalService.create(any(), any())).thenReturn(13L);
+
+        mockMvc.perform(post("/api/admin/comments/{commentId}/remove", 55L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reasonCode\":\"ABUSE\"}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<CreateProposalRequest> captor = ArgumentCaptor.forClass(CreateProposalRequest.class);
+        verify(proposalService).create(captor.capture(), eq(OPERATOR_ID));
+        assertThat(captor.getValue().action()).isEqualTo(ProposalAction.REMOVE_COMMENT);
+        assertThat(captor.getValue().targetType()).isEqualTo(ReviewTargetType.COMMENT);
+    }
+
+    @Test
+    @DisplayName("隐藏联系方式与维持下架同样只是发起提案")
+    void shouldProposeHideContactAndUphold() throws Exception {
+        authenticateAsAdmin();
+        when(proposalService.create(any(), any())).thenReturn(14L);
+
+        mockMvc.perform(post("/api/admin/posts/{postId}/hide-contact", POST_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reasonCode\":\"FRAUD\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/admin/posts/{postId}/uphold-reports", POST_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reasonCode\":\"ABUSE\"}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<CreateProposalRequest> captor = ArgumentCaptor.forClass(CreateProposalRequest.class);
+        verify(proposalService, times(2)).create(captor.capture(), eq(OPERATOR_ID));
+        assertThat(captor.getAllValues()).extracting(CreateProposalRequest::action)
+                .containsExactly(ProposalAction.HIDE_CONTACT, ProposalAction.UPHOLD_TAKEDOWN);
+    }
+
+    @Test
     @DisplayName("下架缺少违规类型返回 400")
     void shouldRejectTakeDownWithoutReasonCode() throws Exception {
         mockMvc.perform(post("/api/admin/posts/{postId}/take-down", POST_ID)
@@ -200,30 +304,27 @@ class AdminReviewControllerTest {
     }
 
     @Test
-    @DisplayName("下架封禁天数超出上限返回 400")
-    void shouldRejectTakeDownWithExcessiveBanDays() throws Exception {
+    @DisplayName("下架说明超长返回 400")
+    void shouldRejectTakeDownWithExcessiveDetail() throws Exception {
         mockMvc.perform(post("/api/admin/posts/{postId}/take-down", POST_ID)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reasonCode\":\"ABUSE\",\"banDays\":3651}"))
+                        .content("{\"reasonCode\":\"ABUSE\",\"detail\":\"" + "长".repeat(401) + "\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("QL-400-001"));
     }
 
     @Test
-    @DisplayName("合法下架调用服务，且操作人取自登录态而非请求体")
-    void shouldTakeDownWithOperatorFromPrincipal() throws Exception {
+    @DisplayName("恢复可见仍是单人动作，直接调用审核服务，不产生提案")
+    void shouldRestoreDirectly() throws Exception {
         authenticateAsAdmin();
 
-        mockMvc.perform(post("/api/admin/posts/{postId}/take-down", POST_ID)
+        mockMvc.perform(post("/api/admin/posts/{postId}/restore", POST_ID)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reasonCode\":\"ABUSE\",\"detail\":\"人身攻击\",\"banDays\":7}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("QL-000-000"));
+                        .content("{\"reason\":\"确系误判\"}"))
+                .andExpect(status().isOk());
 
-        ArgumentCaptor<TakeDownPostRequest> captor = ArgumentCaptor.forClass(TakeDownPostRequest.class);
-        verify(reviewService).takeDown(eq(POST_ID), eq(OPERATOR_ID), captor.capture());
-        assertThat(captor.getValue().reasonCode()).isEqualTo(ReportReason.ABUSE);
-        assertThat(captor.getValue().banDays()).isEqualTo(7);
+        verify(reviewService).restore(POST_ID, OPERATOR_ID, "确系误判");
+        verifyNoInteractions(proposalService);
     }
 
     @Test

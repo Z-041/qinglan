@@ -58,7 +58,7 @@ describe('useReviewActions', () => {
     mockedTakeDownPost.mockRejectedValue(new Error('网络异常'))
 
     const actions = useReviewActions()
-    const payload = { reasonCode: 'ABUSE' as const, detail: null, banDays: null }
+    const payload = { reasonCode: 'ABUSE' as const, detail: null }
 
     await expect(actions.takeDownPost(5, payload)).resolves.toBe(false)
     expect(actions.submitting.value).toBe(false)

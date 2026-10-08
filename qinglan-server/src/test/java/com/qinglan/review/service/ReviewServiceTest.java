@@ -16,14 +16,13 @@ import com.qinglan.post.entity.ReviewState;
 import com.qinglan.post.entity.RiskLevel;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.review.dto.DismissReportsRequest;
-import com.qinglan.review.dto.TakeDownPostRequest;
+import com.qinglan.review.dto.ProposalDispositionRequest;
 import com.qinglan.review.entity.Report;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReportStatus;
 import com.qinglan.review.entity.ReviewTargetType;
 import com.qinglan.review.repository.ReportRepository;
 import com.qinglan.support.TestFixtures;
-import com.qinglan.user.service.UserService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,7 +31,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -69,9 +67,6 @@ class ReviewServiceTest {
 
     @Mock
     private CommentService commentService;
-
-    @Mock
-    private UserService userService;
 
     @Mock
     private AuditLogService auditLogService;
@@ -135,7 +130,7 @@ class ReviewServiceTest {
                 .thenReturn(List.of(postReport(101L), postReport(102L)));
 
         reviewService.takeDown(POST_ID, OPERATOR_ID,
-                new TakeDownPostRequest(ReportReason.ABUSE, "人身攻击", null));
+                new ProposalDispositionRequest(ReportReason.ABUSE, "人身攻击"));
 
         Post post = postRepository.findById(POST_ID).orElseThrow();
         assertThat(post.getStatus()).isEqualTo(PostStatus.TAKEN_DOWN);
@@ -157,7 +152,7 @@ class ReviewServiceTest {
                 .thenReturn(List.of());
 
         reviewService.takeDown(POST_ID, OPERATOR_ID,
-                new TakeDownPostRequest(ReportReason.PORNOGRAPHY, "   ", null));
+                new ProposalDispositionRequest(ReportReason.PORNOGRAPHY, "   "));
 
         assertThat(postRepository.findById(POST_ID).orElseThrow().getReviewReason())
                 .isEqualTo("PORNOGRAPHY");
@@ -166,30 +161,16 @@ class ReviewServiceTest {
     }
 
     @Test
-    @DisplayName("下架并封禁：带 banDays 时同时封禁作者，封禁自身也留痕")
-    void shouldBanAuthorWhenTakeDownWithBanDays() {
-        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(approvedPost()));
-        when(reportRepository.findByTargetTypeAndTargetIdAndStatus(
-                ReviewTargetType.POST, POST_ID, ReportStatus.PENDING))
-                .thenReturn(List.of());
-
-        reviewService.takeDown(POST_ID, OPERATOR_ID,
-                new TakeDownPostRequest(ReportReason.ABUSE, "累犯", 7));
-
-        verify(userService).ban(AUTHOR_ID, Duration.ofDays(7), "ABUSE: 累犯", OPERATOR_ID);
-    }
-
-    @Test
     @DisplayName("不在审核通过态的内容不能下架（不变量 #5 禁止跳态），且不结案举报")
     void shouldRejectTakeDownFromIllegalState() {
         when(postRepository.findById(POST_ID)).thenReturn(Optional.of(pendingPost()));
 
         assertThatThrownBy(() -> reviewService.takeDown(POST_ID, OPERATOR_ID,
-                new TakeDownPostRequest(ReportReason.ABUSE, null, null)))
+                new ProposalDispositionRequest(ReportReason.ABUSE, null)))
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.ILLEGAL_REVIEW_TRANSITION);
-        verifyNoInteractions(reportRepository, auditLogService, userService);
+        verifyNoInteractions(reportRepository, auditLogService);
     }
 
     // -------------------------------------------------------- 恢复 / 隐藏联系方式
@@ -430,11 +411,11 @@ class ReviewServiceTest {
         when(postRepository.findById(POST_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reviewService.takeDown(POST_ID, OPERATOR_ID,
-                new TakeDownPostRequest(ReportReason.OTHER, null, null)))
+                new ProposalDispositionRequest(ReportReason.OTHER, null)))
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.POST_NOT_FOUND);
-        verifyNoInteractions(reportRepository, auditLogService, userService);
+        verifyNoInteractions(reportRepository, auditLogService);
     }
 
     // -------------------------------------------------------- 通知（REVIEW_RESULT / REPORT_FEEDBACK）
@@ -476,7 +457,7 @@ class ReviewServiceTest {
                 .thenReturn(List.of(postReport(101L), postReport(102L)));
 
         reviewService.takeDown(POST_ID, OPERATOR_ID,
-                new TakeDownPostRequest(ReportReason.ABUSE, "人身攻击", null));
+                new ProposalDispositionRequest(ReportReason.ABUSE, "人身攻击"));
 
         ArgumentCaptor<NotificationMessage> captor = ArgumentCaptor.forClass(NotificationMessage.class);
         verify(notificationPort).notify(eq(AUTHOR_ID), eq(OPERATOR_ID), captor.capture());

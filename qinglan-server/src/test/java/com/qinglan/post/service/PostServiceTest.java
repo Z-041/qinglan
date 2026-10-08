@@ -19,6 +19,8 @@ import com.qinglan.common.notify.NotificationMessage;
 import com.qinglan.common.notify.NotificationPort;
 import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
+import com.qinglan.common.store.EphemeralStore;
+import com.qinglan.common.store.InMemoryEphemeralStore;
 import com.qinglan.post.config.PostProperties;
 import com.qinglan.post.dto.CreatePostRequest;
 import com.qinglan.post.dto.PostDetailResponse;
@@ -53,7 +55,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -100,6 +104,9 @@ class PostServiceTest {
     @Mock
     private NotificationPort notificationPort;
 
+    /** 真实内存实现：H4 的「按用户维度限流 + 用户间额度隔离」只有走真实计数才验证得到 */
+    private final EphemeralStore ephemeralStore = new InMemoryEphemeralStore();
+
     private PostService postService;
 
     /** 默认放行的硬拦截桩；需要拦截的用例自行构造一个会抛的守卫 */
@@ -108,9 +115,13 @@ class PostServiceTest {
 
     @BeforeEach
     void setUp() {
-        postService = new PostService(postRepository, postImageRepository, topicRepository,
+        postService = newService(ephemeralStore);
+    }
+
+    private PostService newService(EphemeralStore store) {
+        return new PostService(postRepository, postImageRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
-                new PostProperties(60, 9), ALLOW_ALL, announcementService, notificationPort);
+                new PostProperties(60, 9), ALLOW_ALL, announcementService, notificationPort, store);
     }
 
     // ------------------------------------------------------------------ 发布
@@ -183,7 +194,7 @@ class PostServiceTest {
         };
         PostService strict = new PostService(postRepository, postImageRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
-                new PostProperties(60, 9), blocking, announcementService, notificationPort);
+                new PostProperties(60, 9), blocking, announcementService, notificationPort, ephemeralStore);
 
         assertThatThrownBy(() -> strict.create(AUTHOR_ID, new CreatePostRequest(TOPIC_ID, "正文", null, null)))
                 .isInstanceOf(BizException.class)
@@ -318,6 +329,74 @@ class PostServiceTest {
 
         assertThat(response.contact()).isEqualTo(CONTACT);
         verifyNoInteractions(auditLogService);
+    }
+
+    // -------------------------------------------------------- H4 联系方式审计限流
+
+    @Test
+    @DisplayName("H4 限流：同一用户在窗口内超限后不再写 CONTACT_VIEW 审计，但详情仍正常返回")
+    void shouldStopAuditingAfterRateLimitButStillReturnDetail() {
+        long viewerId = 8L;
+        stubDetailDependencies();
+        stubPostAggregates(viewerId);
+
+        for (int i = 0; i < PostService.CONTACT_VIEW_MAX_PER_WINDOW; i++) {
+            postService.detail(POST_ID, new Viewer(viewerId));
+        }
+        verify(auditLogService, times(PostService.CONTACT_VIEW_MAX_PER_WINDOW))
+                .record(AuditTargetType.POST, POST_ID, AuditAction.CONTACT_VIEW, viewerId, null);
+
+        // 超出上限：仍然正常返回详情（不抛异常、不返回 4xx），只是不再写审计
+        PostDetailResponse response = postService.detail(POST_ID, new Viewer(viewerId));
+
+        assertThat(response.contact()).isEqualTo(CONTACT);
+        verify(auditLogService, times(PostService.CONTACT_VIEW_MAX_PER_WINDOW))
+                .record(AuditTargetType.POST, POST_ID, AuditAction.CONTACT_VIEW, viewerId, null);
+    }
+
+    @Test
+    @DisplayName("H4 限流：不同用户额度独立，甲超限不影响乙")
+    void shouldIsolateContactViewRateLimitPerUser() {
+        long flooder = 8L;
+        long other = 9L;
+        stubDetailDependencies();
+        stubPostAggregates(flooder);
+        stubPostAggregates(other);
+
+        // 甲打满额度并越界一次
+        for (int i = 0; i <= PostService.CONTACT_VIEW_MAX_PER_WINDOW; i++) {
+            postService.detail(POST_ID, new Viewer(flooder));
+        }
+        verify(auditLogService, times(PostService.CONTACT_VIEW_MAX_PER_WINDOW))
+                .record(AuditTargetType.POST, POST_ID, AuditAction.CONTACT_VIEW, flooder, null);
+
+        // 乙的额度与甲无关，照样写审计
+        postService.detail(POST_ID, new Viewer(other));
+
+        verify(auditLogService).record(AuditTargetType.POST, POST_ID, AuditAction.CONTACT_VIEW, other, null);
+    }
+
+    @Test
+    @DisplayName("H4：看自己的帖子 / 未认证 / 联系方式不可见，既不写审计也不占用限流额度")
+    void shouldNotAuditNorConsumeQuotaWhenNoAuditNeeded() {
+        // 用探针存储验证「不消耗额度」：这些场景连 increment 都不该发生
+        EphemeralStore probe = mock(EphemeralStore.class);
+        PostService service = newService(probe);
+        stubDetailDependencies();
+        stubPostAggregates(AUTHOR_ID);
+
+        // 作者看自己的帖子
+        service.detail(POST_ID, new Viewer(AUTHOR_ID));
+        // 游客看
+        service.detail(POST_ID, Viewer.anonymous());
+        // 联系方式被隐藏时他人看不到
+        Post hidden = TestFixtures.approvedPost(POST_ID, AUTHOR_ID, TOPIC_ID, CONTACT);
+        hidden.hideContact();
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(hidden));
+        service.detail(POST_ID, new Viewer(8L));
+
+        verifyNoInteractions(auditLogService);
+        verifyNoInteractions(probe);
     }
 
     @Test

@@ -61,12 +61,30 @@ function detail(overrides: Partial<PostDetail> = {}): PostDetail {
 
 const RouterLinkStub = { props: ['to'], template: '<a :href="to"><slot /></a>' }
 
-async function mountView(post: PostDetail, comments: Comment[] = []): Promise<VueWrapper> {
+async function mountView(
+  post: PostDetail,
+  comments: Comment[] = [],
+  nextCursor: string | null = null,
+): Promise<VueWrapper> {
   mockedFetchPostDetail.mockResolvedValue(post)
-  mockedFetchComments.mockResolvedValue(comments)
+  mockedFetchComments.mockResolvedValue({ items: comments, nextCursor })
   const wrapper = mount(PostDetailView, { global: { stubs: { RouterLink: RouterLinkStub } } })
   await flushPromises()
   return wrapper
+}
+
+function comment(id: number, overrides: Partial<Comment> = {}): Comment {
+  return {
+    id,
+    content: `评论内容 ${id}`,
+    anonymousCode: `梧桐#${id}`,
+    likeCount: 0,
+    liked: false,
+    mine: false,
+    createdAt: '2026-10-06T00:00:00Z',
+    replies: [],
+    ...overrides,
+  }
 }
 
 describe('PostDetailView 联系方式（不变量 #2）', () => {
@@ -159,5 +177,39 @@ describe('PostDetailView 删除评论', () => {
 
     expect(wrapper.find('[role="dialog"][aria-label="删除评论"]').exists()).toBe(false)
     expect(mockedDeleteComment).not.toHaveBeenCalled()
+  })
+})
+
+describe('PostDetailView 评论分页', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    setAuthToken(null)
+    vi.clearAllMocks()
+    useUserStore().setAccessToken('token')
+  })
+
+  function moreButton(wrapper: VueWrapper) {
+    return wrapper.findAll('button').find((button) => button.text() === '加载更多')
+  }
+
+  it('末页（nextCursor 为 null）不显示「加载更多」', async () => {
+    const wrapper = await mountView(detail(), [comment(1)], null)
+
+    expect(moreButton(wrapper)).toBeUndefined()
+  })
+
+  it('还有下一页时显示「加载更多」，点击后按游标追加，末页后收起', async () => {
+    const wrapper = await mountView(detail(), [comment(1)], 'cursor-1')
+    expect(moreButton(wrapper)).toBeTruthy()
+
+    mockedFetchComments.mockResolvedValueOnce({ items: [comment(2)], nextCursor: null })
+    await moreButton(wrapper)?.trigger('click')
+    await flushPromises()
+
+    expect(mockedFetchComments).toHaveBeenLastCalledWith(7, 'cursor-1')
+    expect(wrapper.text()).toContain('评论内容 2')
+    // 已到末页，入口收起
+    expect(moreButton(wrapper)).toBeUndefined()
   })
 })

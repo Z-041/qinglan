@@ -6,22 +6,34 @@ import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
+import com.qinglan.common.web.TextPreview;
 import com.qinglan.post.entity.Post;
+import com.qinglan.post.entity.PostImage;
+import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
+import com.qinglan.review.dto.ReviewQueueProposalResponse;
 import com.qinglan.review.entity.Report;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReportStatus;
+import com.qinglan.review.entity.ReviewProposal;
 import com.qinglan.review.entity.ReviewTargetType;
+import com.qinglan.review.entity.ReviewVote;
+import com.qinglan.review.entity.VoteDecision;
+import com.qinglan.review.entity.VoteTally;
 import com.qinglan.review.repository.ReportRepository;
+import com.qinglan.review.repository.ReviewProposalRepository;
 import com.qinglan.review.repository.ReviewQueueRow;
+import com.qinglan.review.repository.ReviewVoteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -31,8 +43,9 @@ import java.util.stream.Collectors;
 /**
  * 审核队列：按举报目标聚合，供管理端工作台逐条处置。
  *
- * <p>排序与分页都在数据库完成（举报数降序、首报时间升序），内存只做装配。一页之内用
- * 三次批量查询补齐摘要与理由，杜绝逐行查询造成的 N+1。</p>
+ * <p>排序与分页都在数据库完成（举报数降序、首报时间升序），内存只做装配。一页之内用若干次
+ * 批量查询补齐摘要、理由、提案进度与帖子图片，杜绝逐行查询造成的 N+1。图片是审核的必要输入：
+ * 只给正文摘要时，管理员根本看不到随帖的图，等于漏审。</p>
  *
  * <p>队列里不出现举报人的任何信息——举报人身份不出审核队列（不变量 #1 的引申）。</p>
  */
@@ -42,7 +55,6 @@ public class ReviewQueueService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int PREVIEW_LENGTH = 80;
-    private static final String ELLIPSIS = "...";
     private static final String KEY_SEPARATOR = ":";
 
     /**
@@ -58,10 +70,16 @@ public class ReviewQueueService {
 
     private final ReportRepository reportRepository;
     private final PostRepository postRepository;
+    private final PostImageRepository postImageRepository;
     private final CommentRepository commentRepository;
+    private final ReviewProposalRepository proposalRepository;
+    private final ReviewVoteRepository voteRepository;
 
+    /**
+     * @param viewerId 当前操作者，用于回填「我是否已投这一票」；队列行只给汇总，不含任何投票人身份
+     */
     @Transactional(readOnly = true)
-    public CursorPage<ReviewQueueItemResponse> queue(String cursorRaw) {
+    public CursorPage<ReviewQueueItemResponse> queue(String cursorRaw, Long viewerId) {
         ReviewQueueCursor cursor = parseCursor(cursorRaw);
         // 多取一条判断是否还有下一页，避免额外 count 查询
         List<ReviewQueueRow> rows = reportRepository.findQueueAggregates(
@@ -79,11 +97,13 @@ public class ReviewQueueService {
         }
 
         Map<Long, Post> posts = loadPosts(page);
+        Map<Long, List<String>> postImages = loadPostImages(page);
         Map<Long, Comment> comments = loadComments(page);
         Map<String, ReportSummary> summaries = loadReportSummaries(page);
+        Map<String, ReviewQueueProposalResponse> proposals = loadOpenProposals(page, viewerId);
 
         List<ReviewQueueItemResponse> items = page.stream()
-                .map(row -> toItem(row, posts, comments, summaries))
+                .map(row -> toItem(row, posts, postImages, comments, summaries, proposals))
                 .toList();
         String nextCursor = hasMore ? formatCursor(page.get(page.size() - 1)) : null;
         return CursorPage.of(items, nextCursor);
@@ -98,6 +118,23 @@ public class ReviewQueueService {
         }
         return postRepository.findAllById(ids).stream()
                 .collect(Collectors.toMap(Post::getId, post -> post));
+    }
+
+    /**
+     * 一页之内按 POST 目标批量取图：一次 {@code findByPostIdInOrderBySortOrderAsc} 覆盖整页，
+     * 杜绝逐行查询造成的 N+1。评论目标没有图片，故只取 POST；仓储已按 {@code sort_order} 升序返回，
+     * 分组用有序 Map 保序。未在映射里的 POST（已被删除）在装配时取空列表。
+     */
+    private Map<Long, List<String>> loadPostImages(List<ReviewQueueRow> page) {
+        List<Long> ids = targetIds(page, ReviewTargetType.POST);
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<String>> images = new LinkedHashMap<>();
+        for (PostImage image : postImageRepository.findByPostIdInOrderBySortOrderAsc(ids)) {
+            images.computeIfAbsent(image.getPostId(), ignored -> new ArrayList<>()).add(image.getUrl());
+        }
+        return images;
     }
 
     private Map<Long, Comment> loadComments(List<ReviewQueueRow> page) {
@@ -142,10 +179,53 @@ public class ReviewQueueService {
         }
     }
 
+    /**
+     * 一页之内按目标装配「正在进行的处置提案」（方案 9.2）。两次批量查询覆盖帖子与评论两类目标，
+     * 无逐行查询。同目标最多一条提案（唯一键保证），因此按目标建映射不会互相覆盖。
+     */
+    private Map<String, ReviewQueueProposalResponse> loadOpenProposals(List<ReviewQueueRow> page, Long viewerId) {
+        Map<String, ReviewQueueProposalResponse> proposals = new HashMap<>();
+        collectOpenProposals(ReviewTargetType.POST, targetIds(page, ReviewTargetType.POST), viewerId, proposals);
+        collectOpenProposals(ReviewTargetType.COMMENT, targetIds(page, ReviewTargetType.COMMENT), viewerId, proposals);
+        return proposals;
+    }
+
+    private void collectOpenProposals(ReviewTargetType targetType, List<Long> targetIds, Long viewerId,
+                                      Map<String, ReviewQueueProposalResponse> sink) {
+        if (targetIds.isEmpty()) {
+            return;
+        }
+        List<ReviewProposal> proposals = proposalRepository.findOpenByTargets(targetType, targetIds);
+        if (proposals.isEmpty()) {
+            return;
+        }
+        List<Long> proposalIds = proposals.stream().map(ReviewProposal::getId).toList();
+        Map<Long, List<ReviewVote>> votesByProposal = new HashMap<>();
+        for (ReviewVote vote : voteRepository.findByProposalIdIn(proposalIds)) {
+            votesByProposal.computeIfAbsent(vote.getProposalId(), ignored -> new ArrayList<>()).add(vote);
+        }
+        for (ReviewProposal proposal : proposals) {
+            List<ReviewVote> votes = votesByProposal.getOrDefault(proposal.getId(), List.of());
+            int agree = (int) votes.stream().filter(vote -> vote.getDecision() == VoteDecision.AGREE).count();
+            VoteTally tally = VoteTally.of(proposal.getSnapshotSize(), agree, votes.size() - agree);
+            VoteDecision mine = viewerId == null ? null : votes.stream()
+                    .filter(vote -> vote.getVoterId().equals(viewerId))
+                    .map(ReviewVote::getDecision)
+                    .findFirst()
+                    .orElse(null);
+            sink.put(key(targetType, proposal.getTargetId()), new ReviewQueueProposalResponse(
+                    proposal.getId(), proposal.getAction(), proposal.getStatus(),
+                    agree, tally.neededCount(), tally.votedCount(), mine));
+        }
+    }
+
     private ReviewQueueItemResponse toItem(ReviewQueueRow row, Map<Long, Post> posts,
+                                           Map<Long, List<String>> postImages,
                                            Map<Long, Comment> comments,
-                                           Map<String, ReportSummary> summaries) {
+                                           Map<String, ReportSummary> summaries,
+                                           Map<String, ReviewQueueProposalResponse> proposals) {
         ReportSummary summary = summaries.getOrDefault(key(row.targetType(), row.targetId()), ReportSummary.EMPTY);
+        ReviewQueueProposalResponse proposal = proposals.get(key(row.targetType(), row.targetId()));
         return switch (row.targetType()) {
             case POST -> {
                 Post post = posts.get(row.targetId());
@@ -153,11 +233,13 @@ public class ReviewQueueService {
                         ReviewTargetType.POST,
                         row.targetId(),
                         preview(post == null ? null : post.getContent()),
+                        postImages.getOrDefault(row.targetId(), List.of()),
                         post == null ? null : post.getStatus().name(),
                         (int) row.reportCount(),
                         row.firstReportedAt(),
                         summary.reasons(),
-                        summary.details());
+                        summary.details(),
+                        proposal);
             }
             case COMMENT -> {
                 Comment comment = comments.get(row.targetId());
@@ -165,11 +247,14 @@ public class ReviewQueueService {
                         ReviewTargetType.COMMENT,
                         row.targetId(),
                         preview(comment == null ? null : comment.getContent()),
+                        // 评论没有图片：返回空列表而非 null，前端无需判空
+                        List.of(),
                         comment == null ? null : comment.getStatus().name(),
                         (int) row.reportCount(),
                         row.firstReportedAt(),
                         summary.reasons(),
-                        summary.details());
+                        summary.details(),
+                        proposal);
             }
         };
     }
@@ -187,10 +272,7 @@ public class ReviewQueueService {
     }
 
     private String preview(String content) {
-        if (content == null) {
-            return null;
-        }
-        return content.length() <= PREVIEW_LENGTH ? content : content.substring(0, PREVIEW_LENGTH) + ELLIPSIS;
+        return TextPreview.of(content, PREVIEW_LENGTH);
     }
 
     private String key(ReviewTargetType targetType, Long targetId) {

@@ -15,6 +15,7 @@ declare module 'vue' {
     AnnouncementTable: typeof import('./components/admin/AnnouncementTable.vue')['default']
     AppealReviewDialog: typeof import('./components/admin/AppealReviewDialog.vue')['default']
     AppealTable: typeof import('./components/admin/AppealTable.vue')['default']
+    ArbitrationDialog: typeof import('./components/admin/ArbitrationDialog.vue')['default']
     BanUserDialog: typeof import('./components/admin/BanUserDialog.vue')['default']
     CreditAdjustDialog: typeof import('./components/admin/CreditAdjustDialog.vue')['default']
     DismissReportsDialog: typeof import('./components/admin/DismissReportsDialog.vue')['default']
@@ -25,12 +26,12 @@ declare module 'vue' {
     ElOption: typeof import('element-plus/es')['ElOption']
     ElSelect: typeof import('element-plus/es')['ElSelect']
     PendingPostTable: typeof import('./components/admin/PendingPostTable.vue')['default']
+    ProposalReasonDialog: typeof import('./components/admin/ProposalReasonDialog.vue')['default']
     QueueTable: typeof import('./components/admin/QueueTable.vue')['default']
     ReviewActionBar: typeof import('./components/admin/ReviewActionBar.vue')['default']
     ReviewContextPanel: typeof import('./components/admin/ReviewContextPanel.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    TakeDownDialog: typeof import('./components/admin/TakeDownDialog.vue')['default']
     UserTable: typeof import('./components/admin/UserTable.vue')['default']
   }
 }

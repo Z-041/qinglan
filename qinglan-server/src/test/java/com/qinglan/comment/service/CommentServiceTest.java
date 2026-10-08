@@ -19,6 +19,8 @@ import com.qinglan.common.notify.NotificationMessage;
 import com.qinglan.common.notify.NotificationPort;
 import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
+import com.qinglan.common.web.CursorCodec;
+import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.support.TestFixtures;
@@ -31,7 +33,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -320,7 +326,7 @@ class CommentServiceTest {
     void shouldRejectListingCommentsOfInvisiblePost() {
         when(postRepository.findById(POST_ID)).thenReturn(Optional.of(pendingPost()));
 
-        assertThatThrownBy(() -> commentService.list(POST_ID, Viewer.anonymous()))
+        assertThatThrownBy(() -> commentService.list(POST_ID, null, Viewer.anonymous()))
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.POST_NOT_FOUND);
@@ -381,8 +387,8 @@ class CommentServiceTest {
     @DisplayName("评论列表：一级评论带出回复，并批量装配点赞数（游客没有 liked 状态）")
     void shouldAssembleRepliesAndLikes() {
         when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
-        when(commentRepository.findByPostIdAndParentIdIsNullAndStatusOrderByCreatedAtAsc(
-                POST_ID, CommentStatus.PUBLISHED))
+        when(commentRepository.findRootPage(
+                eq(POST_ID), eq(CommentStatus.PUBLISHED), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(List.of(comment(ROOT_ID, POST_ID, null, AUTHOR_ID)));
         when(commentRepository.findByParentIdInAndStatusOrderByCreatedAtAsc(
                 List.of(ROOT_ID), CommentStatus.PUBLISHED))
@@ -390,10 +396,11 @@ class CommentServiceTest {
         when(likeRepository.countByTargets(LikeTargetType.COMMENT, List.of(ROOT_ID, REPLY_ID)))
                 .thenReturn(List.of(new LikeCount(ROOT_ID, 3L)));
 
-        List<CommentResponse> comments = commentService.list(POST_ID, Viewer.anonymous());
+        CursorPage<CommentResponse> page = commentService.list(POST_ID, null, Viewer.anonymous());
 
-        assertThat(comments).hasSize(1);
-        CommentResponse root = comments.getFirst();
+        assertThat(page.items()).hasSize(1);
+        assertThat(page.nextCursor()).isNull();
+        CommentResponse root = page.items().getFirst();
         assertThat(root.likeCount()).isEqualTo(3);
         assertThat(root.liked()).isFalse();
         assertThat(root.replies()).hasSize(1);
@@ -402,15 +409,132 @@ class CommentServiceTest {
     }
 
     @Test
-    @DisplayName("帖子没有评论时不查回复表，直接返回空列表")
+    @DisplayName("帖子没有评论时不查回复表，直接返回空页")
     void shouldReturnEmptyWhenNoComments() {
         when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
-        when(commentRepository.findByPostIdAndParentIdIsNullAndStatusOrderByCreatedAtAsc(
-                POST_ID, CommentStatus.PUBLISHED))
+        when(commentRepository.findRootPage(
+                eq(POST_ID), eq(CommentStatus.PUBLISHED), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(List.of());
 
-        assertThat(commentService.list(POST_ID, Viewer.anonymous())).isEmpty();
+        CursorPage<CommentResponse> page = commentService.list(POST_ID, null, Viewer.anonymous());
+
+        assertThat(page.items()).isEmpty();
+        assertThat(page.nextCursor()).isNull();
         verifyNoInteractions(likeRepository);
+    }
+
+    @Test
+    @DisplayName("首页取 21 条只回 20 条并给出带 id 段的游标，回复只装配本页的一级评论")
+    void shouldPageRootsAndAssembleOnlyThisPageReplies() {
+        Instant base = Instant.parse("2026-10-06T00:00:00Z");
+        List<Comment> rows = new ArrayList<>();
+        for (int i = 0; i < 21; i++) {
+            rows.add(comment(500L + i, POST_ID, null, AUTHOR_ID, base.plusNanos(i * 1_000_000L)));
+        }
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
+        when(commentRepository.findRootPage(
+                eq(POST_ID), eq(CommentStatus.PUBLISHED), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(rows);
+        List<Long> pageRootIds = rows.subList(0, 20).stream().map(Comment::getId).toList();
+        when(commentRepository.findByParentIdInAndStatusOrderByCreatedAtAsc(
+                pageRootIds, CommentStatus.PUBLISHED))
+                .thenReturn(List.of(comment(9001L, POST_ID, pageRootIds.getFirst(), 8L, base)));
+
+        CursorPage<CommentResponse> page = commentService.list(POST_ID, null, Viewer.anonymous());
+
+        assertThat(page.items()).hasSize(20);
+        assertThat(page.items().getFirst().replies()).hasSize(1);
+        // 游标是 (createdAt 微秒, id) 两段：只按时间会在同微秒并列时漏行或重复
+        Comment boundary = rows.get(19);
+        assertThat(page.nextCursor())
+                .isEqualTo(CursorCodec.encode(boundary.getCreatedAt()) + ":" + boundary.getId());
+        // 回复查询只针对本页的 20 条一级评论，不再传全量 id
+        verify(commentRepository)
+                .findByParentIdInAndStatusOrderByCreatedAtAsc(pageRootIds, CommentStatus.PUBLISHED);
+    }
+
+    @Test
+    @DisplayName("游标带 id 段：同一微秒并列的两行也能接着翻页不重不漏")
+    void shouldKeepIdWhenRowsShareTheSameMicrosecond() {
+        Instant shared = Instant.parse("2026-10-06T00:00:01Z");
+        List<Comment> rows = new ArrayList<>();
+        for (int i = 0; i < 19; i++) {
+            rows.add(comment(600L + i, POST_ID, null, AUTHOR_ID, shared.minusNanos((19 - i) * 1_000L)));
+        }
+        Comment boundary = comment(619L, POST_ID, null, AUTHOR_ID, shared);
+        Comment following = comment(620L, POST_ID, null, AUTHOR_ID, shared);
+        rows.add(boundary);
+        rows.add(following);
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
+        when(commentRepository.findRootPage(
+                eq(POST_ID), eq(CommentStatus.PUBLISHED), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(rows);
+
+        CursorPage<CommentResponse> page = commentService.list(POST_ID, null, Viewer.anonymous());
+
+        assertThat(page.items()).hasSize(20);
+        assertThat(page.nextCursor())
+                .isEqualTo(CursorCodec.encode(shared) + ":" + boundary.getId());
+
+        // 第二页必须拿到并列行的 id，否则同微秒的 following 行会被跳过或与 boundary 重复
+        commentService.list(POST_ID, page.nextCursor(), Viewer.anonymous());
+
+        verify(commentRepository).findRootPage(eq(POST_ID), eq(CommentStatus.PUBLISHED), eq(shared),
+                eq(boundary.getId()), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("回复只出现在其所属一级评论所在的页：第二页带出该页一级评论自己的回复")
+    void shouldAssembleRepliesOnTheirOwnPageOnly() {
+        Instant base = Instant.parse("2026-10-06T00:00:00Z");
+        Post post = visiblePost();
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(post));
+        // 首页：仅 ROOT_ID；下一页：仅 ROOT_ID + 20
+        when(commentRepository.findRootPage(
+                eq(POST_ID), eq(CommentStatus.PUBLISHED), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(List.of(comment(ROOT_ID, POST_ID, null, AUTHOR_ID, base)));
+        Instant cursorAt = base.plusSeconds(1);
+        long nextRootId = ROOT_ID + 20;
+        when(commentRepository.findRootPage(
+                eq(POST_ID), eq(CommentStatus.PUBLISHED), eq(cursorAt), eq(ROOT_ID), any(Pageable.class)))
+                .thenReturn(List.of(comment(nextRootId, POST_ID, null, AUTHOR_ID, cursorAt)));
+        when(commentRepository.findByParentIdInAndStatusOrderByCreatedAtAsc(
+                List.of(ROOT_ID), CommentStatus.PUBLISHED))
+                .thenReturn(List.of(comment(REPLY_ID, POST_ID, ROOT_ID, 8L, base)));
+        when(commentRepository.findByParentIdInAndStatusOrderByCreatedAtAsc(
+                List.of(nextRootId), CommentStatus.PUBLISHED))
+                .thenReturn(List.of(comment(nextRootId + 1, POST_ID, nextRootId, 9L, cursorAt)));
+
+        CursorPage<CommentResponse> first = commentService.list(POST_ID, null, Viewer.anonymous());
+        CursorPage<CommentResponse> second = commentService.list(
+                POST_ID, CursorCodec.encode(cursorAt) + ":" + ROOT_ID, Viewer.anonymous());
+
+        assertThat(first.items()).singleElement().satisfies(root -> {
+            assertThat(root.id()).isEqualTo(ROOT_ID);
+            assertThat(root.replies()).singleElement()
+                    .satisfies(reply -> assertThat(reply.id()).isEqualTo(REPLY_ID));
+        });
+        assertThat(second.items()).singleElement().satisfies(root -> {
+            assertThat(root.id()).isEqualTo(nextRootId);
+            assertThat(root.replies()).singleElement()
+                    .satisfies(reply -> assertThat(reply.id()).isEqualTo(nextRootId + 1));
+        });
+    }
+
+    @Test
+    @DisplayName("非法游标（缺段 / 非数字 / 非正数）一律拒绝，不静默从头开始")
+    void shouldRejectInvalidCursor() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
+
+        for (String invalid : List.of(
+                "123", "abc:5", "5:abc", "0:5", "5:0", "1:2:3", ":")) {
+            assertThatThrownBy(() -> commentService.list(POST_ID, invalid, Viewer.anonymous()))
+                    .as("游标 %s", invalid)
+                    .isInstanceOf(BizException.class)
+                    .extracting(ex -> ((BizException) ex).errorCode())
+                    .isEqualTo(ErrorCode.CURSOR_INVALID);
+        }
+        verifyNoInteractions(commentRepository);
     }
 
     // ------------------------------------------------------------------ 辅助
@@ -428,8 +552,14 @@ class CommentServiceTest {
     }
 
     private static Comment comment(long id, long postId, Long parentId, long authorId) {
+        return comment(id, postId, parentId, authorId, Instant.parse("2026-10-06T00:00:00Z"));
+    }
+
+    /** 带 createdAt 的构造：游标分页用例要精确控制时间，才能构造同微秒并列等边界 */
+    private static Comment comment(long id, long postId, Long parentId, long authorId, Instant createdAt) {
         Comment comment = Comment.create(postId, authorId, parentId, "内容");
         TestFixtures.setId(comment, id);
+        TestFixtures.setCreatedAt(comment, createdAt);
         comment.assignAnonymousCode("青竹#0f0f");
         return comment;
     }

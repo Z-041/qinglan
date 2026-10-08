@@ -54,6 +54,35 @@ class AnnouncementRepositoryTest {
     }
 
     @Test
+    @DisplayName("当日「发布过」计数含已撤回：撤回不回退额度，否则「发布→撤回→再发布」可绕过每日上限")
+    void shouldCountRevokedAnnouncementInDailyPublishCount() {
+        Announcement first = publish("公告一", AnnouncementLevel.NORMAL, NOW);
+        publish("公告二", AnnouncementLevel.NORMAL, NOW.plusSeconds(60));
+
+        first.revoke(NOW.plusSeconds(120));
+        entityManager.flush();
+
+        // 两条都在今天发布过。撤回改的是状态、不是发布时间，故计数仍为 2——
+        // 若按「当前状态 = PUBLISHED」统计，这里会变成 1，上限即可被反复撤回绕过。
+        assertThat(first.getStatus()).isEqualTo(AnnouncementStatus.REVOKED);
+        assertThat(announcementRepository.countByPublishedAtGreaterThanEqual(NOW.minusSeconds(1)))
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("从未发布过的草稿不计入当日发布数")
+    void shouldNotCountDraftInDailyPublishCount() {
+        publish("公告一", AnnouncementLevel.NORMAL, NOW);
+        // 草稿：publishedAt 为空，SQL 的 NULL 比较天然把它排除
+        announcementRepository.saveAndFlush(Announcement.draft(
+                "草稿", "正文", AnnouncementLevel.NORMAL, NOW, null, 0, false, false, null, 1L));
+        entityManager.flush();
+
+        assertThat(announcementRepository.countByPublishedAtGreaterThanEqual(NOW.minusSeconds(1)))
+                .isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("登录用户的已读记录把该公告排除出待读")
     void shouldExcludeReadByUserId() {
         Announcement urgent = publish("紧急公告", AnnouncementLevel.URGENT, NOW.minusSeconds(10));

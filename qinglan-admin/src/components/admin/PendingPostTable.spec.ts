@@ -8,6 +8,7 @@ function pendingPost(overrides: Partial<AdminPendingPostItem> = {}): AdminPendin
   return {
     postId: 5,
     preview: '测试正文',
+    images: [],
     targetStatus: 'PENDING',
     submittedAt: '2026-10-06T00:00:00Z',
     reportCount: 0,
@@ -47,6 +48,29 @@ describe('PendingPostTable', () => {
     expect(text).toContain('测试正文')
     expect(text).toContain('审核中')
     expect(text).toContain(new Date('2026-10-06T00:00:00Z').toLocaleString())
+  })
+
+  it('渲染缩略图：按序渲染全部图片，点开在新标签页看原图', () => {
+    const wrapper = mount(PendingPostTable, {
+      props: { items: [pendingPost({ images: ['/uploads/a.jpg', '/uploads/b.jpg'] })] },
+    })
+
+    const imgs = wrapper.findAll('img')
+    expect(imgs.map((img) => img.attributes('src'))).toEqual(['/uploads/a.jpg', '/uploads/b.jpg'])
+    expect(imgs[0].classes()).toContain('object-cover')
+
+    const links = wrapper.findAll('a')
+    expect(links).toHaveLength(2)
+    expect(links[0].attributes('href')).toBe('/uploads/a.jpg')
+    expect(links[0].attributes('target')).toBe('_blank')
+    expect(links[0].attributes('rel')).toBe('noopener noreferrer')
+  })
+
+  it('无图时不渲染 img，图片列显示占位符而不是留空', () => {
+    const wrapper = mount(PendingPostTable, { props: { items: [pendingPost()] } })
+
+    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.findAll('td').some((cell) => cell.text() === '—')).toBe(true)
   })
 
   it('不变量 #1：没有作者列，作者身份不出队列', () => {

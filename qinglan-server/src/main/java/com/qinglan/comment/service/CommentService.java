@@ -21,6 +21,9 @@ import com.qinglan.common.notify.NotificationMessage;
 import com.qinglan.common.notify.NotificationPort;
 import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
+import com.qinglan.common.web.CursorCodec;
+import com.qinglan.common.web.CursorPage;
+import com.qinglan.common.web.TextPreview;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.user.entity.User;
@@ -28,9 +31,11 @@ import com.qinglan.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,6 +60,11 @@ public class CommentService {
 
     /** 通知正文（评论摘要）截断长度；超出补省略号，避免把整条评论塞进通知 */
     private static final int NOTIFICATION_BODY_LENGTH = 50;
+    /** 一级评论每页条数；回复随所属一级评论整页带出，不单独分页 */
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final String KEY_SEPARATOR = ":";
+    /** 评论列表游标段数：评论微秒 : 评论 id */
+    private static final int CURSOR_SEGMENTS = 2;
 
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
@@ -66,17 +76,26 @@ public class CommentService {
     private final ContentGuard contentGuard;
 
     /**
-     * 评论列表：一次取出该帖全部一级评论与其回复，再批量装配点赞，避免评论树的 N+1。
+     * 评论列表：一级评论键集分页（每页 {@value #DEFAULT_PAGE_SIZE} 条），回复随所属一级评论整页带出，
+     * 再批量装配点赞，避免评论树的 N+1。
+     *
+     * <p>只对一级评论分页：热帖上千条评论时，全量加载会让响应体、内存与 {@code IN (...)} 子句线性膨胀。
+     * 点赞统计只针对本页的一级评论与其回复，不再传全量 id。</p>
      *
      * <p>先校验帖子可见性：否则可以绕过帖子详情、直接读已下架帖子的评论。</p>
      */
     @Transactional(readOnly = true)
-    public List<CommentResponse> list(Long postId, Viewer viewer) {
+    public CursorPage<CommentResponse> list(Long postId, String cursorRaw, Viewer viewer) {
         requireVisiblePost(postId, viewer.userId());
-        List<Comment> roots = commentRepository
-                .findByPostIdAndParentIdIsNullAndStatusOrderByCreatedAtAsc(postId, CommentStatus.PUBLISHED);
+        CommentCursor cursor = parseCursor(cursorRaw);
+        // 多取一条判断是否还有下一页，避免额外 count 查询
+        List<Comment> found = commentRepository.findRootPage(
+                postId, CommentStatus.PUBLISHED, cursor.createdAt(), cursor.id(),
+                PageRequest.of(0, DEFAULT_PAGE_SIZE + 1));
+        boolean hasMore = found.size() > DEFAULT_PAGE_SIZE;
+        List<Comment> roots = hasMore ? List.copyOf(found.subList(0, DEFAULT_PAGE_SIZE)) : found;
         if (roots.isEmpty()) {
-            return List.of();
+            return CursorPage.empty();
         }
         List<Long> rootIds = roots.stream().map(Comment::getId).toList();
         List<Comment> replies = commentRepository
@@ -95,10 +114,12 @@ public class CommentService {
             repliesByParent.computeIfAbsent(reply.getParentId(), key -> new ArrayList<>())
                     .add(toResponse(reply, List.of(), likeCounts, likedIds, viewer));
         }
-        return roots.stream()
+        List<CommentResponse> items = roots.stream()
                 .map(root -> toResponse(root, repliesByParent.getOrDefault(root.getId(), List.of()),
                         likeCounts, likedIds, viewer))
                 .toList();
+        String nextCursor = hasMore ? formatCursor(roots.get(roots.size() - 1)) : null;
+        return CursorPage.of(items, nextCursor);
     }
 
     @Transactional
@@ -263,11 +284,44 @@ public class CommentService {
         contentGuard.check(content);
     }
 
-    /** 评论摘要：超过 {@value #NOTIFICATION_BODY_LENGTH} 字截断并补省略号，与既有预览截断同风格 */
+    /**
+     * 解析评论列表游标。游标对客户端不透明，只要求原样回传；格式为「评论微秒:评论 id」，
+     * 两段必须齐全且为正数，缺段、错位或非数字一律按非法游标拒绝，不静默从头开始。
+     */
+    private CommentCursor parseCursor(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return new CommentCursor(null, null);
+        }
+        String[] parts = raw.split(KEY_SEPARATOR);
+        if (parts.length != CURSOR_SEGMENTS) {
+            throw new BizException(ErrorCode.CURSOR_INVALID);
+        }
+        try {
+            long micros = Long.parseLong(parts[0]);
+            long id = Long.parseLong(parts[1]);
+            if (micros <= 0 || id <= 0) {
+                throw new NumberFormatException("游标各段不合法");
+            }
+            return new CommentCursor(CursorCodec.decode(micros), id);
+        } catch (NumberFormatException ex) {
+            throw new BizException(ErrorCode.CURSOR_INVALID);
+        }
+    }
+
+    private String formatCursor(Comment comment) {
+        return CursorCodec.encode(comment.getCreatedAt()) + KEY_SEPARATOR + comment.getId();
+    }
+
+    /** 评论列表游标：与 {@code CommentRepository#findRootPage} 的排序键逐一对应 */
+    private record CommentCursor(Instant createdAt, Long id) {
+    }
+
+    /**
+     * 评论摘要：超过 {@value #NOTIFICATION_BODY_LENGTH} 个码点截断并补省略号。
+     * 按**码点**而不是 char 切，否则 emoji 会被切成半个、在通知里显示成乱码（见 {@link TextPreview}）。
+     */
     private static String truncateForNotification(String content) {
-        return content.length() > NOTIFICATION_BODY_LENGTH
-                ? content.substring(0, NOTIFICATION_BODY_LENGTH) + "..."
-                : content;
+        return TextPreview.of(content, NOTIFICATION_BODY_LENGTH);
     }
 
     private LikeStateResponse likeState(Long commentId, Long userId) {

@@ -25,11 +25,14 @@ const {
   post,
   comments,
   loading,
+  loadingMore,
+  hasMore,
   failed,
   submitting,
   appealSubmitting,
   appealed,
   load,
+  loadMoreComments,
   toggleLike,
   toggleCommentLike,
   submitComment,
@@ -300,6 +303,13 @@ async function handleAppeal(): Promise<void> {
               />
             </ul>
             <p v-else class="mt-3 text-xs text-muted">还没有评论，说点什么吧</p>
+
+            <!-- 一级评论游标分页：还有下一页时才出现，点一次追加一批；回复随所属一级评论整页带出 -->
+            <div v-if="comments.length && hasMore" class="mt-4 flex justify-center">
+              <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMoreComments">
+                加载更多
+              </BaseButton>
+            </div>
 
             <form v-if="userStore.isAuthenticated" class="mt-4" @submit.prevent="handleComment">
               <div v-if="replyTo" class="mb-2 flex items-center gap-2 text-xs text-muted">

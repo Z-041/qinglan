@@ -279,11 +279,15 @@ public class AnnouncementService {
                 .orElseThrow(() -> new BizException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
     }
 
-    /** 当日已发布数。日界线用 Asia/Shanghai，与 {@code AdminStatsService} 的看板口径一致 */
+    /**
+     * 当日**发布过**的公告数（含已被撤回的）。日界线用 Asia/Shanghai，与 {@code AdminStatsService} 的看板口径一致。
+     *
+     * <p>不按「当前状态 = PUBLISHED」统计：撤回会改状态，「发布 → 撤回 → 再发布」就能让计数回落、
+     * 绕过每日上限。上限约束的是发布这个动作。</p>
+     */
     private long publishedToday(Instant now) {
         Instant dayStart = now.atZone(DAY_ZONE).toLocalDate().atStartOfDay(DAY_ZONE).toInstant();
-        return announcementRepository.countByStatusAndPublishedAtGreaterThanEqual(
-                AnnouncementStatus.PUBLISHED, dayStart);
+        return announcementRepository.countByPublishedAtGreaterThanEqual(dayStart);
     }
 
     /** 请求体 deviceId 优先，其次查询参数；两者都空返回 null。超长直接拒绝而不是让数据库报错 */

@@ -5,14 +5,18 @@ import com.qinglan.common.web.ApiResponse;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.review.dto.AdminAppealItemResponse;
 import com.qinglan.review.dto.AdminReviewContextResponse;
+import com.qinglan.review.dto.CreateProposalRequest;
+import com.qinglan.review.dto.CreateProposalResponse;
 import com.qinglan.review.dto.DismissReportsRequest;
 import com.qinglan.review.dto.PendingPostItemResponse;
+import com.qinglan.review.dto.ProposalDispositionRequest;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
-import com.qinglan.review.dto.TakeDownPostRequest;
+import com.qinglan.review.entity.ProposalAction;
 import com.qinglan.review.entity.ReviewTargetType;
 import com.qinglan.review.service.AppealQueueService;
 import com.qinglan.review.service.AppealService;
 import com.qinglan.review.service.PendingPostQueueService;
+import com.qinglan.review.service.ProposalService;
 import com.qinglan.review.service.ReviewContextService;
 import com.qinglan.review.service.ReviewQueueService;
 import com.qinglan.review.service.ReviewService;
@@ -33,8 +37,10 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>权限点写在**方法级**（P5 设计 7.1）：类上不再做任何放宽，避免「类级放行 + 方法级遗漏」。
  * 读类端点用 {@code MODERATION_VIEW}、申诉相关用 {@code APPEAL_REVIEW}、核准用
- * {@code POST_REVIEW}、驳回举报用 {@code REPORT_DISMISS}，处置类（下架/移除/隐藏/维持）
- * 一期仍按 {@code PROPOSAL_CREATE} 直接放行，二期接入表决后改为「发起提案」。</p>
+ * {@code POST_REVIEW}、驳回举报用 {@code REPORT_DISMISS}。处置类（下架/移除/隐藏/维持）
+ * **二期起不再直接处置**，改为「发起提案」（{@code PROPOSAL_CREATE} + 委员会表决，决策 D5）；
+ * **撤销**已作出的处置（恢复可见 / 撤销隐藏联系方式）归 {@code DISPOSITION_REVOKE}，
+ * 仅超级管理员——否则任一委员都能静默推翻多数决。</p>
  *
  * <p>Controller 只做取参、校验与取当前操作人，业务判断全在 Service。</p>
  */
@@ -49,13 +55,14 @@ public class AdminReviewController {
     private final AppealService appealService;
     private final AppealQueueService appealQueueService;
     private final PendingPostQueueService pendingPostQueueService;
+    private final ProposalService proposalService;
 
-    /** 举报队列：按举报数降序 + 等待时长升序，游标分页 */
+    /** 举报队列：按举报数降序 + 等待时长升序，游标分页；行内带该目标进行中的提案进度 */
     @GetMapping("/review-queue")
     @PreAuthorize("hasAuthority('MODERATION_VIEW')")
     public ApiResponse<CursorPage<ReviewQueueItemResponse>> queue(
             @RequestParam(required = false) String cursor) {
-        return ApiResponse.ok(reviewQueueService.queue(cursor));
+        return ApiResponse.ok(reviewQueueService.queue(cursor, CurrentUser.requireUserId()));
     }
 
     /** 待复审申诉队列：先到先审，游标分页 */
@@ -101,43 +108,58 @@ public class AdminReviewController {
         return ApiResponse.ok();
     }
 
-    /** 下架；请求体带 {@code banDays} 即「下架并封禁」 */
+    /**
+     * 下架：二期起改为**发起处置提案**（P5 决策 D5），由委员会表决通过后系统才真正下架。
+     *
+     * <p>原请求体里的「下架并封禁」（{@code banDays}）随之去掉——表决机制下不能先封禁再等投票；
+     * 封禁改由用户管理页的 {@code POST /api/admin/users/{id}/ban} 单独执行（USER_MANAGE）。
+     * 动作由 URL 隐含，请求体只带违规类型与说明。</p>
+     */
     @PostMapping("/posts/{postId}/take-down")
     @PreAuthorize("hasAuthority('PROPOSAL_CREATE')")
-    public ApiResponse<Void> takeDown(@PathVariable Long postId,
-                                      @Valid @RequestBody TakeDownPostRequest request) {
-        reviewService.takeDown(postId, CurrentUser.requireUserId(), request);
-        return ApiResponse.ok();
+    public ApiResponse<CreateProposalResponse> takeDown(@PathVariable Long postId,
+                                                        @Valid @RequestBody ProposalDispositionRequest request) {
+        return propose(ProposalAction.TAKE_DOWN, postId, request);
     }
 
-    /** 恢复可见；申诉通过也走这里 */
+    /**
+     * 恢复可见：**撤销一条已作出的下架处置**，仅超级管理员（{@code DISPOSITION_REVOKE}）。
+     *
+     * <p>下架是经委员会表决才成立的处置，若任一委员都能一键撤销，多数决就不构成约束。
+     * 申诉复审（{@code APPEAL_REVIEW}）是另一条通道，不受此限制。</p>
+     */
     @PostMapping("/posts/{postId}/restore")
-    @PreAuthorize("hasAuthority('PROPOSAL_CREATE')")
+    @PreAuthorize("hasAuthority('DISPOSITION_REVOKE')")
     public ApiResponse<Void> restore(@PathVariable Long postId, @Valid @RequestBody ReasonRequest request) {
         reviewService.restore(postId, CurrentUser.requireUserId(), request.reason());
         return ApiResponse.ok();
     }
 
+    /** 隐藏联系方式：二期起改为发起提案（不变量 #2 的处置侧） */
     @PostMapping("/posts/{postId}/hide-contact")
     @PreAuthorize("hasAuthority('PROPOSAL_CREATE')")
-    public ApiResponse<Void> hideContact(@PathVariable Long postId, @Valid @RequestBody ReasonRequest request) {
-        reviewService.hideContact(postId, CurrentUser.requireUserId(), request.reason());
-        return ApiResponse.ok();
+    public ApiResponse<CreateProposalResponse> hideContact(@PathVariable Long postId,
+                                                           @Valid @RequestBody ProposalDispositionRequest request) {
+        return propose(ProposalAction.HIDE_CONTACT, postId, request);
     }
 
-    /** 撤销隐藏联系方式：纠正「隐藏」的误判，联系方式恢复为认证用户可见 */
+    /**
+     * 撤销隐藏联系方式：同样是**撤销一条已作出的处置**（隐藏本身要经表决），故与恢复可见同档，
+     * 仅超级管理员（{@code DISPOSITION_REVOKE}）——否则「隐藏」这一处置形同虚设。
+     */
     @PostMapping("/posts/{postId}/show-contact")
-    @PreAuthorize("hasAuthority('PROPOSAL_CREATE')")
+    @PreAuthorize("hasAuthority('DISPOSITION_REVOKE')")
     public ApiResponse<Void> showContact(@PathVariable Long postId, @Valid @RequestBody ReasonRequest request) {
         reviewService.showContact(postId, CurrentUser.requireUserId(), request.reason());
         return ApiResponse.ok();
     }
 
+    /** 移除评论：二期起改为发起提案——评论先发后审，这是唯一的兜底处置手段 */
     @PostMapping("/comments/{commentId}/remove")
     @PreAuthorize("hasAuthority('PROPOSAL_CREATE')")
-    public ApiResponse<Void> removeComment(@PathVariable Long commentId, @Valid @RequestBody ReasonRequest request) {
-        reviewService.removeComment(commentId, CurrentUser.requireUserId(), request.reason());
-        return ApiResponse.ok();
+    public ApiResponse<CreateProposalResponse> removeComment(@PathVariable Long commentId,
+                                                             @Valid @RequestBody ProposalDispositionRequest request) {
+        return propose(ProposalAction.REMOVE_COMMENT, commentId, request);
     }
 
     /** 驳回举报，按目标一次结清；评论没有举报计数，仅帖子会清零 */
@@ -149,14 +171,14 @@ public class AdminReviewController {
     }
 
     /**
-     * 维持下架：确认举报成立，结案该帖全部待处理举报（不动内容状态）。
+     * 维持下架：二期起改为发起提案（确认违规成立、结案该帖待处理举报）。
      * 专治「举报数达阈值自动降级」后举报仍挂在队列里、却无合法 UPHELD 入口的缺口。
      */
     @PostMapping("/posts/{postId}/uphold-reports")
     @PreAuthorize("hasAuthority('PROPOSAL_CREATE')")
-    public ApiResponse<Void> upholdReports(@PathVariable Long postId, @Valid @RequestBody ReasonRequest request) {
-        reviewService.upholdReports(postId, CurrentUser.requireUserId(), request.reason());
-        return ApiResponse.ok();
+    public ApiResponse<CreateProposalResponse> upholdReports(@PathVariable Long postId,
+                                                             @Valid @RequestBody ProposalDispositionRequest request) {
+        return propose(ProposalAction.UPHOLD_TAKEDOWN, postId, request);
     }
 
     /** 复审申诉：通过则恢复内容可见。复审人不得是原处置人（AppealService 校验） */
@@ -175,5 +197,19 @@ public class AdminReviewController {
                                           @Valid @RequestBody ReasonRequest request) {
         appealService.reject(appealId, CurrentUser.requireUserId(), request.reason());
         return ApiResponse.ok();
+    }
+
+    /**
+     * 处置类端点的统一出口：都只是「发起提案」（P5 决策 D5）。
+     *
+     * <p>目标类型由动作本身决定（{@link ProposalAction#targetType()}），因此不存在
+     * 「对评论下架」这类不存在的组合；真正的校验与唯一性约束在 {@link ProposalService}。</p>
+     */
+    private ApiResponse<CreateProposalResponse> propose(ProposalAction action, Long targetId,
+                                                        ProposalDispositionRequest request) {
+        Long proposalId = proposalService.create(new CreateProposalRequest(
+                        action.targetType(), targetId, action, request.reasonCode(), request.detail()),
+                CurrentUser.requireUserId());
+        return ApiResponse.ok(new CreateProposalResponse(proposalId));
     }
 }

@@ -1,13 +1,28 @@
 <script setup lang="ts">
 import { isReportOverdue } from '@/composables/useReviewQueue'
+import { proposalActionLabel, proposalStatusLabel } from '@/types/proposal'
 import { useUserLabels } from '@shared/composables/useUserLabels'
-import type { AdminQueueItem } from '@/types/review'
+import type { AdminQueueItem, AdminQueueProposalProgress } from '@/types/review'
 
 const props = defineProps<{ items: AdminQueueItem[]; loading?: boolean; failed?: boolean }>()
 
 const emit = defineEmits<{ handle: [item: AdminQueueItem] }>()
 
 const { targetTypeLabel, targetStatusLabel, reportReasonLabel } = useUserLabels()
+
+/** 提案进度文案：同意票进度 + 是否已投票 + 僵局提示（只展示汇总，不展示谁投了什么） */
+function progressText(proposal: AdminQueueProposalProgress): string {
+  const base = `${proposalActionLabel(proposal.action)} ${proposal.agreeCount}/${proposal.needed} 同意`
+  if (proposal.status === 'ESCALATED') {
+    return `${base} · 僵局待超管裁决`
+  }
+  return proposal.myDecision === null ? `${base} · 我未投` : `${base} · 我已投`
+}
+
+/** 该行是否已有进行中的提案：有则不可再发起（后端会以唯一键挡成 409） */
+function hasOpenProposal(item: AdminQueueItem): boolean {
+  return item.proposal !== null
+}
 </script>
 
 <template>
@@ -16,10 +31,12 @@ const { targetTypeLabel, targetStatusLabel, reportReasonLabel } = useUserLabels(
       <tr class="border-b border-line text-left text-xs text-muted">
         <th class="px-3 py-2.5 font-medium">目标类型</th>
         <th class="px-3 py-2.5 font-medium">内容摘要</th>
+        <th class="px-3 py-2.5 font-medium">图片</th>
         <th class="px-3 py-2.5 font-medium">目标状态</th>
         <th class="px-3 py-2.5 font-medium">待处理举报</th>
         <th class="px-3 py-2.5 font-medium">首报时间</th>
         <th class="px-3 py-2.5 font-medium">理由</th>
+        <th class="px-3 py-2.5 font-medium">提案进度</th>
         <th class="px-3 py-2.5 font-medium">操作</th>
       </tr>
     </thead>
@@ -31,6 +48,24 @@ const { targetTypeLabel, targetStatusLabel, reportReasonLabel } = useUserLabels(
       >
         <td class="px-3 py-3">{{ targetTypeLabel(row.targetType) }}</td>
         <td class="max-w-[320px] truncate px-3 py-3" :title="row.preview">{{ row.preview }}</td>
+        <td class="px-3 py-3">
+          <!-- 缩略图：审核必须看得见全部图片，只给正文摘要等于让图片随帖放行。
+               点开在新标签页看原图；URL 只做 :src/:href 绑定，不拼 HTML -->
+          <div v-if="row.images.length" class="flex flex-wrap gap-1">
+            <a
+              v-for="url in row.images"
+              :key="url"
+              :href="url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="block overflow-hidden rounded border border-line"
+            >
+              <img :src="url" alt="帖子图片" class="h-12 w-12 object-cover" loading="lazy" />
+            </a>
+          </div>
+          <!-- 无图时给占位，避免空列看起来像渲染坏了 -->
+          <span v-else class="text-xs text-muted">—</span>
+        </td>
         <td class="px-3 py-3">{{ targetStatusLabel(row.targetStatus) }}</td>
         <td class="px-3 py-3">{{ row.reportCount }}</td>
         <td
@@ -58,6 +93,17 @@ const { targetTypeLabel, targetStatusLabel, reportReasonLabel } = useUserLabels(
           </p>
         </td>
         <td class="px-3 py-3">
+          <!-- 有进行中提案时把入口显出来：否则点下架的同事只会撞到 409 而不知道该去哪儿投票 -->
+          <span
+            v-if="row.proposal"
+            class="ql-badge bg-warning-soft text-warning"
+            :title="`提案 #${row.proposal.proposalId}：${proposalStatusLabel(row.proposal.status)}`"
+          >
+            {{ progressText(row.proposal) }}
+          </span>
+          <span v-else class="text-xs text-muted">—</span>
+        </td>
+        <td class="px-3 py-3">
           <button
             type="button"
             class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-primary hover:text-primary-deep"
@@ -65,10 +111,11 @@ const { targetTypeLabel, targetStatusLabel, reportReasonLabel } = useUserLabels(
           >
             处置
           </button>
+          <span v-if="hasOpenProposal(row)" class="ml-2 text-xs text-muted">表决中</span>
         </td>
       </tr>
       <tr v-if="!props.items.length">
-        <td colspan="7" class="px-3 py-10 text-center text-sm text-muted">
+        <td colspan="9" class="px-3 py-10 text-center text-sm text-muted">
           {{ props.loading ? '加载中…' : props.failed ? '加载失败，请点击「刷新」重试' : '暂无待处理举报' }}
         </td>
       </tr>

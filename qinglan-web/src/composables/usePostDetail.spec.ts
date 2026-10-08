@@ -4,6 +4,7 @@ import { createComment, deleteComment, fetchComments, likeComment, unlikeComment
 import { fetchPostDetail, likePost, unlikePost } from '@/api/post'
 import { submitAppeal } from '@shared/api/report'
 import { usePostDetail } from '@/composables/usePostDetail'
+import type { CursorPage } from '@shared/types/api'
 import type { Comment } from '@/types/comment'
 import type { PostDetail } from '@/types/post'
 
@@ -72,28 +73,34 @@ function comment(id: number, replies: Comment[] = [], overrides: Partial<Comment
   }
 }
 
+/** 一级评论分页结果，与后端 common/web/CursorPage 对应 */
+function page(items: Comment[], nextCursor: string | null = null): CursorPage<Comment> {
+  return { items, nextCursor }
+}
+
 describe('usePostDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('加载时并发拉取详情与评论列表', async () => {
+  it('加载时并发拉取详情与评论首页（游标为 null）', async () => {
     mockedFetchPostDetail.mockResolvedValue(detail())
-    mockedFetchComments.mockResolvedValue([comment(1)])
+    mockedFetchComments.mockResolvedValue(page([comment(1)]))
 
     const state = usePostDetail(7)
     await state.load()
 
     expect(mockedFetchPostDetail).toHaveBeenCalledWith(7)
-    expect(mockedFetchComments).toHaveBeenCalledWith(7)
+    expect(mockedFetchComments).toHaveBeenCalledWith(7, null)
     expect(state.post.value?.id).toBe(7)
     expect(state.comments.value).toHaveLength(1)
+    expect(state.hasMore.value).toBe(false)
     expect(state.loading.value).toBe(false)
   })
 
   it('详情加载失败时结束 loading，评论保持为空', async () => {
     mockedFetchPostDetail.mockRejectedValue(new Error('网络异常'))
-    mockedFetchComments.mockResolvedValue([])
+    mockedFetchComments.mockResolvedValue(page([]))
 
     const state = usePostDetail(7)
     await expect(state.load()).resolves.toBeUndefined()
@@ -102,11 +109,11 @@ describe('usePostDetail', () => {
     expect(state.loading.value).toBe(false)
   })
 
-  it('发表评论后重拉列表，并按实际条数（含回复）同步评论数', async () => {
-    mockedFetchPostDetail.mockResolvedValue(detail())
+  it('发表评论后重拉首页，并在后端权威计数上把评论数加一', async () => {
+    mockedFetchPostDetail.mockResolvedValue(detail({ commentCount: 3 }))
     mockedFetchComments
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([comment(1, [comment(2), comment(3)]), comment(4)])
+      .mockResolvedValueOnce(page([comment(1)], 'cursor-1'))
+      .mockResolvedValueOnce(page([comment(1), comment(4)], null))
     mockedCreateComment.mockResolvedValue(comment(1))
 
     const state = usePostDetail(7)
@@ -115,14 +122,15 @@ describe('usePostDetail', () => {
 
     expect(ok).toBe(true)
     expect(mockedCreateComment).toHaveBeenCalledWith(7, { content: '你好', parentId: null })
-    // 两条一级评论 + 其中一条的两个回复 = 4
+    // 重拉的是首页（游标重置为 null），而不是翻到下一页
+    expect(mockedFetchComments).toHaveBeenLastCalledWith(7, null)
     expect(state.post.value?.commentCount).toBe(4)
     expect(state.submitting.value).toBe(false)
   })
 
   it('发表评论失败时返回 false，交由页面保留草稿', async () => {
     mockedFetchPostDetail.mockResolvedValue(detail())
-    mockedFetchComments.mockResolvedValue([])
+    mockedFetchComments.mockResolvedValue(page([]))
     mockedCreateComment.mockRejectedValue(new Error('网络异常'))
 
     const state = usePostDetail(7)
@@ -134,7 +142,7 @@ describe('usePostDetail', () => {
 
   it('回复二级评论时带上父评论 id', async () => {
     mockedFetchPostDetail.mockResolvedValue(detail())
-    mockedFetchComments.mockResolvedValueOnce([comment(1)]).mockResolvedValueOnce([comment(1)])
+    mockedFetchComments.mockResolvedValueOnce(page([comment(1)])).mockResolvedValueOnce(page([comment(1)]))
     mockedCreateComment.mockResolvedValue(comment(2))
 
     const state = usePostDetail(7)
@@ -144,11 +152,11 @@ describe('usePostDetail', () => {
     expect(mockedCreateComment).toHaveBeenCalledWith(7, { content: '回复内容', parentId: 1 })
   })
 
-  it('删除评论后重拉列表并同步评论数', async () => {
-    mockedFetchPostDetail.mockResolvedValue(detail())
+  it('删除一级评论后按「本身 + 已知回复数」扣减计数并重拉首页', async () => {
+    mockedFetchPostDetail.mockResolvedValue(detail({ commentCount: 3 }))
     mockedFetchComments
-      .mockResolvedValueOnce([comment(1, [comment(2)]), comment(4)])
-      .mockResolvedValueOnce([comment(4)])
+      .mockResolvedValueOnce(page([comment(1, [comment(2)]), comment(4)]))
+      .mockResolvedValueOnce(page([comment(4)]))
     mockedDeleteComment.mockResolvedValue(undefined)
 
     const state = usePostDetail(7)
@@ -156,12 +164,42 @@ describe('usePostDetail', () => {
     await state.removeComment(1)
 
     expect(mockedDeleteComment).toHaveBeenCalledWith(1)
+    // 一级评论 1 连同其 1 条回复一并删除：3 - 2 = 1
     expect(state.post.value?.commentCount).toBe(1)
+  })
+
+  it('加载更多按游标追加下一页，nextCursor 为 null 时不再有下一页', async () => {
+    mockedFetchPostDetail.mockResolvedValue(detail())
+    mockedFetchComments
+      .mockResolvedValueOnce(page([comment(1)], 'cursor-1'))
+      .mockResolvedValueOnce(page([comment(2)], null))
+
+    const state = usePostDetail(7)
+    await state.load()
+    expect(state.hasMore.value).toBe(true)
+
+    await state.loadMoreComments()
+
+    expect(mockedFetchComments).toHaveBeenLastCalledWith(7, 'cursor-1')
+    expect(state.comments.value.map((item) => item.id)).toEqual([1, 2])
+    expect(state.hasMore.value).toBe(false)
+    expect(state.loadingMore.value).toBe(false)
+  })
+
+  it('末页（nextCursor 为 null）时「加载更多」不发请求', async () => {
+    mockedFetchPostDetail.mockResolvedValue(detail())
+    mockedFetchComments.mockResolvedValue(page([comment(1)], null))
+
+    const state = usePostDetail(7)
+    await state.load()
+    await state.loadMoreComments()
+
+    expect(mockedFetchComments).toHaveBeenCalledTimes(1)
   })
 
   it('评论点赞能定位到二级回复并写回状态', async () => {
     mockedFetchPostDetail.mockResolvedValue(detail())
-    mockedFetchComments.mockResolvedValue([comment(1, [comment(2)])])
+    mockedFetchComments.mockResolvedValue(page([comment(1, [comment(2)])]))
     mockedLikeComment.mockResolvedValue({ likeCount: 3, liked: true })
 
     const state = usePostDetail(7)
@@ -175,7 +213,7 @@ describe('usePostDetail', () => {
 
   it('已点赞的评论再次点击走取消点赞接口', async () => {
     mockedFetchPostDetail.mockResolvedValue(detail())
-    mockedFetchComments.mockResolvedValue([comment(1, [], { liked: true, likeCount: 3 })])
+    mockedFetchComments.mockResolvedValue(page([comment(1, [], { liked: true, likeCount: 3 })]))
     mockedUnlikeComment.mockResolvedValue({ likeCount: 2, liked: false })
 
     const state = usePostDetail(7)
@@ -189,7 +227,7 @@ describe('usePostDetail', () => {
 
   it('帖子点赞用后端返回值覆盖本地状态', async () => {
     mockedFetchPostDetail.mockResolvedValue(detail())
-    mockedFetchComments.mockResolvedValue([])
+    mockedFetchComments.mockResolvedValue(page([]))
     mockedLikePost.mockResolvedValue({ likeCount: 8, liked: true })
     mockedUnlikePost.mockResolvedValue({ likeCount: 7, liked: false })
 
@@ -215,7 +253,7 @@ describe('usePostDetail', () => {
 
   it('申诉成功后标记已申诉，页面据此收起申诉表单', async () => {
     mockedFetchPostDetail.mockResolvedValue(detail({ mine: true, takenDown: true }))
-    mockedFetchComments.mockResolvedValue([])
+    mockedFetchComments.mockResolvedValue(page([]))
     mockedSubmitAppeal.mockResolvedValue(undefined)
 
     const state = usePostDetail(7)
@@ -230,7 +268,7 @@ describe('usePostDetail', () => {
 
   it('申诉失败（如已超过 7 日）不标记已申诉，交由拦截器提示', async () => {
     mockedFetchPostDetail.mockResolvedValue(detail({ mine: true, takenDown: true }))
-    mockedFetchComments.mockResolvedValue([])
+    mockedFetchComments.mockResolvedValue(page([]))
     mockedSubmitAppeal.mockRejectedValue(new Error('申诉期已过'))
 
     const state = usePostDetail(7)

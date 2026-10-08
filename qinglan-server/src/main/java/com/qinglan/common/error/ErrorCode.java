@@ -23,6 +23,8 @@ public enum ErrorCode {
     ANNOUNCEMENT_READ_TOO_EARLY(HttpStatus.BAD_REQUEST, "QL-400-011", "阅读时长不足，暂不能标记为已读"),
     // 不变量 #6 的另外两个条件（设计方案 5.2 的 AND）：需滚动到底、需勾选已了解
     ANNOUNCEMENT_READ_UNCONFIRMED(HttpStatus.BAD_REQUEST, "QL-400-012", "尚未完成强制阅读：需滚动到底并勾选已了解"),
+    // P5 二期：提案的动作与目标当前状态不匹配（如对 PENDING 帖提「下架」、对可见帖提「维持下架」）
+    PROPOSAL_TARGET_INVALID(HttpStatus.BAD_REQUEST, "QL-400-013", "目标当前状态与所选处置不匹配"),
 
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "QL-401-001", "请先完成认证"),
     EMAIL_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "QL-401-002", "邮箱认证凭证无效或已过期"),
@@ -45,6 +47,7 @@ public enum ErrorCode {
     APPEAL_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-006", "申诉不存在"),
     ANNOUNCEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-007", "公告不存在"),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-008", "通知不存在"),
+    PROPOSAL_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-009", "处置提案不存在"),
 
     // 428：存在未读紧急公告，发帖/评论等写操作被前置拦截。响应需携带公告内容（PreconditionRequiredException）
     PRECONDITION_REQUIRED(HttpStatus.PRECONDITION_REQUIRED, "QL-428-001", "存在未读的紧急公告"),
@@ -61,6 +64,10 @@ public enum ErrorCode {
     ANNOUNCEMENT_STATE_ILLEGAL(HttpStatus.CONFLICT, "QL-409-008", "公告当前状态不允许该操作"),
     // P5：委员会（管理员 + 评议员）合计上限 6 人，它是表决法定人数的基础（决策 D3）
     COMMITTEE_FULL(HttpStatus.CONFLICT, "QL-409-009", "管理员名额已满，请先收回其他成员的权限"),
+    // P5 二期：同一目标同时只允许一条进行中提案（uk_proposal_open_target）
+    PROPOSAL_ALREADY_OPEN(HttpStatus.CONFLICT, "QL-409-010", "该内容已有进行中的处置提案，请等待表决结果"),
+    // P5 二期：一人一票（uk_vote_proposal_voter），重复投票明确回报，不静默吞掉
+    ALREADY_VOTED(HttpStatus.CONFLICT, "QL-409-011", "你已经投过票"),
 
     CODE_SEND_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "QL-429-001", "验证码发送过于频繁，请稍后再试"),
     VERIFY_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "QL-429-002", "验证失败次数过多，请重新获取验证码"),

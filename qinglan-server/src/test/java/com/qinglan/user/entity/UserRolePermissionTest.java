@@ -52,7 +52,7 @@ class UserRolePermissionTest {
     }
 
     @Test
-    @DisplayName("管理员：评议员权限 + 申诉复审 + 用户管理 + 建草稿，但不含发布公告与下放/裁决/审计")
+    @DisplayName("管理员：评议员权限 + 申诉复审 + 用户管理 + 建草稿，但不含发布公告与下放/裁决/撤销/审计")
     void adminMatchesMatrix() {
         assertThat(UserRole.ADMIN.permissions()).isEqualTo(ADMIN_EXPECTED);
         assertThat(UserRole.ADMIN.isCommittee()).isTrue();
@@ -60,6 +60,7 @@ class UserRolePermissionTest {
                 AdminPermission.ANNOUNCEMENT_MANAGE,
                 AdminPermission.ROLE_GRANT,
                 AdminPermission.PROPOSAL_ARBITRATE,
+                AdminPermission.DISPOSITION_REVOKE,
                 AdminPermission.AUDIT_READ);
     }
 
@@ -92,6 +93,7 @@ class UserRolePermissionTest {
                         AdminPermission.ANNOUNCEMENT_MANAGE,
                         AdminPermission.ROLE_GRANT,
                         AdminPermission.PROPOSAL_ARBITRATE,
+                        AdminPermission.DISPOSITION_REVOKE,
                         AdminPermission.AUDIT_READ);
     }
 

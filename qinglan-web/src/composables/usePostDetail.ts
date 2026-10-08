@@ -15,10 +15,16 @@ export function usePostDetail(postId: number) {
   const post = ref<PostDetail | null>(null)
   const comments = ref<Comment[]>([])
   const loading = ref(false)
+  const loadingMore = ref(false)
+  /** 是否还有下一页一级评论；由后端 nextCursor 推导，末页为 false */
+  const hasMore = ref(false)
   const submitting = ref(false)
   const appealSubmitting = ref(false)
   /** 正文/评论加载失败过。用于把「失败」渲染成带重试的屏，而不是一片空白 */
   const failed = ref(false)
+
+  /** 一级评论下一页游标。不放进 ref：只作为下一次请求的入参，变化不需要触发渲染 */
+  let commentCursor: string | null = null
   /**
    * 本次会话内是否已提交过申诉。
    *
@@ -28,13 +34,42 @@ export function usePostDetail(postId: number) {
    */
   const appealed = ref(false)
 
-  /** 评论计数由列表实际条数推导，删一级评论会级联删回复，直接复用后端返回值反而容易不一致 */
-  function syncCommentCount(): void {
+  /**
+   * 拉取一级评论首页并重置分页游标。写操作（发表 / 删除）后重拉首页，保证排序与层级与后端一致；
+   * 与后端一致，一级评论按「最早在前」排序，新发的评论落在末页。
+   */
+  async function loadCommentFirstPage(): Promise<void> {
+    const page = await fetchComments(postId, null)
+    comments.value = page.items
+    commentCursor = page.nextCursor
+    hasMore.value = page.nextCursor !== null
+  }
+
+  /**
+   * 加载下一批一级评论（回复随所属一级评论整页带出）。
+   * 无下一页、或首屏/上一批仍在加载时直接返回，避免重复请求。
+   */
+  async function loadMoreComments(): Promise<void> {
+    if (!hasMore.value || loading.value || loadingMore.value) {
+      return
+    }
+    loadingMore.value = true
+    try {
+      const page = await fetchComments(postId, commentCursor)
+      comments.value = [...comments.value, ...page.items]
+      commentCursor = page.nextCursor
+      hasMore.value = page.nextCursor !== null
+    } catch {
+      // 错误已由拦截器提示
+    } finally {
+      loadingMore.value = false
+    }
+  }
+
+  /** 在详情返回的权威计数上做增量：删一级评论会级联删回复，用本地已知的回复条数修正 */
+  function adjustCommentCount(delta: number): void {
     if (post.value) {
-      post.value.commentCount = comments.value.reduce(
-        (total, item) => total + 1 + item.replies.length,
-        0,
-      )
+      post.value.commentCount += delta
     }
   }
 
@@ -42,9 +77,11 @@ export function usePostDetail(postId: number) {
     loading.value = true
     failed.value = false
     try {
-      const [detail, list] = await Promise.all([fetchPostDetail(postId), fetchComments(postId)])
+      const [detail, page] = await Promise.all([fetchPostDetail(postId), fetchComments(postId, null)])
       post.value = detail
-      comments.value = list
+      comments.value = page.items
+      commentCursor = page.nextCursor
+      hasMore.value = page.nextCursor !== null
     } catch {
       // 错误已由拦截器提示；这里只置状态位，让 view 给出「重试」出口而不是留一片空白
       failed.value = true
@@ -98,9 +135,9 @@ export function usePostDetail(postId: number) {
     submitting.value = true
     try {
       await createComment(postId, { content, parentId })
-      // 重新拉取以保证排序与层级与后端一致
-      comments.value = await fetchComments(postId)
-      syncCommentCount()
+      // 重新拉取首页以保证排序与层级与后端一致（一级评论最早在前，新评论落在末页）
+      await loadCommentFirstPage()
+      adjustCommentCount(1)
       return true
     } catch {
       return false
@@ -111,10 +148,12 @@ export function usePostDetail(postId: number) {
 
   /** 删除自己的评论（一级评论会连同其回复一起删除） */
   async function removeComment(commentId: number): Promise<void> {
+    const target = findComment(commentId)
     try {
       await deleteComment(commentId)
-      comments.value = await fetchComments(postId)
-      syncCommentCount()
+      // 一级评论会级联删除其回复；回复随所属一级评论整页返回，本地已知其条数
+      adjustCommentCount(-(target ? 1 + target.replies.length : 1))
+      await loadCommentFirstPage()
     } catch {
       // 错误已由拦截器提示
     }
@@ -138,11 +177,14 @@ export function usePostDetail(postId: number) {
     post,
     comments,
     loading,
+    loadingMore,
+    hasMore,
     failed,
     submitting,
     appealSubmitting,
     appealed,
     load,
+    loadMoreComments,
     toggleLike,
     toggleCommentLike,
     submitComment,

@@ -216,6 +216,81 @@ class SecuritySkeletonTest {
         assertThat(auditCount).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("提案接口按权限点放行：评议员可看提案列表（PROPOSAL_VOTE），学生被拒（P5 二期）")
+    void shouldScopeProposalsByPermission() throws Exception {
+        User reviewer = createUser("proposer@qinglan.edu.cn", "2023010019", UserRole.REVIEWER);
+        User student = createStudent("plain@qinglan.edu.cn", "2023010020");
+        String reviewerToken = jwtService.issueAccessToken(reviewer.getId(), UserRole.REVIEWER);
+        String studentToken = jwtService.issueAccessToken(student.getId(), UserRole.STUDENT);
+
+        mockMvc.perform(get("/api/admin/proposals").header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isArray());
+
+        mockMvc.perform(get("/api/admin/proposals").header("Authorization", "Bearer " + studentToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-001"));
+    }
+
+    @Test
+    @DisplayName("僵局裁决只对超管开放：管理员读待裁决列表与裁决都是 403（PROPOSAL_ARBITRATE 不在其权限集）")
+    void shouldRestrictArbitrationToSuperAdmin() throws Exception {
+        User admin = createAdmin("arbiter@qinglan.edu.cn", "2023010021");
+        User superAdmin = createUser("root5@qinglan.edu.cn", "2023010022", UserRole.SUPER_ADMIN);
+        String adminToken = jwtService.issueAccessToken(admin.getId(), UserRole.ADMIN);
+        String superAdminToken = jwtService.issueAccessToken(superAdmin.getId(), UserRole.SUPER_ADMIN);
+
+        mockMvc.perform(get("/api/admin/proposals/escalated").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-001"));
+
+        mockMvc.perform(post("/api/admin/proposals/{id}/arbitrate", 1L)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"GRANT\",\"reason\":\"放行\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-001"));
+
+        // 超管可读待裁决列表（内容为空也应是 200）
+        mockMvc.perform(get("/api/admin/proposals/escalated")
+                        .header("Authorization", "Bearer " + superAdminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isArray());
+    }
+
+    @Test
+    @DisplayName("撤销处置只对超管开放：管理员不能恢复可见或撤销隐藏（若谁都能撤，多数决就不构成约束）")
+    void shouldRestrictDispositionRevokeToSuperAdmin() throws Exception {
+        User admin = createAdmin("revoker@qinglan.edu.cn", "2023010031");
+        User superAdmin = createUser("root6@qinglan.edu.cn", "2023010032", UserRole.SUPER_ADMIN);
+        String adminToken = jwtService.issueAccessToken(admin.getId(), UserRole.ADMIN);
+        String superAdminToken = jwtService.issueAccessToken(superAdmin.getId(), UserRole.SUPER_ADMIN);
+
+        // 管理员：两个撤销入口都被权限点挡住
+        mockMvc.perform(post("/api/admin/posts/{id}/restore", 999999L)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"我觉得不该下架\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-001"));
+
+        mockMvc.perform(post("/api/admin/posts/{id}/show-contact", 999999L)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"撤销隐藏\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-001"));
+
+        // 超管：过了权限点这一关，因帖子不存在而 404（证明拦的是权限而不是路径）
+        mockMvc.perform(post("/api/admin/posts/{id}/restore", 999999L)
+                        .header("Authorization", "Bearer " + superAdminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"确系误判\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("QL-404-002"));
+    }
+
     private String banBody() throws Exception {
         return objectMapper.writeValueAsString(new BanRequestBody(7, "人身攻击"));
     }

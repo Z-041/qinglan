@@ -13,11 +13,13 @@ function item(targetId: number, overrides: Partial<AdminQueueItem> = {}): AdminQ
     targetType: 'POST',
     targetId,
     preview: `第 ${targetId} 条`,
+    images: [],
     targetStatus: 'PENDING',
     reportCount: 3,
     firstReportedAt: '2026-10-06T00:00:00Z',
     reasons: ['ABUSE'],
     details: [],
+    proposal: null,
     ...overrides,
   }
 }

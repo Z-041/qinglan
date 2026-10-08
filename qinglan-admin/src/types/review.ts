@@ -7,12 +7,39 @@
  */
 
 import type { ReportReason, ReviewTargetType } from '@shared/types/review-common'
+import type { ProposalAction, ProposalStatus, VoteDecision } from '@/types/proposal'
+
+/**
+ * 与后端 review/dto/ReviewQueueProposalResponse 一一对应：该目标上「正在进行」的处置提案
+ * （进行中或僵局待裁决）。同目标最多一条（唯一键保证），没有时为 null。
+ *
+ * <p>处置改走表决后，同目标已有进行中提案时再发起会被挡成 409——队列行上必须能看见它，
+ * 否则点下架的人只会收到一句冲突提示而不知道该去哪儿（方案 9.2）。</p>
+ *
+ * <p><b>只含汇总与「我的票」</b>，不含任何投票人身份（决策 D8：委员会只可见汇总）。</p>
+ */
+export interface AdminQueueProposalProgress {
+  proposalId: number
+  action: ProposalAction
+  status: ProposalStatus
+  agreeCount: number
+  /** 通过所需同意票数（按提案创建时的在册人数快照算） */
+  needed: number
+  /** 已投票数（同意 + 不同意） */
+  votedCount: number
+  myDecision: VoteDecision | null
+}
 
 /** 与后端 review/dto/ReviewQueueItemResponse 一一对应（管理端举报队列） */
 export interface AdminQueueItem {
   targetType: ReviewTargetType
   targetId: number
   preview: string
+  /**
+   * 该帖全部图片 URL，按 sort_order 保序。审核必须看得见全部图片——
+   * 只给正文摘要时图片会随帖被放行，漏看一张就是漏审。评论目标为 `[]`（无图）。
+   */
+  images: string[]
   /** 目标当前状态码（帖子 / 评论状态枚举名），文案映射见 useUserLabels.targetStatusLabel */
   targetStatus: string
   reportCount: number
@@ -23,6 +50,8 @@ export interface AdminQueueItem {
    * 理由选「其他」时它是唯一线索，此前只入库不出参、管理端读不到。
    */
   details: string[]
+  /** 该目标上正在进行的处置提案；没有则 null */
+  proposal: AdminQueueProposalProgress | null
 }
 
 /**
@@ -33,6 +62,11 @@ export interface AdminPendingPostItem {
   /** 处置接口（approve / reject）与上下文面板所需的目标 id */
   postId: number
   preview: string
+  /**
+   * 该帖全部图片 URL，按 sort_order 保序。放行前必须看得见图——
+   * 只给正文摘要时图片会随帖直接放行展示。无图为 `[]`。
+   */
+  images: string[]
   /** 帖子当前状态码（PENDING / REVIEWING），文案映射见 useUserLabels.targetStatusLabel */
   targetStatus: string
   /** 提交审核时间（发布与提交同刻），据它展示等待时长 */
@@ -72,11 +106,16 @@ export interface AdminAppealItem {
   appealedAt: string
 }
 
-/** 与后端 review/dto/TakeDownPostRequest 一一对应；banDays 非空即「下架并封禁」 */
-export interface TakeDownPayload {
+/**
+ * 与后端 review/dto/ProposalDispositionRequest 一一对应。
+ *
+ * 二期起下架 / 移除评论 / 隐藏联系方式 / 维持下架不再直接处置，而是「发起提案」：
+ * 动作由 URL 隐含，请求体只需违规类型与补充说明，四处共用这一形状。
+ * 原 `TakeDownPayload` 已删除——`banDays`（下架并封禁）随表决机制一并移除。
+ */
+export interface ProposalDispositionPayload {
   reasonCode: ReportReason
   detail?: string | null
-  banDays?: number | null
 }
 
 /** 与后端 review/dto/DismissReportsRequest 一一对应 */

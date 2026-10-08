@@ -9,11 +9,13 @@ function item(overrides: Partial<AdminQueueItem> = {}): AdminQueueItem {
     targetType: 'POST',
     targetId: 5,
     preview: '测试正文',
+    images: [],
     targetStatus: 'PENDING',
     reportCount: 2,
     firstReportedAt: '2026-10-01T00:00:00Z',
     reasons: ['ABUSE', 'FRAUD'],
     details: [],
+    proposal: null,
     ...overrides,
   }
 }
@@ -57,6 +59,29 @@ describe('QueueTable', () => {
     expect(wrapper.text()).toContain('还发了外链')
   })
 
+  it('渲染缩略图：按序渲染全部图片，点开在新标签页看原图', () => {
+    const wrapper = mount(QueueTable, {
+      props: { items: [item({ images: ['/uploads/a.jpg', '/uploads/b.jpg'] })] },
+    })
+
+    const imgs = wrapper.findAll('img')
+    expect(imgs.map((img) => img.attributes('src'))).toEqual(['/uploads/a.jpg', '/uploads/b.jpg'])
+    expect(imgs[0].classes()).toContain('object-cover')
+
+    const links = wrapper.findAll('a')
+    expect(links).toHaveLength(2)
+    expect(links[0].attributes('href')).toBe('/uploads/a.jpg')
+    expect(links[0].attributes('target')).toBe('_blank')
+    expect(links[0].attributes('rel')).toBe('noopener noreferrer')
+  })
+
+  it('无图时不渲染 img，图片列显示占位符而不是留空', () => {
+    const wrapper = mount(QueueTable, { props: { items: [item()] } })
+
+    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.findAll('td').some((cell) => cell.text() === '—')).toBe(true)
+  })
+
   it('首报超过 24 小时的行标红', () => {
     const firstReportedAt = '2000-01-01T00:00:00Z'
     const wrapper = mount(QueueTable, { props: { items: [item({ firstReportedAt })] } })
@@ -90,5 +115,81 @@ describe('QueueTable', () => {
     await buttonByText(wrapper, '处置').trigger('click')
 
     expect(wrapper.emitted('handle')).toEqual([[row]])
+  })
+
+  it('有进行中提案时行内显示进度与「我是否已投」，避免撞 409 后无处可去', () => {
+    const wrapper = mount(QueueTable, {
+      props: {
+        items: [
+          item({
+            proposal: {
+              proposalId: 12,
+              action: 'TAKE_DOWN',
+              status: 'OPEN',
+              agreeCount: 2,
+              needed: 4,
+              votedCount: 3,
+              myDecision: 'AGREE',
+            },
+          }),
+        ],
+      },
+    })
+
+    const text = wrapper.text()
+    expect(text).toContain('下架帖子')
+    expect(text).toContain('2/4 同意')
+    expect(text).toContain('我已投')
+    expect(text).toContain('表决中')
+  })
+
+  it('我已投反对时标注「我已投」，未投票时标注「我未投」', () => {
+    const base = {
+      proposalId: 12,
+      action: 'TAKE_DOWN' as const,
+      status: 'OPEN' as const,
+      agreeCount: 1,
+      needed: 4,
+      votedCount: 1,
+    }
+
+    const voted = mount(QueueTable, {
+      props: { items: [item({ proposal: { ...base, myDecision: 'DISAGREE' } })] },
+    })
+    const notVoted = mount(QueueTable, {
+      props: { items: [item({ proposal: { ...base, myDecision: null } })] },
+    })
+
+    expect(voted.text()).toContain('我已投')
+    expect(notVoted.text()).toContain('我未投')
+  })
+
+  it('僵局提案直接标出「待超管裁决」，让人不再等票', () => {
+    const wrapper = mount(QueueTable, {
+      props: {
+        items: [
+          item({
+            proposal: {
+              proposalId: 12,
+              action: 'TAKE_DOWN',
+              status: 'ESCALATED',
+              agreeCount: 1,
+              needed: 3,
+              votedCount: 4,
+              myDecision: 'AGREE',
+            },
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.text()).toContain('僵局待超管裁决')
+  })
+
+  it('没有进行中提案时该列显示占位符，不显示「表决中」', () => {
+    const wrapper = mount(QueueTable, { props: { items: [item()] } })
+
+    expect(wrapper.text()).toContain('—')
+    expect(wrapper.text()).not.toContain('表决中')
   })
 })

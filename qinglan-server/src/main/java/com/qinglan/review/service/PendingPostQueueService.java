@@ -4,8 +4,11 @@ import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
+import com.qinglan.common.web.TextPreview;
 import com.qinglan.post.entity.Post;
+import com.qinglan.post.entity.PostImage;
 import com.qinglan.post.entity.PostStatus;
+import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.review.dto.PendingPostItemResponse;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +17,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 待审帖子队列：先审后发（设计方案第一章红线 2）下，唯一能把 {@code PENDING} 帖子捞给管理端的地方。
@@ -23,7 +29,8 @@ import java.util.List;
  * 出现在工作台上，管理端也就无从放行——队列有了，入口不能没有。</p>
  *
  * <p>与另外两个队列同构：排序与分页全交给数据库（{@code created_at asc, id asc}，先到先审），
- * 内存只做装配。本队列的行直接来自帖子实体，不需要额外批量查询补数据。</p>
+ * 内存只做装配。行本身来自帖子实体，图片则按本页帖子 id 一次性批量查出——放行前必须看得见图，
+ * 否则图片随帖直接放行。</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -31,7 +38,6 @@ public class PendingPostQueueService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int PREVIEW_LENGTH = 80;
-    private static final String ELLIPSIS = "...";
     private static final String KEY_SEPARATOR = ":";
     /** 游标段数：提交微秒 : 帖子 id */
     private static final int CURSOR_SEGMENTS = 2;
@@ -44,6 +50,7 @@ public class PendingPostQueueService {
             List.of(PostStatus.PENDING, PostStatus.REVIEWING);
 
     private final PostRepository postRepository;
+    private final PostImageRepository postImageRepository;
 
     @Transactional(readOnly = true)
     public CursorPage<PendingPostItemResponse> queue(String cursorRaw) {
@@ -58,27 +65,41 @@ public class PendingPostQueueService {
             return CursorPage.empty();
         }
 
-        List<PendingPostItemResponse> items = page.stream().map(this::toItem).toList();
+        Map<Long, List<String>> images = loadImages(page);
+        List<PendingPostItemResponse> items = page.stream()
+                .map(post -> toItem(post, images.getOrDefault(post.getId(), List.of())))
+                .toList();
         String nextCursor = hasMore ? formatCursor(page.get(page.size() - 1)) : null;
         return CursorPage.of(items, nextCursor);
     }
 
     // ---------------------------------------------------------------- 内部方法
 
-    private PendingPostItemResponse toItem(Post post) {
+    /**
+     * 一页之内按帖子 id 批量取图：一次 {@code findByPostIdInOrderBySortOrderAsc} 覆盖整页，
+     * 杜绝逐行查询造成的 N+1。仓储已按 {@code sort_order} 升序返回，分组时用有序 Map 保序。
+     */
+    private Map<Long, List<String>> loadImages(List<Post> page) {
+        List<Long> postIds = page.stream().map(Post::getId).toList();
+        Map<Long, List<String>> images = new LinkedHashMap<>();
+        for (PostImage image : postImageRepository.findByPostIdInOrderBySortOrderAsc(postIds)) {
+            images.computeIfAbsent(image.getPostId(), ignored -> new ArrayList<>()).add(image.getUrl());
+        }
+        return images;
+    }
+
+    private PendingPostItemResponse toItem(Post post, List<String> images) {
         return new PendingPostItemResponse(
                 post.getId(),
                 preview(post.getContent()),
+                images,
                 post.getStatus().name(),
                 post.getCreatedAt(),
                 post.getReportCount());
     }
 
     private String preview(String content) {
-        if (content == null) {
-            return null;
-        }
-        return content.length() <= PREVIEW_LENGTH ? content : content.substring(0, PREVIEW_LENGTH) + ELLIPSIS;
+        return TextPreview.of(content, PREVIEW_LENGTH);
     }
 
     /**

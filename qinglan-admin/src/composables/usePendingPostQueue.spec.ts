@@ -12,6 +12,7 @@ function pendingPost(postId: number, overrides: Partial<AdminPendingPostItem> = 
   return {
     postId,
     preview: `第 ${postId} 条待审帖子`,
+    images: [],
     targetStatus: 'PENDING',
     submittedAt: '2026-10-06T00:00:00Z',
     reportCount: 0,

@@ -6,8 +6,10 @@ import com.qinglan.auth.security.JwtService;
 import com.qinglan.common.crypto.CryptoService;
 import com.qinglan.post.dto.CreatePostRequest;
 import com.qinglan.review.dto.CreateReportRequest;
+import com.qinglan.review.dto.ProposalDispositionRequest;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReviewTargetType;
+import com.qinglan.review.service.ReviewService;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.entity.UserRole;
 import com.qinglan.user.service.UserService;
@@ -24,7 +26,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -62,6 +63,9 @@ class ReviewFlowIntegrationTest {
 
     @Autowired
     private JwtService jwtService;
+
+    @Autowired
+    private ReviewService reviewService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -255,11 +259,8 @@ class ReviewFlowIntegrationTest {
         assertThat(postStatus(postId)).isEqualTo("TAKEN_DOWN");
         assertThat(reportCount(postId)).isEqualTo(3);
 
-        mockMvc.perform(post("/api/admin/posts/{id}/uphold-reports", postId)
-                        .header("Authorization", bearer(admin, UserRole.ADMIN))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("reason", "确认违规，维持下架"))))
-                .andExpect(status().isOk());
+        // 二期起 HTTP 的 uphold-reports 也走表决；本用例验证的是「维持下架把举报结案」的处置本身
+        reviewService.upholdReports(postId, admin.getId(), "确认违规，维持下架");
 
         // 内容仍在架下（维持下架不做状态迁移），举报结案为「成立」，待处理计数清零
         assertThat(postStatus(postId)).isEqualTo("TAKEN_DOWN");
@@ -269,7 +270,7 @@ class ReviewFlowIntegrationTest {
     }
 
     @Test
-    @DisplayName("复审前帖子已被另一位管理员手工恢复：复审通过不再因状态机冲突整体回滚")
+    @DisplayName("复审前帖子已被超管手工恢复：复审通过不再因状态机冲突整体回滚")
     void shouldAcceptAppealWhenPostAlreadyRestoredManually() throws Exception {
         User author = createStudent("author@qinglan.edu.cn", "2023011001");
         User operator = createStudent("operator@qinglan.edu.cn", "2023012001");
@@ -281,8 +282,8 @@ class ReviewFlowIntegrationTest {
         takeDown(operator, postId, ReportReason.ABUSE, "人身攻击");
         submitAppeal(author, postId, "并没有攻击任何人");
 
-        // 复审尚未发生，另一位管理员先把帖子手工恢复
-        restore(restorer, postId, "误判，先行恢复");
+        // 复审尚未发生，超管先把帖子手工恢复（撤销处置需要 DISPOSITION_REVOKE，仅超管）
+        restore(restorer, UserRole.SUPER_ADMIN, postId, "误判，先行恢复");
         assertThat(postStatus(postId)).isEqualTo("APPROVED");
 
         long appealId = appealId(postId);
@@ -325,20 +326,24 @@ class ReviewFlowIntegrationTest {
                 .andExpect(status().isOk());
     }
 
-    private void takeDown(User operator, long postId, ReportReason reason, String detail) throws Exception {
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("reasonCode", reason.name());
-        payload.put("detail", detail);
-        mockMvc.perform(post("/api/admin/posts/{id}/take-down", postId)
-                        .header("Authorization", bearer(operator, UserRole.ADMIN))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(payload)))
-                .andExpect(status().isOk());
+    /**
+     * 直接下架造数（不走 HTTP）。
+     *
+     * <p>二期起 HTTP 的 take-down 会走「发起提案 + 委员会表决」（见 {@code ProposalFlowIntegrationTest}），
+     * 而表决执行时 {@code review_by} 记的是系统哨兵——本类要验证的申诉链路却需要「帖子已下架且记着
+     * 某个具体处置人」（复审独立性判定读的就是 {@code post.review_by}），故用服务层直接处置造数。</p>
+     */
+    private void takeDown(User operator, long postId, ReportReason reason, String detail) {
+        reviewService.takeDown(postId, operator.getId(), new ProposalDispositionRequest(reason, detail));
     }
 
-    private void restore(User operator, long postId, String reason) throws Exception {
+    /**
+     * 手工恢复可见（撤销处置）。撤销权归超管（{@code DISPOSITION_REVOKE}），
+     * 因此调用方必须传 SUPER_ADMIN 令牌，否则会被 403。
+     */
+    private void restore(User operator, UserRole role, long postId, String reason) throws Exception {
         mockMvc.perform(post("/api/admin/posts/{id}/restore", postId)
-                        .header("Authorization", bearer(operator, UserRole.ADMIN))
+                        .header("Authorization", bearer(operator, role))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("reason", reason))))
                 .andExpect(status().isOk());

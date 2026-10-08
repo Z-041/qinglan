@@ -20,6 +20,7 @@ export type AdminPermission =
   | 'STATS_VIEW'
   | 'ROLE_GRANT'
   | 'PROPOSAL_ARBITRATE'
+  | 'DISPOSITION_REVOKE'
   | 'AUDIT_READ'
 
 /** 是否拥有某个权限点。判定收敛在此，避免各处写 `permissions.includes(...)` */

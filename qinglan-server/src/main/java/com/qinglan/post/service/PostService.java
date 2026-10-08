@@ -18,6 +18,7 @@ import com.qinglan.common.notify.NotificationMessage;
 import com.qinglan.common.notify.NotificationPort;
 import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
+import com.qinglan.common.store.EphemeralStore;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.config.PostProperties;
 import com.qinglan.post.dto.CreatePostRequest;
@@ -41,6 +42,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -83,6 +85,26 @@ public class PostService {
     private static final Pattern IMAGE_URL_PATTERN =
             Pattern.compile("^/uploads/\\d{4}/\\d{2}/[0-9a-f]{32}\\.(?:jpg|png|webp)$");
 
+    /**
+     * 联系方式查看审计的限流键前缀（AGENTS.md Redis key 约定 {@code ql:{domain}:{id}}）。
+     */
+    private static final String CONTACT_VIEW_RATE_KEY_PREFIX = "ql:post:contact-view:";
+
+    /**
+     * 单个用户在一个窗口内最多写多少条 {@code CONTACT_VIEW} 审计。
+     *
+     * <p>限流按<b>用户</b>而非「用户 + 帖子」。详情页每次访问都会写一条审计（不变量 #2），脚本批量
+     * 抓取可刷爆 {@code review_log} 并放大详情接口的写入。若按「用户 + 帖子」去重，同一人抓 1000 个
+     * 不同帖子仍会写 1000 行，写入量不封顶；按用户维度才能把单位时间内的写入量真正压到上限 N。
+     * 代价是同一人短时间内浏览多个帖子只留部分痕迹，但审计目的正是识别「异常批量抓取」，用户维度已足够。</p>
+     *
+     * <p>包内可见以便测试直接引用阈值，不在测试里重复魔法数。</p>
+     */
+    static final int CONTACT_VIEW_MAX_PER_WINDOW = 60;
+
+    /** 联系方式查看审计的限流窗口（与 {@link #CONTACT_VIEW_MAX_PER_WINDOW} 成对，从首次访问起算） */
+    private static final Duration CONTACT_VIEW_RATE_WINDOW = Duration.ofMinutes(1);
+
     private final PostRepository postRepository;
     private final PostImageRepository postImageRepository;
     private final TopicRepository topicRepository;
@@ -94,6 +116,7 @@ public class PostService {
     private final ContentGuard contentGuard;
     private final AnnouncementService announcementService;
     private final NotificationPort notificationPort;
+    private final EphemeralStore ephemeralStore;
 
     /**
      * 发布。落 Pending 而非直接可见——主帖先审后发，是设计方案第一章的红线 2。
@@ -268,12 +291,25 @@ public class PostService {
     /**
      * 不变量 #2：查看他人联系方式必须留痕，便于被人恶意批量抓取时追溯。
      * 看自己的帖子不记，否则日志会被作者自己的浏览刷屏。
+     *
+     * <p>审计写入按用户维度限流（{@link #CONTACT_VIEW_MAX_PER_WINDOW} / {@link #CONTACT_VIEW_RATE_WINDOW}），
+     * 超限后<b>不再写审计行但仍正常返回详情</b>——限流是防「GET 带写放大」刷爆 {@code review_log}，
+     * 绝不能因此影响阅读体验（因此这里不抛异常、不返回 4xx）。</p>
      */
     private void recordContactView(Post post, Viewer viewer) {
         if (!viewer.authenticated() || viewer.is(post.getAuthorId())) {
             return;
         }
         if (!post.contactVisibleTo(viewer.userId(), true) || post.getContact() == null) {
+            return;
+        }
+        // 限流放在「确要写审计」之后：看自己的帖子 / 未认证 / 联系方式不可见都不消耗额度
+        long views = ephemeralStore.increment(
+                CONTACT_VIEW_RATE_KEY_PREFIX + viewer.userId(), CONTACT_VIEW_RATE_WINDOW);
+        if (views > CONTACT_VIEW_MAX_PER_WINDOW) {
+            // 日志只带 userId 与丢弃计数，不得打印任何身份明文（学号/邮箱）或联系方式
+            log.warn("CONTACT_VIEW 审计写入超限，已丢弃 userId={} 本窗口累计丢弃={}",
+                    viewer.userId(), views - CONTACT_VIEW_MAX_PER_WINDOW);
             return;
         }
         auditLogService.record(AuditTargetType.POST, post.getId(), AuditAction.CONTACT_VIEW, viewer.userId(), null);

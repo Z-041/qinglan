@@ -14,20 +14,18 @@ import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.entity.ReviewState;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.review.dto.DismissReportsRequest;
-import com.qinglan.review.dto.TakeDownPostRequest;
+import com.qinglan.review.dto.ProposalDispositionRequest;
 import com.qinglan.review.entity.Report;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReportStatus;
 import com.qinglan.review.entity.ReviewTargetType;
 import com.qinglan.review.repository.ReportRepository;
-import com.qinglan.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -61,7 +59,6 @@ public class ReviewService {
     private final PostRepository postRepository;
     private final ReportRepository reportRepository;
     private final CommentService commentService;
-    private final UserService userService;
     private final AuditLogService auditLogService;
     private final NotificationPort notificationPort;
 
@@ -103,10 +100,12 @@ public class ReviewService {
      * 处置完还挂在队列里等于没处理完。清零用「减去本次结案条数」而非直接写 0：
      * 计数是原子维护的，直接写会覆盖掉并发期间新增的举报。</p>
      *
-     * <p>{@code banDays} 非空即「下架并封禁」，封禁本身也走 UserService 落审计。</p>
+     * <p>调用方只有 P5 二期的表决执行（{@link ProposalService}，operator 为系统哨兵）。
+     * 曾经的「下架并封禁」（{@code banDays}）已移除：表决机制下不能先封禁再等投票，封禁改由
+     * 用户管理页单独执行（{@code USER_MANAGE}）。</p>
      */
     @Transactional
-    public void takeDown(Long postId, Long operatorId, TakeDownPostRequest request) {
+    public void takeDown(Long postId, Long operatorId, ProposalDispositionRequest request) {
         Post post = requirePost(postId);
         String reason = describe(request.reasonCode(), request.detail());
         post.transitionTo(new ReviewState.TakenDown(operatorId, reason, Instant.now()));
@@ -115,15 +114,11 @@ public class ReviewService {
         // 必须最后调用：该方法 flushAutomatically 落定上面的改动，再 clearAutomatically 清一级缓存
         postRepository.adjustReportCount(postId, -handled);
 
-        if (request.banDays() != null) {
-            userService.ban(post.getAuthorId(), Duration.ofDays(request.banDays()), reason, operatorId);
-        }
         auditLogService.record(AuditTargetType.POST, postId, AuditAction.POST_TAKEDOWN, operatorId, reason);
         // 下架理由对作者可见（申诉入口在详情里）
         notificationPort.notify(post.getAuthorId(), operatorId,
                 new NotificationMessage(NotificationType.REVIEW_RESULT, "你的帖子已被下架", reason, "/posts/" + postId));
-        log.info("下架帖子 postId={} 结案举报数={} 封禁={}，操作人 operatorId={}",
-                postId, handled, request.banDays() != null, operatorId);
+        log.info("下架帖子 postId={} 结案举报数={}，操作人 operatorId={}", postId, handled, operatorId);
     }
 
     /**

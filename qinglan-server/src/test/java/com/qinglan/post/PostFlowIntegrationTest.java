@@ -167,10 +167,14 @@ class PostFlowIntegrationTest {
         long replyId = commentId(createComment(postId, readerHeader, "已经出掉了", rootId));
         assertThat(detail(postId, null).path("commentCount").asInt()).isEqualTo(2);
 
-        JsonNode comments = readJson(mockMvc.perform(get("/api/posts/{id}/comments", postId))
+        // 评论列表已改为一级评论游标分页：出参是 { items, nextCursor }
+        JsonNode commentPage = readJson(mockMvc.perform(get("/api/posts/{id}/comments", postId))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8)).path("data");
+        JsonNode comments = commentPage.path("items");
         assertThat(comments).hasSize(1);
+        assertThat(commentPage.path("nextCursor").isNull() || commentPage.path("nextCursor").asText().isEmpty())
+                .isTrue();
         assertThat(comments.get(0).path("replies")).hasSize(1);
         assertThat(comments.get(0).path("replies").get(0).path("authorId").isMissingNode()).isTrue();
 

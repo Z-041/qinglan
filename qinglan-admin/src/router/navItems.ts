@@ -17,10 +17,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { name: 'admin-dashboard', label: '看板', permission: 'STATS_VIEW' },
   { name: 'admin-pending-posts', label: '待审帖子', permission: 'MODERATION_VIEW' },
   { name: 'admin-review-queue', label: '审核队列', permission: 'MODERATION_VIEW' },
+  { name: 'admin-proposals', label: '我的提案与投票', permission: 'PROPOSAL_VOTE' },
   { name: 'admin-appeals', label: '申诉复审', permission: 'APPEAL_REVIEW' },
   { name: 'admin-users', label: '用户管理', permission: 'USER_MANAGE' },
   { name: 'admin-announcements', label: '公告管理', permission: 'ANNOUNCEMENT_DRAFT' },
   { name: 'admin-permissions', label: '权限管理', permission: 'ROLE_GRANT' },
+  { name: 'admin-arbitration', label: '待裁决', permission: 'PROPOSAL_ARBITRATE' },
   { name: 'admin-audit-logs', label: '审计日志', permission: 'AUDIT_READ' },
 ]
 

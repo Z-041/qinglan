@@ -4,6 +4,7 @@ import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
+import com.qinglan.common.web.TextPreview;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.review.dto.AdminAppealItemResponse;
@@ -34,7 +35,6 @@ public class AppealQueueService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int PREVIEW_LENGTH = 80;
-    private static final String ELLIPSIS = "...";
     private static final String KEY_SEPARATOR = ":";
     /** 游标段数：申诉微秒 : 申诉 id */
     private static final int CURSOR_SEGMENTS = 2;
@@ -84,10 +84,7 @@ public class AppealQueueService {
     }
 
     private String preview(String content) {
-        if (content == null) {
-            return null;
-        }
-        return content.length() <= PREVIEW_LENGTH ? content : content.substring(0, PREVIEW_LENGTH) + ELLIPSIS;
+        return TextPreview.of(content, PREVIEW_LENGTH);
     }
 
     /**
