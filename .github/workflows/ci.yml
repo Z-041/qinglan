@@ -59,11 +59,17 @@ jobs:
         run: ./mvnw -B -ntp test
 
   frontend:
-    name: Frontend (Vue 3 + TS)
+    name: Frontend (${{ matrix.package }})
     runs-on: ubuntu-latest
+    # 前端已拆成三个 pnpm workspace 包：shared（共享）/ qinglan-web（学生端）/ qinglan-admin（管理端）。
+    # fail-fast: false 让三包的失败都能报出来，而不是第一个红了就掐掉其余。
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [shared, qinglan-web, qinglan-admin]
     defaults:
       run:
-        working-directory: qinglan-web
+        working-directory: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up pnpm
@@ -75,12 +81,19 @@ jobs:
         with:
           node-version: "22"
           cache: pnpm
-          cache-dependency-path: qinglan-web/pnpm-lock.yaml
+          # workspace 根只有一个 lockfile（拆分时已从 qinglan-web/ 上移）
+          cache-dependency-path: pnpm-lock.yaml
       - name: Install dependencies
+        # 必须在 workspace 根安装：三个包共用一份 lockfile 与虚拟store
+        working-directory: .
         run: pnpm install --frozen-lockfile
       - name: Lint
         run: pnpm lint
+      # 用各包自己的 typecheck 脚本（qinglan-admin 的 ElMessageBox 等自动导入声明已入库，
+      # 否则新克隆的仓库首次 typecheck 会报 TS2304）
       - name: Type check
-        run: pnpm vue-tsc --noEmit
+        run: pnpm typecheck
       - name: Unit tests
-        run: pnpm vitest run
+        run: pnpm test
+      - name: Build
+        run: pnpm build
