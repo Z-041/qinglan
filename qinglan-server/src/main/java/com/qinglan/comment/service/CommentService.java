@@ -105,9 +105,7 @@ public class CommentService {
     public CommentResponse create(Long postId, Long authorId, CreateCommentRequest request) {
         Post post = requireVisiblePost(postId, authorId);
         Long parentId = request.parentId();
-        if (parentId != null) {
-            requireReplyableRoot(parentId, postId);
-        }
+        Comment parent = parentId == null ? null : requireReplyableRoot(parentId, postId);
         User author = userService.requireUsableById(authorId);
         requireAllowedContent(request.content());
 
@@ -119,12 +117,22 @@ public class CommentService {
         // 原子自增：读-改-写会在并发下丢更新（C）
         postRepository.adjustCommentCount(postId, 1);
         // 通知帖主。body 只能是评论正文，绝不带上评论者的匿名代号 / authorId，否则跨帖可关联（不变量 #1）
-        notificationPort.notify(post.getAuthorId(), authorId,
-                new NotificationMessage(NotificationType.COMMENT, "有人评论了你的帖子",
-                        truncateForNotification(request.content().trim()), "/posts/" + postId));
+        notifyComment(post.getAuthorId(), authorId, "有人评论了你的帖子", request.content().trim(), postId);
+        // 二级评论还要通知**被回复的人**：只通知帖主的话，被回复者永远不知道自己被回复了
+        // （同一条评论若两人是同一人则只发一条，避免重复打扰）
+        if (parent != null && !parent.getAuthorId().equals(post.getAuthorId())) {
+            notifyComment(parent.getAuthorId(), authorId, "有人回复了你的评论", request.content().trim(), postId);
+        }
 
         log.info("用户发表评论 commentId={} postId={} parentId={}", saved.getId(), postId, parentId);
         return toResponse(saved, List.of(), Map.of(), Set.of(), new Viewer(authorId));
+    }
+
+    /** 发一条评论类通知；正文按列长截断。绝不带上评论者身份（不变量 #1） */
+    private void notifyComment(Long recipientId, Long actorId, String title, String content, Long postId) {
+        notificationPort.notify(recipientId, actorId,
+                new NotificationMessage(NotificationType.COMMENT, title,
+                        truncateForNotification(content), "/posts/" + postId));
     }
 
     /**
@@ -223,14 +231,19 @@ public class CommentService {
         return post;
     }
 
-    /** 只支持两级：回复必须落在同一帖的一级评论下，防止构造任意深度的评论树 */
-    private void requireReplyableRoot(Long parentId, Long postId) {
+    /**
+     * 校验被回复的父评论可回复，并返回它——调用方要拿父评论作者去通知被回复的人。
+     *
+     * <p>只支持两级：回复必须落在同一帖的一级评论下，防止构造任意深度的评论树。</p>
+     */
+    private Comment requireReplyableRoot(Long parentId, Long postId) {
         Comment parent = commentRepository.findById(parentId)
                 .filter(candidate -> !candidate.isRemoved())
                 .orElseThrow(() -> new BizException(ErrorCode.COMMENT_NOT_FOUND));
         if (!parent.getPostId().equals(postId) || parent.isReply()) {
             throw new BizException(ErrorCode.COMMENT_NOT_FOUND);
         }
+        return parent;
     }
 
     /**

@@ -40,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -140,6 +141,57 @@ class CommentServiceTest {
         assertThat(message.link()).isEqualTo("/posts/" + POST_ID);
         // 不变量 #1：body 只放评论文本，绝不带评论者代号等可关联字段
         assertThat(message.body()).doesNotContain("青竹#0f0f");
+    }
+
+    @Test
+    @DisplayName("回复一级评论：帖主与被回复者各收一条通知，body 同样不带身份（R-32）")
+    void shouldNotifyParentCommentAuthorWhenReplying() {
+        long commenterId = 42L;
+        long parentAuthorId = 88L;
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
+        when(commentRepository.findById(ROOT_ID))
+                .thenReturn(Optional.of(comment(ROOT_ID, POST_ID, null, parentAuthorId)));
+        when(userService.requireUsableById(commenterId))
+                .thenReturn(User.register("emailHash", "studentIdHash", "enc", SALT));
+        when(anonymousCodeService.deriveCode(POST_ID, commenterId, SALT)).thenReturn("青竹#0f0f");
+        when(commentRepository.save(any(Comment.class))).thenAnswer(invocation -> {
+            Comment saved = invocation.getArgument(0);
+            TestFixtures.setId(saved, 9L);
+            return saved;
+        });
+
+        commentService.create(POST_ID, commenterId, new CreateCommentRequest("回复你", ROOT_ID));
+
+        ArgumentCaptor<NotificationMessage> captor = ArgumentCaptor.forClass(NotificationMessage.class);
+        // 被回复者：只通知帖主的话，他永远不知道自己被回复了
+        verify(notificationPort).notify(eq(parentAuthorId), eq(commenterId), captor.capture());
+        assertThat(captor.getValue().title()).isEqualTo("有人回复了你的评论");
+        assertThat(captor.getValue().body()).isEqualTo("回复你");
+        assertThat(captor.getValue().body()).doesNotContain("青竹#0f0f");
+        // 帖主照旧收到一条
+        verify(notificationPort).notify(eq(AUTHOR_ID), eq(commenterId), any());
+    }
+
+    @Test
+    @DisplayName("被回复者就是帖主时只发一条通知，不重复打扰（R-32）")
+    void shouldNotifyOnceWhenParentAuthorIsPostAuthor() {
+        long commenterId = 42L;
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
+        // 一级评论的作者就是帖主本人
+        when(commentRepository.findById(ROOT_ID))
+                .thenReturn(Optional.of(comment(ROOT_ID, POST_ID, null, AUTHOR_ID)));
+        when(userService.requireUsableById(commenterId))
+                .thenReturn(User.register("emailHash", "studentIdHash", "enc", SALT));
+        when(anonymousCodeService.deriveCode(POST_ID, commenterId, SALT)).thenReturn("青竹#0f0f");
+        when(commentRepository.save(any(Comment.class))).thenAnswer(invocation -> {
+            Comment saved = invocation.getArgument(0);
+            TestFixtures.setId(saved, 9L);
+            return saved;
+        });
+
+        commentService.create(POST_ID, commenterId, new CreateCommentRequest("回复你", ROOT_ID));
+
+        verify(notificationPort, times(1)).notify(any(), any(), any());
     }
 
     @Test
