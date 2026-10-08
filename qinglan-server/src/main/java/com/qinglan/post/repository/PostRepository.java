@@ -40,6 +40,30 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     );
 
     /**
+     * 待审帖子的键集分页查询，供管理端「待审帖子」队列（先审后发，设计方案红线 2）。
+     *
+     * <p>排序键 {@code (created_at asc, id asc)}——发布即提交审核，{@code created_at} 就是
+     * 提交时刻，先到先审。两个比较条件必须与 {@code order by} 严格同序，否则翻页会漏行或重复。</p>
+     *
+     * <p>状态取集合而非单值：与看板的「待审核」口径一致（{@code PENDING} + {@code REVIEWING}），
+     * 免得将来出现认领动作后「看板数字」与「队列条数」对不上。</p>
+     */
+    @Query("""
+            select p from Post p
+            where p.status in :statuses
+              and (:cursorCreatedAt is null
+                   or p.createdAt > :cursorCreatedAt
+                   or (p.createdAt = :cursorCreatedAt and p.id > :cursorId))
+            order by p.createdAt asc, p.id asc
+            """)
+    List<Post> findPendingPage(
+            @Param("statuses") Collection<PostStatus> statuses,
+            @Param("cursorCreatedAt") Instant cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable limit
+    );
+
+    /**
      * 原子调整 {@code comment_count}。
      *
      * <p>由 comment 模块在发表/删除评论时调用。不能走实体读-改-写：并发评论时两个事务各自

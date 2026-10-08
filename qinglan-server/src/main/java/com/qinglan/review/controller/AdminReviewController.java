@@ -6,11 +6,13 @@ import com.qinglan.common.web.CursorPage;
 import com.qinglan.review.dto.AdminAppealItemResponse;
 import com.qinglan.review.dto.AdminReviewContextResponse;
 import com.qinglan.review.dto.DismissReportsRequest;
+import com.qinglan.review.dto.PendingPostItemResponse;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
 import com.qinglan.review.dto.TakeDownPostRequest;
 import com.qinglan.review.entity.ReviewTargetType;
 import com.qinglan.review.service.AppealQueueService;
 import com.qinglan.review.service.AppealService;
+import com.qinglan.review.service.PendingPostQueueService;
 import com.qinglan.review.service.ReviewContextService;
 import com.qinglan.review.service.ReviewQueueService;
 import com.qinglan.review.service.ReviewService;
@@ -43,6 +45,7 @@ public class AdminReviewController {
     private final ReviewContextService reviewContextService;
     private final AppealService appealService;
     private final AppealQueueService appealQueueService;
+    private final PendingPostQueueService pendingPostQueueService;
 
     /** 举报队列：按举报数降序 + 等待时长升序，游标分页 */
     @GetMapping("/review-queue")
@@ -56,6 +59,17 @@ public class AdminReviewController {
     public ApiResponse<CursorPage<AdminAppealItemResponse>> appeals(
             @RequestParam(required = false) String cursor) {
         return ApiResponse.ok(appealQueueService.queue(cursor));
+    }
+
+    /**
+     * 待审帖子队列：先审后发（设计方案第一章红线 2）下放行新帖的唯一入口，先到先审，游标分页。
+     *
+     * <p>与举报队列是两个来源：举报队列按「被举报目标」聚合，新帖没被举报就不会出现在那里。</p>
+     */
+    @GetMapping("/pending-posts")
+    public ApiResponse<CursorPage<PendingPostItemResponse>> pendingPosts(
+            @RequestParam(required = false) String cursor) {
+        return ApiResponse.ok(pendingPostQueueService.queue(cursor));
     }
 
     /** 上下文面板：作者信用分、历史违规次数、举报聚合。不出作者与举报人身份 */

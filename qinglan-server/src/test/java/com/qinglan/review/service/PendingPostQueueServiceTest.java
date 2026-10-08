@@ -1,0 +1,205 @@
+package com.qinglan.review.service;
+
+import com.qinglan.common.error.BizException;
+import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.web.CursorPage;
+import com.qinglan.post.entity.Post;
+import com.qinglan.post.entity.PostStatus;
+import com.qinglan.post.repository.PostRepository;
+import com.qinglan.review.dto.PendingPostItemResponse;
+import com.qinglan.support.TestFixtures;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+
+import java.lang.reflect.RecordComponent;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+/**
+ * 待审帖子队列的单元测试。
+ *
+ * <p>盯四件事：只列待审状态（与看板口径一致）、排序与分页键完全交给数据库、队列里不出现作者
+ * 身份（不变量 #1 的引申）、游标非法输入必须拒绝而不是静默从头开始。</p>
+ */
+@ExtendWith(MockitoExtension.class)
+class PendingPostQueueServiceTest {
+
+    private static final Instant BASE = Instant.parse("2026-10-06T00:00:00Z");
+
+    /** 与看板 pendingPosts 同口径：两个状态都要捞 */
+    private static final List<PostStatus> PENDING_STATUSES =
+            List.of(PostStatus.PENDING, PostStatus.REVIEWING);
+
+    @Mock
+    private PostRepository postRepository;
+
+    @InjectMocks
+    private PendingPostQueueService pendingPostQueueService;
+
+    @Test
+    @DisplayName("没有待审帖子时返回空页与空游标")
+    void shouldReturnEmptyPageWhenQueueEmpty() {
+        stubFirstPage(List.of());
+
+        CursorPage<PendingPostItemResponse> page = pendingPostQueueService.queue(null);
+
+        assertThat(page.items()).isEmpty();
+        assertThat(page.nextCursor()).isNull();
+    }
+
+    @Test
+    @DisplayName("首页按「待审两个状态 + 空游标 + 多取一条」查库")
+    void shouldQueryFirstPageWithPendingStatuses() {
+        stubFirstPage(List.of());
+
+        pendingPostQueueService.queue(null);
+
+        verify(postRepository).findPendingPage(PENDING_STATUSES, null, null, PageRequest.of(0, 21));
+    }
+
+    @Test
+    @DisplayName("装配摘要、状态、提交时间与待处理举报数")
+    void shouldAssembleItem() {
+        Post post = TestFixtures.pendingPost(7L, 100L, 1L, "测试正文");
+        TestFixtures.setCreatedAt(post, BASE);
+        TestFixtures.setReportCount(post, 2);
+        stubFirstPage(List.of(post));
+
+        PendingPostItemResponse item = pendingPostQueueService.queue(null).items().get(0);
+
+        assertThat(item.postId()).isEqualTo(7L);
+        assertThat(item.preview()).isEqualTo("测试正文");
+        assertThat(item.targetStatus()).isEqualTo(PostStatus.PENDING.name());
+        assertThat(item.submittedAt()).isEqualTo(BASE);
+        assertThat(item.reportCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("超长内容截断为 80 字加省略号")
+    void shouldTruncateLongPreview() {
+        Post post = TestFixtures.pendingPost(7L, 100L, 1L, "违".repeat(120));
+        stubFirstPage(List.of(post));
+
+        String preview = pendingPostQueueService.queue(null).items().get(0).preview();
+
+        assertThat(preview).hasSize(83).endsWith("...");
+    }
+
+    @Test
+    @DisplayName("多取一条判断还有下一页，游标为「提交微秒:帖子 id」")
+    void shouldEmitOpaqueCursorForNextPage() {
+        List<Post> posts = IntStream.range(0, 21)
+                .mapToObj(i -> pendingPost(100L - i, BASE.plusSeconds(i)))
+                .toList();
+        stubFirstPage(posts);
+
+        CursorPage<PendingPostItemResponse> page = pendingPostQueueService.queue(null);
+
+        assertThat(page.items()).hasSize(20);
+        // 第 20 行（下标 19）的复合键：提交微秒 : 帖子 id
+        assertThat(page.nextCursor()).isEqualTo(BASE.plusSeconds(19).getEpochSecond() * 1_000_000L + ":81");
+    }
+
+    @Test
+    @DisplayName("合法游标解析后按「提交微秒 + 帖子 id」交给仓储")
+    void shouldPassParsedCursorToRepository() {
+        long micros = BASE.plusSeconds(5).getEpochSecond() * 1_000_000L;
+        when(postRepository.findPendingPage(PENDING_STATUSES, BASE.plusSeconds(5), 7L,
+                PageRequest.of(0, 21))).thenReturn(List.of());
+
+        pendingPostQueueService.queue(micros + ":7");
+
+        verify(postRepository).findPendingPage(PENDING_STATUSES, BASE.plusSeconds(5), 7L,
+                PageRequest.of(0, 21));
+    }
+
+    @Test
+    @DisplayName("缺段、非数字、非正数的游标一律按非法游标拒绝，且不触碰仓储")
+    void shouldRejectMalformedCursor() {
+        assertThatThrownBy(() -> pendingPostQueueService.queue("not-a-cursor"))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.CURSOR_INVALID);
+        // 段数不足（只有一段）同样拒绝，避免把旧格式游标当成合法输入静默按首页重来
+        assertThatThrownBy(() -> pendingPostQueueService.queue("123"))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.CURSOR_INVALID);
+        assertThatThrownBy(() -> pendingPostQueueService.queue("0:7"))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.CURSOR_INVALID);
+        assertThatThrownBy(() -> pendingPostQueueService.queue("1:0"))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.CURSOR_INVALID);
+
+        verifyNoInteractions(postRepository);
+    }
+
+    @Test
+    @DisplayName("不变量 #1：待审队列响应不含作者身份字段")
+    void shouldKeepAuthorIdentityOutOfQueueItem() {
+        Set<String> componentNames = Arrays.stream(PendingPostItemResponse.class.getRecordComponents())
+                .map(RecordComponent::getName)
+                .collect(Collectors.toSet());
+
+        assertThat(componentNames).doesNotContain(
+                "authorId", "studentId", "anonymousCode", "email", "reviewBy");
+    }
+
+    @Test
+    @DisplayName("游标带微秒：边界行与下一行同毫秒时，续页仍按边界行的原始时刻")
+    void shouldKeepMicrosWhenPostsShareTheSameMillisecond() {
+        Instant boundary = BASE.plusSeconds(19).plusNanos(234_000);
+        Instant next = BASE.plusSeconds(19).plusNanos(235_000);
+        List<Post> posts = new ArrayList<>();
+        for (int i = 0; i < 21; i++) {
+            posts.add(pendingPost(100L - i, i < 19 ? BASE.plusSeconds(i) : (i == 19 ? boundary : next)));
+        }
+        stubFirstPage(posts);
+
+        CursorPage<PendingPostItemResponse> page = pendingPostQueueService.queue(null);
+
+        assertThat(posts.get(19).getCreatedAt().toEpochMilli())
+                .isEqualTo(posts.get(20).getCreatedAt().toEpochMilli());
+        assertThat(page.nextCursor())
+                .isEqualTo((boundary.getEpochSecond() * 1_000_000L + 234L) + ":81");
+
+        pendingPostQueueService.queue(page.nextCursor());
+
+        verify(postRepository).findPendingPage(PENDING_STATUSES, boundary, 81L, PageRequest.of(0, 21));
+    }
+
+    // ------------------------------------------------------------------ 辅助
+
+    private void stubFirstPage(List<Post> posts) {
+        when(postRepository.findPendingPage(eq(PENDING_STATUSES), any(), any(), any(Pageable.class)))
+                .thenReturn(posts);
+    }
+
+    private static Post pendingPost(long id, Instant createdAt) {
+        Post post = TestFixtures.pendingPost(id, 100L, 1L, "测试正文");
+        TestFixtures.setCreatedAt(post, createdAt);
+        return post;
+    }
+}

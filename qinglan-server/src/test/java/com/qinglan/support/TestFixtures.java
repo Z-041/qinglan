@@ -55,6 +55,15 @@ public final class TestFixtures {
         set(entity, "createdAt", createdAt);
     }
 
+    /** 已提交、等待审核的主帖（待审帖子队列的典型目标） */
+    public static Post pendingPost(Long id, Long authorId, Long topicId, String content) {
+        Post post = Post.draft(authorId, topicId, content, null);
+        post.submit(RiskLevel.LOW);
+        setId(post, id);
+        post.assignAnonymousCode("银杏#1a2b");
+        return post;
+    }
+
     /** 已下架、带下架理由的主帖（申诉队列的典型目标） */
     public static Post takenDownPost(Long id, String content, String reviewReason) {
         Post post = Post.draft(7L, 1L, content, null);

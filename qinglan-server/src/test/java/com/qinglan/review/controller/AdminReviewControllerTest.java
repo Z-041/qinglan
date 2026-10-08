@@ -4,12 +4,14 @@ import com.qinglan.auth.security.JwtService;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.review.dto.AdminAppealItemResponse;
 import com.qinglan.review.dto.AdminReviewContextResponse;
+import com.qinglan.review.dto.PendingPostItemResponse;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
 import com.qinglan.review.dto.TakeDownPostRequest;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReviewTargetType;
 import com.qinglan.review.service.AppealQueueService;
 import com.qinglan.review.service.AppealService;
+import com.qinglan.review.service.PendingPostQueueService;
 import com.qinglan.review.service.ReviewContextService;
 import com.qinglan.review.service.ReviewQueueService;
 import com.qinglan.review.service.ReviewService;
@@ -71,6 +73,9 @@ class AdminReviewControllerTest {
     private AppealQueueService appealQueueService;
 
     @MockitoBean
+    private PendingPostQueueService pendingPostQueueService;
+
+    @MockitoBean
     private JwtService jwtService;
 
     @AfterEach
@@ -112,6 +117,38 @@ class AdminReviewControllerTest {
                 .andExpect(jsonPath("$.data.items").isEmpty());
 
         verify(reviewQueueService).queue(null);
+    }
+
+    // ------------------------------------------------------------------ 待审帖子
+
+    @Test
+    @DisplayName("待审队列返回游标分页，且行内不含作者身份字段")
+    void shouldReturnPendingPostsWithoutAuthorIdentity() throws Exception {
+        when(pendingPostQueueService.queue(null)).thenReturn(CursorPage.of(
+                List.of(new PendingPostItemResponse(POST_ID, "待审正文", "PENDING",
+                        Instant.parse("2026-10-06T00:00:00Z"), 0)),
+                "1000:1"));
+
+        mockMvc.perform(get("/api/admin/pending-posts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("QL-000-000"))
+                .andExpect(jsonPath("$.data.items[0].postId").value(POST_ID))
+                .andExpect(jsonPath("$.data.items[0].targetStatus").value("PENDING"))
+                .andExpect(jsonPath("$.data.items[0].authorId").doesNotExist())
+                .andExpect(jsonPath("$.data.items[0].anonymousCode").doesNotExist())
+                .andExpect(jsonPath("$.data.nextCursor").value("1000:1"));
+    }
+
+    @Test
+    @DisplayName("待审队列的游标原样透传给服务层")
+    void shouldPassPendingPostsCursor() throws Exception {
+        when(pendingPostQueueService.queue("1000:1")).thenReturn(CursorPage.empty());
+
+        mockMvc.perform(get("/api/admin/pending-posts").param("cursor", "1000:1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isEmpty());
+
+        verify(pendingPostQueueService).queue("1000:1");
     }
 
     // ------------------------------------------------------------------ 上下文
