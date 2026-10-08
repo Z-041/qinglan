@@ -101,9 +101,10 @@ public class PostService {
     @Transactional
     public PostDetailResponse create(Long authorId, CreatePostRequest request) {
         User author = userService.requireUsableById(authorId);
-        // 强制阅读的服务端兜底（设计方案 5.4）：存在未读紧急公告时不允许发帖，
+        // 强制阅读的服务端兜底（设计方案 5.4）：存在未读**紧急**公告时不允许发帖。
         // 前端禁用只是体验层，绕过 UI 也发不了帖。428 携带公告内容供前端直接弹窗。
-        announcementService.findPending(authorId, null).ifPresent(pending -> {
+        // 只查 URGENT：规格明确「普通公告不拦截」，用不限级别的 findPending 会让一条活动公告挡住全站发帖。
+        announcementService.findPendingUrgent(authorId).ifPresent(pending -> {
             throw new PreconditionRequiredException(ErrorCode.PRECONDITION_REQUIRED, pending);
         });
         assertCanPost(author);

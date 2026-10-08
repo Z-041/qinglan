@@ -62,6 +62,11 @@ public class AnnouncementService {
     /** 设备标识只允许这几种字符，避免把任意字符串写进列与日志 */
     private static final Pattern DEVICE_ID_PATTERN = Pattern.compile("[A-Za-z0-9_-]{1,64}");
 
+    /** 弹窗用：所有级别的未读公告都要弹（设计方案 5.5） */
+    private static final List<AnnouncementLevel> ALL_LEVELS = List.of(AnnouncementLevel.values());
+    /** 发帖 gate 用：只有紧急公告拦截发帖（设计方案 5.4） */
+    private static final List<AnnouncementLevel> URGENT_ONLY = List.of(AnnouncementLevel.URGENT);
+
     private final AnnouncementRepository announcementRepository;
     private final AnnouncementReadRepository announcementReadRepository;
     private final AuditLogService auditLogService;
@@ -129,19 +134,41 @@ public class AnnouncementService {
     }
 
     /**
-     * 待读一条：供公开接口与发帖 gate 共用。返回优先级最高的一条，无未读返回空。
+     * 待读一条：供公开接口（弹窗）使用。返回优先级最高的一条，无未读返回空。
+     *
+     * <p>不限制级别：任何未读公告都值得弹一次（设计方案 5.5「未读即弹」）。</p>
      *
      * @param userId   登录用户 id；游客为 null
      * @param deviceId 游客设备标识；未传为 null
      */
     @Transactional(readOnly = true)
     public Optional<PendingAnnouncementResponse> findPending(Long userId, String deviceId) {
+        return findPendingAmong(userId, deviceId, ALL_LEVELS);
+    }
+
+    /**
+     * 待读的<b>紧急</b>公告：**只给发帖 gate 用**（设计方案 5.4）。
+     *
+     * <p>规格原文：「存在未读的 URGENT 公告时，POST /api/posts 返回 428……
+     * 是否启用此拦截由 {@code level=URGENT} 决定，<b>普通公告不拦截</b>，避免过度打扰」。
+     * 若这里复用 {@link #findPending}（不限级别），一条普通活动公告就会挡住全站发帖，
+     * 与该规格相反。</p>
+     */
+    @Transactional(readOnly = true)
+    public Optional<PendingAnnouncementResponse> findPendingUrgent(Long userId) {
+        // 发帖必然已登录，设备维度无需参与
+        return findPendingAmong(userId, null, URGENT_ONLY);
+    }
+
+    private Optional<PendingAnnouncementResponse> findPendingAmong(
+            Long userId, String deviceId, Collection<AnnouncementLevel> levels) {
         // 已读排除维度只取其一：登录用户按账号判，只有游客才按设备判。
         // 若对登录用户也按设备排除，同一台电脑上会出现「甲以游客身份读过 → 乙登录后被甲的记录挡掉」，
         // 而强制阅读里「漏看」远比「多看一次」危险，故登录态一律忽略设备维度（计划 D5 修订）。
         String gateDeviceId = userId == null ? normalizeDeviceId(deviceId) : null;
         return announcementRepository.findPending(
                         AnnouncementStatus.PUBLISHED,
+                        levels,
                         AnnouncementLevel.URGENT,
                         AnnouncementLevel.NORMAL,
                         Instant.now(),

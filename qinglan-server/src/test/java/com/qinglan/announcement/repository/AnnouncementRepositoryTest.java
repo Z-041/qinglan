@@ -14,6 +14,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,8 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 公告持久层测试：真实 MySQL（本机 qinglan_test），不 mock 数据库行为。
  *
- * <p>重点验证 {@code findPending} 的显式优先级排序与「按 userId / deviceId 任一命中即已读」的排除逻辑——
- * 这段 JPQL 的 enum 参数 CASE 排序与可空参数排除只有真跑才能确认。</p>
+ * <p>重点验证 {@code findPending} 的显式优先级排序、级别过滤，以及「登录用户只看账号维度、游客只看设备维度」
+ * 的排除逻辑——这段 JPQL 的 enum 参数 CASE 排序与可空参数排除只有真跑才能确认。</p>
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -84,9 +85,38 @@ class AnnouncementRepositoryTest {
         assertThat(findPending(7L, null)).isEmpty();
     }
 
+    @Test
+    @DisplayName("只查 URGENT（发帖 gate 口径）时返回紧急公告，普通公告被排除")
+    void shouldReturnOnlyUrgentWhenLevelRestricted() {
+        publish("普通公告", AnnouncementLevel.NORMAL, NOW.minusSeconds(10));
+        Announcement urgent = publish("紧急公告", AnnouncementLevel.URGENT, NOW.minusSeconds(20));
+        entityManager.flush();
+
+        assertThat(findPending(7L, null, List.of(AnnouncementLevel.URGENT)))
+                .extracting(Announcement::getId)
+                .containsExactly(urgent.getId());
+    }
+
+    @Test
+    @DisplayName("只查 URGENT 且无紧急公告时为空：未读普通公告不拦发帖（设计方案 5.4）")
+    void shouldReturnEmptyForGateWhenOnlyNormalUnread() {
+        publish("普通公告", AnnouncementLevel.NORMAL, NOW.minusSeconds(10));
+        entityManager.flush();
+
+        // 发帖 gate 的口径：没有紧急公告 → 空 → 放行发帖
+        assertThat(findPending(7L, null, List.of(AnnouncementLevel.URGENT))).isEmpty();
+        // 同一份数据走弹窗口径（不限级别）则能取到，证明过滤确实只在 gate 一侧生效
+        assertThat(findPending(7L, null)).hasSize(1);
+    }
+
     private List<Announcement> findPending(Long userId, String deviceId) {
+        return findPending(userId, deviceId, List.of(AnnouncementLevel.values()));
+    }
+
+    private List<Announcement> findPending(
+            Long userId, String deviceId, Collection<AnnouncementLevel> levels) {
         return announcementRepository.findPending(AnnouncementStatus.PUBLISHED,
-                AnnouncementLevel.URGENT, AnnouncementLevel.NORMAL, NOW, userId, deviceId,
+                levels, AnnouncementLevel.URGENT, AnnouncementLevel.NORMAL, NOW, userId, deviceId,
                 PageRequest.of(0, 1));
     }
 

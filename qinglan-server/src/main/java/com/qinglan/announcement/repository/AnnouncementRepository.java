@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 public interface AnnouncementRepository extends JpaRepository<Announcement, Long> {
@@ -21,6 +22,10 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
      * 他人的游客已读记录会把登录用户也挡掉（漏看强制阅读公告比多看一次危险）。两侧逻辑写在
      * {@code AnnouncementService#findPending}。</p>
      *
+     * <p>{@code levels} 由调用方决定要哪几级：弹窗用「全部级别」（未读即弹），
+     * 发帖 gate 只取 {@code URGENT}（设计方案 5.4「是否启用此拦截由 level=URGENT 决定，
+     * 普通公告不拦截」）。两者共用一条查询，避免两份近乎相同的 JPQL 各自漂移。</p>
+     *
      * <p>排序用显式 {@code case level when ... then ...}：枚举声明顺序即优先级顺序，但数据库里存的是名称字符串，
      * 直接按列排序会变成字母序（ACTIVITY &lt; NORMAL &lt; URGENT），与优先级相反，故必须显式指定。
      * 调用方传 {@code PageRequest.of(0, 1)} 取优先级最高的一条。</p>
@@ -28,6 +33,7 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
     @Query("""
             select a from Announcement a
             where a.status = :published
+              and a.level in :levels
               and a.startAt <= :now
               and (a.endAt is null or a.endAt > :now)
               and not exists (
@@ -41,6 +47,7 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
             """)
     List<Announcement> findPending(
             @Param("published") AnnouncementStatus published,
+            @Param("levels") Collection<AnnouncementLevel> levels,
             @Param("urgent") AnnouncementLevel urgent,
             @Param("normal") AnnouncementLevel normal,
             @Param("now") Instant now,

@@ -252,7 +252,7 @@ class AnnouncementServiceTest {
     @DisplayName("共用设备：登录用户只按账号排除已读，不被同设备上他人的游客记录挡掉")
     void shouldNotLetGuestReadsSuppressLoggedInUser() {
         when(announcementRepository.findPending(
-                any(), any(), any(), any(), eq(USER_ID), isNull(), any(Pageable.class)))
+                any(), any(), any(), any(), any(), eq(USER_ID), isNull(), any(Pageable.class)))
                 .thenReturn(List.of());
 
         service.findPending(USER_ID, "dev-1");
@@ -260,20 +260,20 @@ class AnnouncementServiceTest {
         // 关键断言：deviceId 必须以 null 传给仓储。若把设备维度也传下去，
         // 同一台电脑上甲以游客身份读过的公告会把乙也挡掉——漏看强制阅读公告比多看一次危险
         verify(announcementRepository).findPending(
-                any(), any(), any(), any(), eq(USER_ID), isNull(), any(Pageable.class));
+                any(), any(), any(), any(), any(), eq(USER_ID), isNull(), any(Pageable.class));
     }
 
     @Test
     @DisplayName("游客只按设备排除已读，账号维度为空")
     void shouldGateGuestByDevice() {
         when(announcementRepository.findPending(
-                any(), any(), any(), any(), isNull(), eq("dev-1"), any(Pageable.class)))
+                any(), any(), any(), any(), any(), isNull(), eq("dev-1"), any(Pageable.class)))
                 .thenReturn(List.of());
 
         service.findPending(null, "dev-1");
 
         verify(announcementRepository).findPending(
-                any(), any(), any(), any(), isNull(), eq("dev-1"), any(Pageable.class));
+                any(), any(), any(), any(), any(), isNull(), eq("dev-1"), any(Pageable.class));
     }
 
     // ---------------------------------------------------------- 发布状态机
@@ -382,7 +382,7 @@ class AnnouncementServiceTest {
     @DisplayName("待读取优先级最高的一条；无未读返回空")
     void shouldReturnHighestPriorityPending() {
         when(announcementRepository.findPending(
-                eq(AnnouncementStatus.PUBLISHED), eq(AnnouncementLevel.URGENT), eq(AnnouncementLevel.NORMAL),
+                eq(AnnouncementStatus.PUBLISHED), any(), eq(AnnouncementLevel.URGENT), eq(AnnouncementLevel.NORMAL),
                 any(Instant.class), eq(USER_ID), isNull(), any(Pageable.class)))
                 .thenReturn(List.of(published(ANNOUNCEMENT_ID, 5)));
 
@@ -394,10 +394,27 @@ class AnnouncementServiceTest {
     }
 
     @Test
+    @DisplayName("发帖 gate 只查 URGENT：普通公告不参与 428 拦截（设计方案 5.4）")
+    void shouldGatePostingWithUrgentLevelOnly() {
+        when(announcementRepository.findPending(
+                eq(AnnouncementStatus.PUBLISHED), eq(List.of(AnnouncementLevel.URGENT)),
+                any(), any(), any(Instant.class), eq(USER_ID), isNull(), any(Pageable.class)))
+                .thenReturn(List.of());
+
+        assertThat(service.findPendingUrgent(USER_ID)).isEmpty();
+
+        // 关键断言：只允许 URGENT 进入发帖 gate。若这里放行全部级别，
+        // 一条普通活动公告就会挡住全站发帖，与规格「普通公告不拦截」相反
+        verify(announcementRepository).findPending(
+                eq(AnnouncementStatus.PUBLISHED), eq(List.of(AnnouncementLevel.URGENT)),
+                any(), any(), any(Instant.class), eq(USER_ID), isNull(), any(Pageable.class));
+    }
+
+    @Test
     @DisplayName("无未读公告时待读为空")
     void shouldReturnEmptyWhenNothingPending() {
         when(announcementRepository.findPending(
-                any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(List.of());
 
         assertThat(service.findPending(USER_ID, null)).isEmpty();

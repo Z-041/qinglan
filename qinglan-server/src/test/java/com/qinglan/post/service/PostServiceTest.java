@@ -210,7 +210,7 @@ class PostServiceTest {
     @DisplayName("存在未读紧急公告时拒绝发帖并返回 428，且完全不落库")
     void shouldBlockPostWhenUnreadUrgentAnnouncement() {
         stubAuthor(activeAuthor());
-        when(announcementService.findPending(AUTHOR_ID, null)).thenReturn(Optional.of(
+        when(announcementService.findPendingUrgent(AUTHOR_ID)).thenReturn(Optional.of(
                 new PendingAnnouncementResponse(1L, "紧急公告", "公告正文", AnnouncementLevel.URGENT,
                         5, false, false, Instant.parse("2026-10-07T00:00:00Z"))));
 
@@ -221,6 +221,26 @@ class PostServiceTest {
 
         // 强制阅读真强制：拦截在落库之前
         verify(postRepository, never()).save(any(Post.class));
+    }
+
+    @Test
+    @DisplayName("发帖 gate 只问紧急公告：普通公告不进拦截口径（设计方案 5.4）")
+    void shouldAskOnlyUrgentAnnouncementWhenCreating() {
+        stubAuthor(activeAuthor());
+        when(topicRepository.findById(TOPIC_ID))
+                .thenReturn(Optional.of(TestFixtures.topic(TOPIC_ID, "问答", false)));
+        when(postRepository.save(any(Post.class))).thenAnswer(invocation -> {
+            Post saved = invocation.getArgument(0);
+            TestFixtures.setId(saved, 9L);
+            return saved;
+        });
+
+        postService.create(AUTHOR_ID, new CreatePostRequest(TOPIC_ID, "正文", null, null));
+
+        // 合同断言：只能问 URGENT 口径。若改回不限级别的 findPending，
+        // 一条未读普通公告就会挡住全体用户发帖
+        verify(announcementService).findPendingUrgent(AUTHOR_ID);
+        verify(announcementService, never()).findPending(any(), any());
     }
 
     @Test
