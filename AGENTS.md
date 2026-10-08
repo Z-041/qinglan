@@ -8,7 +8,7 @@
 
 ## 一、项目结构
 
-双工程，物理隔离，禁止互相 import：
+三工程 + 一个共享包，物理隔离：**`qinglan-web` 与 `qinglan-admin` 不得互相 import，两者都只允许依赖 `shared`**（`shared` 也不得反向依赖任何应用）。
 
 ```
 qinglan-server/          后端 Java 21 + Spring Boot 3.x，Maven
@@ -25,17 +25,40 @@ qinglan-server/          后端 Java 21 + Spring Boot 3.x，Maven
 包名一律 `com.qinglan.<module>`，如 `com.qinglan.post`、`com.qinglan.review`。
 新文件必须落在上述模块之一；不属于任何模块的先讨论，不要新建包。
 
-qinglan-web/             前端 Vue 3 + TS + Vite + UnoCSS
+qinglan-web/             学生端 Vue 3 + TS + Vite + UnoCSS
   src/
     ├── api/             接口封装（唯一发请求的地方）
     ├── composables/     业务逻辑复用
-    ├── components/      展示组件
-    │   └── base/        自研基础 UI 组件（Button/Input/FormField/Card…）
-    ├── views/           路由页面（管理端页面放 views/admin/）
-    ├── stores/          Pinia：仅用户态、未读、草稿
-    ├── styles/          全局 CSS 变量与 reset 之外的少量全局样式
-    └── types/           接口类型
+    ├── components/      展示组件（基础组件已在 shared）
+    ├── views/           路由页面
+    ├── stores/          Pinia：仅学生端状态（未读计数）
+    ├── styles/          学生端专属样式（全局变量在 shared）
+    └── types/           接口类型（仅学生端）
+
+qinglan-admin/           管理端 Vue 3 + TS + Vite + UnoCSS + Element Plus（仅 PC）
+  src/
+    ├── api/             管理端接口封装（admin.ts、review.ts 的管理端部分）
+    ├── components/admin/ 管理端组件
+    ├── composables/     管理端业务逻辑复用
+    ├── views/           后台页面（AdminLayout / 登录 / 看板 / 队列 / 申诉 / 用户 / 公告）
+    ├── styles/          Element Plus 主题变量映射
+    └── types/           管理端类型（admin.ts、review.ts 的管理端部分）
+
+shared/                  两端共享（以源码形式经 `@shared/*` 别名引入，不产出构建产物）
+  src/
+    ├── api/             http.ts（拦截器/令牌/401/428）、user.ts、auth.ts、report.ts
+    ├── components/      ToastHost.vue + base/（Button/Input/FormField/Card…）
+    ├── composables/     useToast、useUserLabels、useAuth、useCodeCooldown
+    ├── stores/          user.ts（用户态，单会话的落点）
+    ├── styles/          CSS 变量（全站唯一色值来源）
+    ├── types/           双端共用类型（api/auth/user/interaction/review-common/announcement）
+    ├── uno.base.ts      语义色 / ql-* 快捷类 / z 轴分层
+    └── vite/cspPlugin.ts 构建期注入 CSP（两端同一份策略）
 ```
+
+`shared` 由 pnpm workspace 管理（`pnpm-workspace.yaml` 在**仓库根**，lockfile 全局唯一）。
+`vue` / `pinia` 在 `shared` 里必须声明为 `peerDependencies`（另加 `devDependencies` 供本包单测），
+**不能写成 `dependencies`**——否则会装出两份 vue，Pinia 实例分裂。
 
 ---
 
@@ -46,14 +69,17 @@ qinglan-web/             前端 Vue 3 + TS + Vite + UnoCSS
 | 后端构建 | `cd qinglan-server && ./mvnw -q clean install` |
 | 后端测试（全量） | `./mvnw test` |
 | 后端单测 | `./mvnw -Dtest=PostServiceTest test` |
-| 后端启动 | `./mvnw spring-boot:run -Dspring-boot.run.profiles=local` |
-| 前端安装 | `cd qinglan-web && pnpm install` |
-| 前端开发 | `pnpm dev` |
-| 前端测试 | `pnpm vitest run` |
-| 前端类型检查 | `pnpm vue-tsc --noEmit` |
-| 前端 Lint | `pnpm lint` |
+| 后端启动 | `./mvnw spring-boot:run` |
+| 前端安装（在**仓库根**执行一次） | `pnpm install` |
+| 学生端开发（5173） | `pnpm dev:web` |
+| 管理端开发（5174） | `pnpm dev:admin` |
+| 三包一起跑 | `pnpm -r test` / `pnpm -r typecheck` / `pnpm -r lint` / `pnpm -r build` |
+| 只跑某一包 | 进 `shared` / `qinglan-web` / `qinglan-admin` 后 `pnpm test`、`pnpm typecheck`、`pnpm lint`、`pnpm build` |
 
-环境要求：JDK 21、Node 20+、MySQL 8、Redis 7。本地配置走 `application-local.yml`，不得提交任何密钥。
+环境要求：JDK 21、Node 20+、MySQL 8；Redis 7 仅在 `qinglan.auth.code-store` 或 `qinglan.store.type`
+取 `redis` 时才需要（默认 `memory`，本地无需 Redis）。后端本地配置走 `application.yml`——
+**它含本地密钥，已被 .gitignore 忽略，不得提交**；可提交的模板是同目录的 `application.example.yml`
+（复制为 `application.yml` 后填本地值）。
 
 ---
 
@@ -82,13 +108,16 @@ Controller  →  Service  →  Repository  →  DB
 
 ### 前端分层
 
-- **只有 `src/api/` 能发起 HTTP 请求**；组件内禁止直接 `fetch`/`axios`
+- **只有各应用的 `src/api/` 与 `shared/src/api/` 能发起 HTTP 请求**；组件内禁止直接 `fetch`/`axios`
+- 应用之间**不得互相 import**：`qinglan-web` 与 `qinglan-admin` 只能依赖 `shared`，`shared` 不得依赖任一应用
 - `components/` 为展示组件：接收 props、emit 事件，**不得**直接调 Pinia store 拿业务数据
 - `views/` 负责组合：`components` + `composables` + `api`
 - `stores/` 只存用户态、未读计数、草稿箱；**不得**写业务规则
 - 可复用逻辑抽 `composables/`，命名 `useXxx`，超过 3 处重复的 UI 抽组件
-- 基础 UI 组件放 `components/base/`：只管外观与交互（props down / events up），不含业务语义，学生端与管理端共用
-- 管理端页面（P3 起）放 `views/admin/`，使用 Element Plus，仅面向 PC，不做移动适配
+- 基础 UI 组件放 `shared/src/components/base/`：只管外观与交互（props down / events up），不含业务语义，学生端与管理端共用
+- 管理端页面（P3 起）放 `qinglan-admin/src/views/`，使用 Element Plus，仅面向 PC，不做移动适配
+- **判断某个文件归谁，按「谁在用」而不是「原来在哪个文件」**：双端都用的进 `shared`（如 `useUserLabels` 依赖的
+  `ReportReason` / `ReviewTargetType`），只有单端用的留在该应用（如 `ReasonPayload` 只被管理端使用）
 
 ### 前后端接口边界
 
@@ -121,7 +150,7 @@ Controller  →  Service  →  Repository  →  DB
 | 触发条件 | 加载 Skill | 本项目重点约束 |
 | --- | --- | --- |
 | `qinglan-server/**/*.java`、`pom.xml` | `java-springboot` | 构造器注入（禁 `@Autowired` 字段注入）、DTO 边界、`@Transactional` 加在 Service 方法、全局 `@ControllerAdvice` 异常处理 |
-| `qinglan-web/**/*.vue`、`**/*.ts`、`uno.config.ts` | `vue-best-practices` | `<script setup lang="ts">`、`ref` 优先于 `reactive`、props down / events up、`computed` 派生不做副作用、样式一律走 UnoCSS 原子类 |
+| `qinglan-web/**`、`qinglan-admin/**`、`shared/**` 下的 `*.vue`、`*.ts`、`uno.config.ts` | `vue-best-practices` | `<script setup lang="ts">`、`ref` 优先于 `reactive`、props down / events up、`computed` 派生不做副作用、样式一律走 UnoCSS 原子类 |
 | SQL、Flyway 迁移脚本 | （本项目 MySQL 8，无对应 Skill） | 迁移脚本必须可回滚、不得改写已上线脚本；加索引前先 `EXPLAIN` 验证；大表 DDL 放低峰期执行 |
 
 Skill 由**全局安装**提供（仓库内不再保留 `coding-skills/` 副本），本项目实际加载 `java-springboot` 与 `vue-best-practices` 两个。
@@ -157,8 +186,14 @@ Skill 由**全局安装**提供（仓库内不再保留 `coding-skills/` 副本�
 - **会话模型：一个浏览器 = 一个账号 = 一份会话**。令牌只有一份（`api/http.ts` 的 `TOKEN_STORAGE_KEY` + 内存态），用户态只有一个 `useUserStore`，前端**不区分**「学生端会话」与「管理端会话」。依据：后端只有一份 JWT，同一账号在前台与后台是同一身份。由此派生三条硬约束：
   - **退出登录后若当前页 `meta.requiresAuth` 必须跳转**（学生端回首页、管理端回 `/admin/login`）。路由守卫只在导航时运行，只清登录态而不导航会停在已不可用的页面上（`/profile` 只剩标题、`/publish` 停在提交不了的表单）
   - **管理员账号可从任一登录页进入**（他同时是本站认证用户），但前台登录成功后必须提示「当前为管理员账号」，避免误以为在用学生身份
-  - 角色准入只有一份口径：`types/user.ts` 的 `ADMIN_ROLES` / `isAdminRole`，路由守卫与管理端登录页都引用它，不得各写一份
+  - 角色准入只有一份口径：`shared/src/types/user.ts` 的 `ADMIN_ROLES` / `isAdminRole`，路由守卫与管理端登录页都引用它，不得各写一份
   - 若将来产品要求「同一浏览器分别以前台/后台身份登录两个账号」，属架构变更（前端需同时持两份令牌并按区域切换 `Authorization`），**先提 issue 并同步本节**，不要就地改
+- **前后台是两个应用、同源部署**：学生端在 `/`、管理端在 `/admin/`（`qinglan-web` / `qinglan-admin`）。两条硬约束：
+  - **两端必须用同一个 `TOKEN_STORAGE_KEY`**（唯一来源是 `shared/src/api/http.ts`）——同源下 localStorage 共用一把钥匙，才能维持上一条的「一个浏览器 = 一个账号 = 一份会话」
+  - **vite `base` 与 router 的 `createWebHistory(base)` 必须一致**（管理端两处都是 `/admin/`）。不一致的表现是 `/admin` 下白屏或刷新 404；`qinglan-web` 里**不得**再有 `/admin` 路由，否则它会捕获该路径
+  - 共享代码一律经 `@shared/*` 引入；但**配置文件**（`vite.config.ts` 由 Vite 加载、`uno.config.ts` 由 jiti 加载）**不走别名解析**，对 `shared` 必须用相对路径
+  - 改 `shared` 里被两端共用的东西（`uno.base.ts` 的语义色与 `ql-*`、`styles/main.css` 的变量、`base/` 组件）后，**两端产物都要核对**：CSS 里应有对应类
+    （UnoCSS 默认只扫 vite root，扫描范围在各自的 `uno.config.ts` 的 `content.pipeline.include` 里显式包含 `shared/src`，漏配就是「单测绿、页面崩」）
 - **请求错误统一走全局弹窗**：所有请求错误（提交失败、加载失败等）一律由 `src/api/http.ts` 的拦截器 toast 提示，**页面不得再内联渲染请求错误文案**，不要「弹窗 + 容器内」提示两遍；页面只负责结束 loading 态、决定成功后的流程推进。提示由 `useToast` 统一在数秒后自动消失
 - **全局弹窗**：`AnnouncementModal.vue` 单例挂 `App.vue`，遮罩/ESC/返回键均不关闭，倒计时未满禁用关闭按钮
 
@@ -174,9 +209,17 @@ Skill 由**全局安装**提供（仓库内不再保留 `coding-skills/` 副本�
 | 不变量 | 第四章七条每条至少一个针对性测试 |
 | 前端 | Vitest 覆盖 composables 与关键组件；Playwright 覆盖发帖 → 审核 → 下架主流程 |
 
+前端已拆为三个 workspace 包，**三包的 lint / typecheck / vitest / build 都是交付门槛，缺一不可**：
+`shared`（http、useToast、useUserLabels、useAuth 与 base 组件）、`qinglan-web`、`qinglan-admin`。
+在自己那一包跑绿不等于交付通过——改 `shared` 时必须把另外两包也跑一遍。
+
 - 修 bug 先写能复现的失败测试，再修
 - 测试用 Testcontainers 起真实 MySQL/Redis，不 mock 数据库行为
 - 禁止为了通过而删测试、放宽断言、加 `@Disabled`
+- **`vi.mock` 的路径按模块标识符拦截**：模块一旦搬到 `shared`，spec 里的 `vi.mock('@/api/xxx')` 必须
+  同步改成 `vi.mock('@shared/api/xxx')`，否则 mock 不命中、测试会去发真请求
+- `qinglan-admin` 的 `src/auto-imports.d.ts` 与 `src/components.d.ts`（unplugin 生成、`ElMessageBox`
+  等自动导入声明的来源）**必须入库**，否则新克隆的仓库首次 `typecheck` 会报 `TS2304`
 
 ---
 
@@ -198,9 +241,9 @@ Skill 由**全局安装**提供（仓库内不再保留 `coding-skills/` 副本�
 
 1. **先读再改**：改前读完目标文件及其测试、调用方
 2. **不越界**：只改任务范围内的代码；范围外问题先报告，不擅自修
-3. **验证必须真跑**：`./mvnw test` 与 `pnpm vitest run && pnpm vue-tsc --noEmit`，贴实际输出
+3. **验证必须真跑**：后端 `./mvnw test`；前端**三包各自**跑 `pnpm lint && pnpm typecheck && pnpm test && pnpm build`（或在仓库根 `pnpm -r lint && pnpm -r typecheck && pnpm -r test && pnpm -r build`），贴实际输出
    - 后端编译已开 `-Xlint:all,-processing -Werror`：**任何 javac 警告都会让构建失败**，请正面修掉而不是压制（`processing` 一档因 Lombok 噪音而关闭，其余全开）
-4. **提交**：Conventional Commits，`feat|fix|refactor|test|docs|chore(post|review|announcement|web): 说明`，正文写"为什么"
+4. **提交**：Conventional Commits，`feat|fix|refactor|test|docs|chore(server|web|admin|shared|post|review|announcement): 说明`，正文写"为什么"
 5. **PR**：说明改了什么、为什么、如何验证、是否影响第四章不变量、是否破坏性变更
 
 ---

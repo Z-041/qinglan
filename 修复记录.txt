@@ -17,6 +17,121 @@
 
 
 --------------------------------------------------------------------------------
+R-29 前端前后台拆分（qinglan-web / qinglan-admin / shared 三包），后端不变
+--------------------------------------------------------------------------------
+[2026-10-07]  类型：结构性重构 + 约定澄清  状态：已交付
+来源：用户指出「前端没区分学生端与管理端，后台登录与前台登录一样、前台退出后台也退出」。R-28 已
+      就此澄清「单会话」是设计而非缺陷并补严语义；本轮进一步把**代码与依赖**也物理拆开。
+      决策由用户拍板：抽 shared 共享包、同源子路径部署、命名 qinglan-admin + shared。
+      完整方案、逐项取舍与执行记录见《前后台拆分实施计划.md》，此处只记结论与陷阱。
+
+交付
+  1 三包结构：`qinglan-web`（学生端，部署在 /）、`qinglan-admin`（管理端，部署在 /admin/）、
+    `shared`（双端共享）。pnpm workspace 根上移到仓库根，lockfile 全局唯一
+  2 归入 shared（约 34 个文件）：http 拦截器与令牌、user/auth/report 三个 api、ToastHost 与 6 个
+    base 组件、useToast/useUserLabels/useAuth/useCodeCooldown、stores/user、公共 types、
+    styles/main.css、uno.base.ts（语义色与 ql-* 快捷类）、vite/cspPlugin.ts
+  3 归入 qinglan-admin（46 个文件）：7 个后台视图 + AdminLayout、11 个后台组件、6 个后台
+    composable、api/admin.ts、api/review.ts 的管理端部分、types/admin.ts、types/review.ts 的管理端部分
+  4 学生端删除单应用时代的全部补丁：App.vue 的 isAdminArea 与三处 v-if、router 的 /admin 子树与
+    requiresAdmin、main.ts 的 401 前缀分叉、vite.config 的 Element Plus 自动导入
+  5 依赖解耦：element-plus 只进 qinglan-admin；学生端的 node_modules 与产物里都不再有它
+    （产物 CSS 中 `--el-` 出现 0 次，也没有 el-* 懒加载 chunk）
+  6 顺带修正两处行为：http.ts 的 428 分支在「未注册处理器」时退化为 toast（管理端不发帖、不注册
+    该处理器，原写法会让 428 静默无提示）；AdminLayout 的 el-config-provider 上提到 App.vue
+
+约定（已同步进 AGENTS.md 第一章/第二章/第三章/第五章/第七章/第八章）
+  - 两个应用不得互相 import，都只能依赖 shared
+  - 两端必须用同一个 TOKEN_STORAGE_KEY（同源才能维持「一个浏览器 = 一个账号 = 一份会话」）
+  - vite base 与 router 的 createWebHistory(base) 必须一致（管理端都是 /admin/）
+  - 归属判断按「谁在用」而非「原来在哪个文件」
+
+踩过的坑（都会在构建期炸，单测看不出来）
+  1 uno.config.ts 由 jiti 加载、vite.config.ts 由 Vite 加载，**配置文件不走 resolve.alias**，
+    对 shared 必须用相对路径
+  2 pnpm 严格布局下 shared 必须自己声明 axios（否则 vite 从 shared/src 向上找不到）；
+    vue/pinia 用 peerDependencies + devDependencies，保持单份 vue
+  3 UnoCSS 默认只扫 vite root，扫不到 shared/ → 各自的 uno.config.ts 要把 shared/src 纳入
+    content.pipeline.include（否则是「单测绿、页面崩」）
+  4 defineConfig<T extends object = Theme> 会拿 theme 的字面量类型反推泛型，与 presetWind3() 的
+    Preset<Theme> 冲突（TS2322）→ 断言 theme as object
+  5 模块搬家后 spec 里的 vi.mock 路径必须同步（按模块标识符拦截，不改就会去发真请求）
+  6 qinglan-admin 的 auto-imports.d.ts / components.d.ts 必须入库，否则新克隆首次 typecheck 报 TS2304
+
+验证
+  - 三包合计 45 个 spec 文件 / 240 个用例，**与拆分前的基线完全一致**（无用例丢失）
+  - shared 9/37、qinglan-web 20/116、qinglan-admin 16/87；三包的 lint / typecheck / test / build 全通过
+  - 学生端产物（拆分后实测）：index JS 183.46 kB、index CSS 23.47 kB；CSS 里 --el- 为 0 次，
+    .ql-btn 等共享类仍在（JS 比步 0 基线的 189.39 kB 小 5.93 kB——管理端代码已移出该应用）
+  - admin 产物：dist/index.html 资源路径为 /admin/assets/...，主 CSS 含 .ql-btn/--ql-primary 与
+    --el-color-primary
+  - dev 实测：/admin/、/admin/dashboard、/admin/users、/admin/login 直接刷新均 200；
+    无前缀 /dashboard 为 404（证明 base 生效）；学生端 /、/login、/publish、/notifications 均 200
+
+遗留
+  - 部署配置未落地：静态托管需两条回退规则（/ → web、/admin/ → admin，各自回退各自的 index.html），
+    且防嵌套响应头要补两处，见 T-14
+  - 学生端 CSS 最终为 23.47 kB，比步 0 基线（23.09 kB）大 0.38 kB，成因**未定位**；不影响正确性
+    （--el- 为 0 次、.ql-btn 在产物中）。中途曾测得 26.54 kB 并否证过「UnoCSS 扫了 uno.base.ts」
+    这一假设（加 exclude 后产物哈希不变），终态为 23.47 kB，详见实施计划步 6/7 记录
+
+
+--------------------------------------------------------------------------------
+R-28 前后台会话模型澄清与会话语义修复（单会话约定 + 退出跳转 + 角色口径统一）
+--------------------------------------------------------------------------------
+[2026-10-07]  类型：缺陷修复 + 约定澄清  状态：已交付
+来源：用户指出「前端没区分学生端与管理端：后台登录与前台上登录是一样的，前台退出后后台也同时
+      退出」。经核查属实，但**根因不是漏写隔离**，而是从设计上就是「一份令牌 + 一个 store」。
+      先把事实与取舍摆清，由用户在两个产品决策上拍板（AGENTS.md 第十一章第 4 条），再动手。
+
+核查结论（前端「前后台不分」的原因）
+
+  1 令牌只有一份：api/http.ts 的 TOKEN_STORAGE_KEY = 'qinglan.access-token' 与模块级
+    memoryToken，所有请求共用
+  2 用户态只有一份：stores/user.ts 的 accessToken / profile
+  3 两个登录页写的是同一个 store：useAuth 的 verify / bind 都调 userStore.setAccessToken()，
+    不看区域
+  4 两处退出也调同一个 signOut()：App.vue（学生端）与 AdminLayout.vue（管理端）
+  5 后端同样只有一份身份：JWT 里就是 userId + role，没有「前台会话/后台会话」的概念
+
+  故「前台登录＝后台登录」「前台退出＝后台退出」是该结构的必然结果，不是实现缺陷。
+
+用户决策（本轮据此实施）
+  - 会话模型：**保持单会话**，不拆双令牌；补严语义
+  - 前台登录页遇到管理员账号：**允许登录，但明确提示当前身份**
+
+修复
+
+  1 前台退出不跳转（真缺陷，本轮核心）。App.vue 的 sign-out 只调 userStore.signOut()、
+    不做导航，而路由守卫只在**导航时**运行——若当时在 /profile（requiresAuth），档案已清空、
+    ProfileView 三个分支全不命中，页面只剩一个「我的」标题；在 /publish 则停在一张提交不了的
+    表单上。管理端退出是有 router.replace('admin-login') 的，两边行为不一致。
+    处理：App.vue 增 handleSignOut()——清登录态后，当前路由 meta.requiresAuth 为真则回首页；
+    游客本就能浏览的页面（首页、详情）留在原地、自动切游客态，不打断浏览
+
+  2 管理员从前台登录无任何身份提示。前台登录页不校验角色，管理员从前台登录后 /admin 守卫
+    直接放行，导航栏那个角色徽标很容易被忽略、误以为在用学生身份。
+    处理：LoginView 的 afterAuthenticated() 中，若当前角色属管理员则提示「当前为管理员账号，
+    可访问管理后台」；**刻意不拒绝**（管理员同时是本站认证用户，挡在社区外与其身份冲突）
+
+  3 角色准入口径此前有三份。router/index.ts 与 AdminLoginView.vue 各写一份 ADMIN_ROLES，
+    本轮又要在 LoginView 判断一次，属第三处重复；三份一旦漂移就会出现「前端放行、后端 403」。
+    处理：抽取到 types/user.ts 的 ADMIN_ROLES / isAdminRole()（唯一来源），三处改为引用
+
+  4 约定写入 AGENTS.md 第七章：一个浏览器 = 一个账号 = 一份会话，并派生三条硬约束
+    （退出必须跳转、管理员可从任一登录页进入但须提示身份、角色口径只有一份）；
+    同时写明「若将来要同浏览器双身份登录，属架构变更（需双令牌 + 按区域切 Authorization），
+    先提 issue」——把这次的取舍固化成规则，避免后来者就地乱改
+
+验证
+  - 前端 240 tests 全绿（45 文件；新增 App.spec.ts、LoginView.spec.ts）
+  - pnpm vue-tsc --noEmit 无输出；pnpm lint（eslint .）无输出；pnpm build 通过
+  - 反向验证：把 App.vue 的跳转去掉后，App.spec.ts 的用例确实变红
+    （expected '/profile' to be '/'），证明它不是装饰性断言
+  - 未做浏览器实测（本轮未启动服务）：前台退出跳转、管理员登录提示两项并入 T-24
+
+
+--------------------------------------------------------------------------------
 R-27 前端视图逐页复查 12 处（联系方式文案 / 失败态 / 交互细节 / 可访问性 / 结构合法性）
 --------------------------------------------------------------------------------
 [2026-10-07]  类型：缺陷修复  状态：已交付
@@ -1333,11 +1448,14 @@ T-13  P2 处置未扣信用分（发通知已由 R-24 完成）
       但 ReviewService.takeDown 仍不调用 adjustCredit：扣分额度属产品策略，设计稿未给数值，
       需与信用分规则一并定
 
-T-14  前端 SPA 的防嵌套响应头待部署侧补齐
+T-14  前端 SPA 的防嵌套响应头待部署侧补齐（拆分后由「一处」变「两处」）
       R-22 只把 CSP 以 <meta> 形式注入了前端构建产物，而 frame-ancestors 写在 <meta> 里会被
       浏览器忽略，X-Frame-Options / frame-ancestors 只能由托管 index.html 的服务器（如 nginx）
-      发响应头。仓库内目前无任何部署配置，故该头尚未落地——部署前端静态站点时必须补上，
-      否则点击劫持防护对 SPA 页面无效
+      发响应头。仓库内目前无任何部署配置，故该头尚未落地。**R-29 拆分后学生端与管理端是两个
+      独立产物，两处都要补**，否则点击劫持防护只覆盖一半
+      R-29 追加：静态托管需要两条路由规则——`/` → qinglan-web/dist、`/admin/` → qinglan-admin/dist，
+      且两处的 try_files 回退必须指向**各自的** index.html（管理端若回退到学生端的，`/admin/xxx`
+      刷新会渲染出学生端页面）。同时 `/api` 与 `/uploads` 反代到 qinglan-server
 
 T-15  通知未按目标聚合并缺少去重节流（R-24 遗留）
       设计方案第 191 行写「消息中心聚合」，R-24 只做到列表 + 未读计数，没有按目标合并：一条帖子
@@ -1371,7 +1489,7 @@ T-23  仍有 7 个组件没有 spec（R-25 遗留）
       HomeSidebar、ImagePicker、TopicFilter、ToastHost、BanUserDialog、DismissReportsDialog、
       ReviewContextPanel。其中 BanUserDialog（天数范围）与 DismissReportsDialog 含边界分支
 
-T-24  R-25 / R-26 / R-27 的改动未做浏览器实测（按要求未启动服务）
+T-24  R-25 / R-26 / R-27 / R-28 的改动未做浏览器实测（按要求未启动服务）
       R-25 下次验收需覆盖：①管理端在 el-dialog 里发起失败请求时错误 toast 是否可见可点（z 轴修复）；
       ②首页紧凑行点「赞」是否只点赞不跳转；③申诉复审点「复审结论」标题是否不再改结论；
       ④发帖页图片上传中「发布」是否真的禁用；⑤断网时首页显示的是失败态还是空态
@@ -1381,6 +1499,9 @@ T-24  R-25 / R-26 / R-27 的改动未做浏览器实测（按要求未启动服�
       R-27 追加：⑫断网时看板显示失败态而非「暂无数据」；⑬点一个审核动作时只有该按钮转圈；
       ⑭首页话题加载失败是否有提示与重试；⑮删除评论是否弹自绘确认框（不再用原生 confirm）；
       ⑯紧凑行互动条与正文的纵向间距/左对齐是否与改造前一致（结构已改，需目视复核）
+      R-28 追加：⑰在 /profile 或 /publish 上点前台「退出」是否跳回首页（不再停在空白页）；
+      ⑱游客可浏览的页面（首页/详情）退出后是否留在原地；⑲管理员从前台登录是否弹出身份提示；
+      ⑳管理端退出是否仍回 /admin/login（不应因本轮改动而变化）
 
 说明：T-05（P3–P4 未开始）已由 R-24 完成并移出（P3 管理后台在上一轮交付，P4 打磨上线见 R-24，
 其交付留痕的缺失已记入 R-24 的「遗留」）；T-06（未激活徽标填充色）已由 R-18 解决并移出；
