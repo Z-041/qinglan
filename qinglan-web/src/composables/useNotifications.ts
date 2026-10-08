@@ -55,7 +55,12 @@ export function useNotifications() {
     cursor = null
     hasMore.value = false
     try {
-      applyPage(await fetchNotifications(null), false)
+      const page = await fetchNotifications(null)
+      // 过期响应必须丢弃：refresh 与用户再次进入可能同时在飞，先发的不一定先到
+      if (seq !== requestSeq) {
+        return
+      }
+      applyPage(page, false)
     } catch {
       // 错误已由拦截器提示；只有当前这次请求才有权把状态置为失败
       if (seq === requestSeq) {

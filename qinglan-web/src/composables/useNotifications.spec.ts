@@ -75,6 +75,27 @@ describe('useNotifications', () => {
     expect(mockedFetchNotifications).toHaveBeenCalledTimes(1)
   })
 
+  it('并发加载时丢弃先发的过期响应，旧结果不得覆盖新结果', async () => {
+    let resolveFirst!: (page: { items: NotificationItem[]; nextCursor: string | null }) => void
+    mockedFetchNotifications
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveFirst = resolve
+      }))
+      .mockResolvedValueOnce({ items: [notification(2)], nextCursor: null })
+
+    const notifications = useNotifications()
+    const first = notifications.load()
+    const second = notifications.load()
+    await second
+
+    // 先发的那次此时才返回：序号已过期，必须被丢弃
+    resolveFirst({ items: [notification(1)], nextCursor: 'stale' })
+    await first
+
+    expect(notifications.items.value.map((item) => item.id)).toEqual([2])
+    expect(notifications.hasMore.value).toBe(false)
+  })
+
   it('markAllRead 后未读计数归零，本地条目标为已读', async () => {
     mockedFetchNotifications.mockResolvedValue({ items: [notification(1)], nextCursor: null })
     mockedMarkAll.mockResolvedValue(undefined)
