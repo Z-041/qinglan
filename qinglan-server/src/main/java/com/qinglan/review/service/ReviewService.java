@@ -182,6 +182,9 @@ public class ReviewService {
             throw new BizException(ErrorCode.REPORT_NOT_FOUND);
         }
         pending.forEach(report -> report.uphold(operatorId));
+        // 记下处置人：自动降级时 review_by 是 null（trigger 不是人），不记的话同一个管理员
+        // 随后还能复审该帖申诉，而「复审人 ≠ 原处置人」正是靠这个字段判定（设计方案 113 行）
+        post.recordHandler(operatorId);
         // 与 takeDown/dismissReports 同源：按结案条数原子回退，不直接写 0，避免覆盖并发新增的举报
         postRepository.adjustReportCount(postId, -pending.size());
         auditLogService.record(AuditTargetType.POST, postId, AuditAction.REPORT_UPHOLD,

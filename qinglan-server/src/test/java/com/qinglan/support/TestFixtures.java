@@ -64,6 +64,18 @@ public final class TestFixtures {
         return post;
     }
 
+    /** 被系统按举报阈值自动下架的主帖：{@code review_by} 为空（trigger 不是人） */
+    public static Post autoTakenDownPost(Long id, String content) {
+        Post post = Post.draft(7L, 1L, content, null);
+        post.submit(RiskLevel.LOW);
+        post.transitionTo(new ReviewState.Reviewing(9L, Instant.now()));
+        post.transitionTo(new ReviewState.Approved(9L, Instant.now()));
+        post.transitionTo(new ReviewState.TakenDown(null, "被多次举报，待复核", Instant.now()));
+        setId(post, id);
+        post.assignAnonymousCode("银杏#1a2b");
+        return post;
+    }
+
     /** 已下架、带下架理由的主帖（申诉队列的典型目标） */
     public static Post takenDownPost(Long id, String content, String reviewReason) {
         Post post = Post.draft(7L, 1L, content, null);

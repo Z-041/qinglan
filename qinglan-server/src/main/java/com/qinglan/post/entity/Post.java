@@ -152,6 +152,19 @@ public class Post extends BaseEntity {
         }
     }
 
+    /**
+     * 记录本次人工处置人，供「复审人不得是原处置人」判定（设计方案 113 行的「换人复审」）。
+     *
+     * <p>用于**没有状态迁移**的人工处置：内容已被自动降级后，管理员点「维持下架」只是确认原判、
+     * 不改状态，但他在语义上就是本次的处置人；不记下来，同一个人随后还能去复审该帖的申诉，
+     * 复审独立性就形同虚设（自动降级时 {@code review_by} 是 null）。</p>
+     *
+     * <p>只改这一个字段：状态仍然只能经 {@link #transitionTo(ReviewState)} 变更（不变量 #5）。</p>
+     */
+    public void recordHandler(Long operatorId) {
+        this.reviewBy = operatorId;
+    }
+
     public void applyRiskScore(int riskScore) {
         this.riskScore = riskScore;
     }

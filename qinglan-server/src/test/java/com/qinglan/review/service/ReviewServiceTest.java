@@ -318,6 +318,22 @@ class ReviewServiceTest {
     }
 
     @Test
+    @DisplayName("维持下架要记下处置人：否则同一管理员还能复审该帖申诉，复审独立性形同虚设（R-32）")
+    void shouldRecordHandlerWhenUpholdingReports() {
+        // 自动降级：review_by 为空，此时若不记人，任何管理员都能去复审自己刚维持的下架
+        Post post = TestFixtures.autoTakenDownPost(POST_ID, "测试正文");
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(post));
+        when(reportRepository.findByTargetTypeAndTargetIdAndStatus(
+                ReviewTargetType.POST, POST_ID, ReportStatus.PENDING))
+                .thenReturn(List.of(postReport(101L)));
+
+        reviewService.upholdReports(POST_ID, OPERATOR_ID, "确认违规");
+
+        // AppealService.review 的「复审人 ≠ 原处置人」判定读的就是这个字段
+        assertThat(post.getReviewBy()).isEqualTo(OPERATOR_ID);
+    }
+
+    @Test
     @DisplayName("内容仍可见时不能「维持下架」，且不碰举报与审计")
     void shouldRejectUpholdWhenPostStillVisible() {
         when(postRepository.findById(POST_ID)).thenReturn(Optional.of(approvedPost()));
