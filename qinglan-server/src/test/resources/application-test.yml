@@ -16,6 +16,10 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+# 本文件必须**自成一套**：src/main/resources/application.yml 已被 .gitignore 忽略（含本地密钥），
+# 干净的 checkout（CI 就是）里根本没有它。任何只写在那个文件里的配置，在这里都必须有对应项，
+# 否则 @SpringBootTest 起不来——曾因缺 qinglan.announcement 而整批全上下文测试必红（R-32）。
+# 下列取值与 application.example.yml 的生产默认保持一致，便于测试暴露真实行为。
 qinglan:
   crypto:
     aes-key: cWluZ2xhbi10ZXN0LWFlcy1rZXktMzItYnl0ZXMhISE=
@@ -36,6 +40,28 @@ qinglan:
     send-interval: 60s
     allowed-email-domains: qinglan.edu.cn
     expose-code: true
+  post:
+    min-credit-to-post: 60
+    max-images-per-post: 9
+  upload:
+    max-per-window: 30
+    window: 1m
+  announcement:
+    min-read-seconds: 5
+    max-publishes-per-day: 5
+    max-reads-per-window: 30
+    read-rate-window: 1m
+  moderation:
+    # LocalContentGuardTest 是 @SpringBootTest，用的就是这个上下文：它同时验证词库路径与
+    # 隐私正则「能不能真的用起来」，因此这里必须给出真实取值，不能留空
+    sensitive-word-file: classpath:moderation/sensitive-words.txt
+    privacy-rules:
+      - label: 身份证
+        regex: '[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[0-9Xx]'
+      - label: 银行卡
+        regex: '(?<!\d)\d{16,19}(?!\d)'
+  storage:
+    local-root: ./target/test-uploads
 
 logging:
   level:
