@@ -229,8 +229,11 @@ Skill 由**全局安装**提供（仓库内不再保留 `coding-skills/` 副本�
 - 密钥、Token、密码走环境变量；禁止进代码与日志
 - 所有输入视为不可信：DTO 加 `@Valid`，长度与范围都要校验
 - 上传文件校验类型与大小，存对象存储，不存应用服务器本地磁盘
-- 接口必须有权限注解；管理员接口单独角色，且默认拒绝
-  - 令牌是无状态的、角色在签发时即固定，所以**账号级禁令（封禁/黑名单）必须在每个写入口重新判定**：业务写入口调 `UserService.requireUsableById`，管理端写入口由 `AdminWriteGuardFilter`（`/api/admin/**` 的非 GET）统一兜住，不得移除。只读入口放行，以保留被禁令账号的浏览能力
+- 接口必须有权限注解；管理员接口**按权限点**授权，且默认拒绝
+  - 权限点唯一词汇表是 `common/security/AdminPermission`；**角色 → 权限点只在 `UserRole#permissions()` 一处**。端点写 `@PreAuthorize("hasAuthority('X')")`，**禁止 `hasRole` / `hasAnyRole`，禁止把注解写在类上**（类级放行 + 方法级遗漏是最常见的越权来源）——由 `PermissionAnnotationTest` 扫描强制，新增权限点必须登记进枚举
+  - 前端按 `GET /api/admin/me` 下发的权限点渲染菜单与按钮；「哪个菜单要哪个权限点」放 `qinglan-admin/src/router/navItems.ts` 一处，**不要在页面里写 `role === 'SUPER_ADMIN'`**。前端隐藏/显示只是体验层，真正的防线在端点的注解上（与「脱敏在服务端完成」同一条原则）
+  - 令牌是无状态的、角色在签发时即固定，所以**账号级禁令与权限收回都必须在每个写入口重新判定**：业务写入口调 `UserService.requireUsableById`；管理端写入口由 `AdminWriteGuardFilter`（`/api/admin/**` 的非 GET）统一兜住，它同时比对「数据库角色 = 令牌角色」——否则被收回权限的人在令牌到期前照样能写，「收回」就只是心理安慰。**这道复查不得移除**。只读入口放行，以保留被禁令账号的浏览能力
+  - 唯一超级管理员是初始账号：不可被降级、不可被封禁、不可被删除（被锁死就只能改库），任何接口都不允许授予 `SUPER_ADMIN`；委员会（管理员 + 评议员）合计上限 6 人，新增委员前必须带锁计数
 - 导出、批量查询接口必须分页 + 权限校验，禁止无限制全表扫描
 - 不得在错误信息中回显内部堆栈、SQL、手机号、学号
 - **安全响应头不得回退**：后端 API 响应必须带 CSP（`default-src 'none'`）、`X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Permissions-Policy`，由 `SecurityConfig.headers` 统一下发，测试见 `SecuritySkeletonTest`；前端 SPA 由 `vite.config.ts` 插件在**构建期**注入 CSP `meta`（dev 不注入，否则与 Vite HMR 冲突）。**后端 CSP 取 `'none'` 的前提是「后端只返回 JSON 与图片、不托管 SPA 页面」——若将来改由后端直接托管静态页面，必须同步放宽该策略，否则页面自身的脚本与样式会被自身响应头拦死。** `frame-ancestors` 写在 `meta` 里会被浏览器忽略，SPA 的防嵌套响应头须由托管服务器补（见 `修复记录.txt` T-14）。
@@ -266,6 +269,7 @@ Skill 由**全局安装**提供（仓库内不再保留 `coding-skills/` 副本�
 完成后逐条核对：
 
 - [ ] 分层边界未被打破（Controller 未直连 Repository、组件未直接发请求）
+- [ ] 管理端端点用权限点授权（`hasAuthority`），未出现 `hasRole` / `hasAnyRole` / 类级放行；前端未写死角色判断
 - [ ] 第四章七条不变量均未被破坏，且有测试覆盖
 - [ ] 新增/修改的接口有 DTO，未暴露 Entity
 - [ ] 联系方式脱敏在服务端完成，未认证用户拿不到明文
