@@ -63,4 +63,28 @@ describe('useDashboard', () => {
     expect(dashboard.failed.value).toBe(false)
     expect(dashboard.stats.value?.content.totalPosts).toBe(10)
   })
+
+  it('并发加载时丢弃先发的过期响应，旧结果不得覆盖新结果', async () => {
+    const fresh = stats()
+    const stale = stats()
+    stale.content.totalPosts = 1
+    let resolveFirst!: (value: AdminStats) => void
+    mockedFetchAdminStats
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveFirst = resolve
+      }))
+      .mockResolvedValueOnce(fresh)
+
+    const dashboard = useDashboard()
+    const first = dashboard.load()
+    const second = dashboard.load()
+    await second
+
+    // 先发的那次此时才返回：序号已过期，必须被丢弃
+    resolveFirst(stale)
+    await first
+
+    expect(dashboard.stats.value?.content.totalPosts).toBe(10)
+    expect(dashboard.loading.value).toBe(false)
+  })
 })
