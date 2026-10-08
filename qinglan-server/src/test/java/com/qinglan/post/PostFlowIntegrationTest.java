@@ -323,7 +323,17 @@ class PostFlowIntegrationTest {
         return userService.createVerifiedStudent(cryptoService.hashEmail(email), studentId);
     }
 
+    /**
+     * 发令牌，并把数据库里的角色一并对齐。
+     *
+     * <p>P5 之后管理端写入口会比对「令牌角色 = 数据库角色」（决策 D9），只改令牌不改库会被当场拒绝。
+     * 对齐也符合真实流程：先授予权限，再签发令牌。</p>
+     *
+     * <p>用 {@code requireById} 重新取一次再改：测试中途调用过 {@code entityManager.clear()}，
+     * 早先拿到的 user 引用可能已经脱离持久化上下文，直接改它会**静默不落库**。</p>
+     */
     private String bearer(User user, UserRole role) {
+        userService.requireById(user.getId()).changeRole(role);
         return "Bearer " + jwtService.issueAccessToken(user.getId(), role);
     }
 

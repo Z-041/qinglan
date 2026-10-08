@@ -15,6 +15,8 @@ import com.qinglan.review.service.PendingPostQueueService;
 import com.qinglan.review.service.ReviewContextService;
 import com.qinglan.review.service.ReviewQueueService;
 import com.qinglan.review.service.ReviewService;
+import com.qinglan.user.dto.ReasonRequest;
+import com.qinglan.user.entity.UserRole;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -83,10 +86,14 @@ class AdminReviewControllerTest {
         SecurityContextHolder.clearContext();
     }
 
+    /** 认证态按真实过滤器写入的权威集合构造：ROLE_* + 该角色的权限点（P5 权限模型） */
     private void authenticateAsAdmin() {
+        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+        authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        UserRole.ADMIN.permissions().forEach(permission ->
+                authorities.add(new SimpleGrantedAuthority(permission.name())));
         SecurityContextHolder.getContext().setAuthentication(
-                UsernamePasswordAuthenticationToken.authenticated(
-                        OPERATOR_ID, null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
+                UsernamePasswordAuthenticationToken.authenticated(OPERATOR_ID, null, authorities));
     }
 
     // ------------------------------------------------------------------ 队列

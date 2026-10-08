@@ -9,8 +9,10 @@ import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.user.dto.AdminUserQuery;
+import com.qinglan.user.dto.AssignableRole;
 import com.qinglan.user.dto.UserProfileResponse;
 import com.qinglan.user.entity.User;
+import com.qinglan.user.entity.UserRole;
 import com.qinglan.user.entity.UserStatus;
 import com.qinglan.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +40,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -279,5 +282,178 @@ class UserServiceTest {
 
         verify(userRepository).findAdminPage(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 eq(Instant.parse("2026-01-01T00:00:19.000234Z")), eq(81L), eq(PageRequest.of(0, 21)));
+    }
+
+    // ---------------------------------------------------------- P5 权限下放 / 收回
+
+    private static final long TARGET_ID = 7L;
+    private static final long OPERATOR_ID = 1L;
+
+    @Test
+    @DisplayName("下放管理员：角色变更并写 ROLE_GRANT 审计（理由里带上原角色）")
+    void shouldGrantRoleAndRecordAudit() {
+        User target = userWithRole(TARGET_ID, UserRole.STUDENT);
+        User superAdmin = userWithRole(OPERATOR_ID, UserRole.SUPER_ADMIN);
+        stubOperatorAndTarget(superAdmin, target);
+        when(userRepository.findForUpdate(UserRole.SUPER_ADMIN)).thenReturn(List.of(superAdmin));
+        when(userRepository.countByRoleIn(any())).thenReturn(2L);
+
+        userService.changeRole(TARGET_ID, AssignableRole.ADMIN, "缺人手", OPERATOR_ID);
+
+        assertThat(target.getRole()).isEqualTo(UserRole.ADMIN);
+        verify(auditLogService).record(AuditTargetType.USER, TARGET_ID, AuditAction.ROLE_GRANT,
+                OPERATOR_ID, "STUDENT → ADMIN：缺人手");
+    }
+
+    @Test
+    @DisplayName("收回权限：写 ROLE_REVOKE 审计，且不触发上限校验（人数只减不增）")
+    void shouldRevokeRoleAndRecordAudit() {
+        User target = userWithRole(TARGET_ID, UserRole.REVIEWER);
+        User superAdmin = userWithRole(OPERATOR_ID, UserRole.SUPER_ADMIN);
+        stubOperatorAndTarget(superAdmin, target);
+
+        userService.changeRole(TARGET_ID, AssignableRole.STUDENT, "任期结束", OPERATOR_ID);
+
+        assertThat(target.getRole()).isEqualTo(UserRole.STUDENT);
+        verify(auditLogService).record(AuditTargetType.USER, TARGET_ID, AuditAction.ROLE_REVOKE,
+                OPERATOR_ID, "REVIEWER → STUDENT：任期结束");
+        verify(userRepository, never()).findForUpdate(any());
+    }
+
+    @Test
+    @DisplayName("委员会满员时新增第 7 人被拒：不落角色、不写审计")
+    void shouldRejectGrantWhenCommitteeFull() {
+        User target = userWithRole(TARGET_ID, UserRole.STUDENT);
+        User superAdmin = userWithRole(OPERATOR_ID, UserRole.SUPER_ADMIN);
+        stubOperatorAndTarget(superAdmin, target);
+        when(userRepository.findForUpdate(UserRole.SUPER_ADMIN)).thenReturn(List.of(superAdmin));
+        when(userRepository.countByRoleIn(any())).thenReturn((long) UserRole.MAX_COMMITTEE_SIZE);
+
+        assertThatThrownBy(() ->
+                userService.changeRole(TARGET_ID, AssignableRole.REVIEWER, "再加一个", OPERATOR_ID))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.COMMITTEE_FULL);
+
+        assertThat(target.getRole()).isEqualTo(UserRole.STUDENT);
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("委员会内部互转（REVIEWER → ADMIN）不占新名额，因此不查上限")
+    void shouldAllowRoleSwapWithinCommitteeWithoutLimitCheck() {
+        User target = userWithRole(TARGET_ID, UserRole.REVIEWER);
+        User superAdmin = userWithRole(OPERATOR_ID, UserRole.SUPER_ADMIN);
+        stubOperatorAndTarget(superAdmin, target);
+
+        userService.changeRole(TARGET_ID, AssignableRole.ADMIN, "升为管理员", OPERATOR_ID);
+
+        assertThat(target.getRole()).isEqualTo(UserRole.ADMIN);
+        verify(userRepository, never()).findForUpdate(any());
+        verify(userRepository, never()).countByRoleIn(any());
+    }
+
+    @Test
+    @DisplayName("超管不可被降级：唯一超管被改掉，后台就再也没人能解锁")
+    void shouldProtectSuperAdminFromRoleChange() {
+        User target = userWithRole(TARGET_ID, UserRole.SUPER_ADMIN);
+        User superAdmin = userWithRole(OPERATOR_ID, UserRole.SUPER_ADMIN);
+        stubOperatorAndTarget(superAdmin, target);
+
+        assertThatThrownBy(() -> userService.changeRole(TARGET_ID, AssignableRole.STUDENT, "换人", OPERATOR_ID))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.SUPER_ADMIN_PROTECTED);
+    }
+
+    @Test
+    @DisplayName("不能修改自己的角色")
+    void shouldRejectSelfRoleChange() {
+        User superAdmin = userWithRole(OPERATOR_ID, UserRole.SUPER_ADMIN);
+        when(userRepository.findById(OPERATOR_ID)).thenReturn(Optional.of(superAdmin));
+
+        assertThatThrownBy(() ->
+                userService.changeRole(OPERATOR_ID, AssignableRole.ADMIN, "自己改自己", OPERATOR_ID))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.ROLE_SELF_CHANGE_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("目标已是该角色时幂等：不写审计，避免反复点按钮刷出无意义的授权记录")
+    void shouldSkipRoleChangeWhenAlreadyTarget() {
+        User target = userWithRole(TARGET_ID, UserRole.ADMIN);
+        User superAdmin = userWithRole(OPERATOR_ID, UserRole.SUPER_ADMIN);
+        stubOperatorAndTarget(superAdmin, target);
+
+        userService.changeRole(TARGET_ID, AssignableRole.ADMIN, "重复点", OPERATOR_ID);
+
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("超管不唯一时授予直接失败：互斥锁失效必须显式报错，不能静默放行")
+    void shouldFailWhenSuperAdminIsNotUnique() {
+        User target = userWithRole(TARGET_ID, UserRole.STUDENT);
+        User superAdmin = userWithRole(OPERATOR_ID, UserRole.SUPER_ADMIN);
+        stubOperatorAndTarget(superAdmin, target);
+        when(userRepository.findForUpdate(UserRole.SUPER_ADMIN))
+                .thenReturn(List.of(superAdmin, userWithRole(99L, UserRole.SUPER_ADMIN)));
+
+        assertThatThrownBy(() -> userService.changeRole(TARGET_ID, AssignableRole.ADMIN, "授予", OPERATOR_ID))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("封禁超管被拒，且不写审计（P5 D4）")
+    void shouldProtectSuperAdminFromBan() {
+        User target = userWithRole(TARGET_ID, UserRole.SUPER_ADMIN);
+        when(userRepository.findById(TARGET_ID)).thenReturn(Optional.of(target));
+
+        assertThatThrownBy(() -> userService.ban(TARGET_ID, Duration.ofDays(7), "误操作", OPERATOR_ID))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.SUPER_ADMIN_PROTECTED);
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("委员会名单按加入时间返回管理员与评议员")
+    void shouldListCommittee() {
+        when(userRepository.findByRoleInOrderByCreatedAtAsc(List.of(UserRole.ADMIN, UserRole.REVIEWER)))
+                .thenReturn(List.of(userWithRole(1L, UserRole.ADMIN), userWithRole(2L, UserRole.REVIEWER)));
+
+        List<UserProfileResponse> committee = userService.listCommittee();
+
+        assertThat(committee).extracting(UserProfileResponse::role)
+                .containsExactly(UserRole.ADMIN.name(), UserRole.REVIEWER.name());
+    }
+
+    @Test
+    @DisplayName("当前身份：角色取自数据库（不是令牌），权限点与角色矩阵一致且稳定排序")
+    void shouldReturnCurrentIdentityFromDatabase() {
+        User reviewer = userWithRole(TARGET_ID, UserRole.REVIEWER);
+        when(userRepository.findById(TARGET_ID)).thenReturn(Optional.of(reviewer));
+
+        var identity = userService.currentAdminIdentity(TARGET_ID);
+
+        assertThat(identity.userId()).isEqualTo(TARGET_ID);
+        assertThat(identity.role()).isEqualTo(UserRole.REVIEWER.name());
+        assertThat(identity.permissions())
+                .containsExactlyInAnyOrderElementsOf(
+                        UserRole.REVIEWER.permissions().stream().map(Enum::name).toList());
+        assertThat(identity.permissions()).isSorted();
+    }
+
+    private void stubOperatorAndTarget(User operator, User target) {
+        when(userRepository.findById(OPERATOR_ID)).thenReturn(Optional.of(operator));
+        when(userRepository.findById(TARGET_ID)).thenReturn(Optional.of(target));
+    }
+
+    private static User userWithRole(Long id, UserRole role) {
+        User user = User.register("hash-" + id, "student-hash-" + id, "enc", "a".repeat(32));
+        ReflectionTestUtils.setField(user, "id", id);
+        user.changeRole(role);
+        return user;
     }
 }

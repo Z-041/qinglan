@@ -1,9 +1,13 @@
 package com.qinglan.common.audit;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
+import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 
 /**
  * 审计日志仓储。
@@ -25,4 +29,31 @@ public interface AuditLogRepository extends Repository<AuditLog, Long> {
      */
     long countByActionInAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
             Collection<AuditAction> actions, Instant from, Instant to);
+
+    /**
+     * 审计日志查询（P5 设计 7.5）：键集分页 + 可选动作 / 时间筛选。
+     *
+     * <p>排序键 {@code (created_at desc, id desc)}，游标是这两列的复合值；比较条件必须与
+     * {@code order by} 严格同序。首页传 {@code cursorCreatedAt = null}，由第一个分支恒真兜住，
+     * 因此首页与后续页共用一条 JPQL。</p>
+     *
+     * <p>只读方法与 {@link #save} 一样不破坏「只增不改删」。</p>
+     */
+    @Query("""
+            select l from AuditLog l
+            where (:action is null or l.action = :action)
+              and (:from is null or l.createdAt >= :from)
+              and (:to is null or l.createdAt < :to)
+              and (:cursorCreatedAt is null
+                   or l.createdAt < :cursorCreatedAt
+                   or (l.createdAt = :cursorCreatedAt and l.id < :cursorId))
+            order by l.createdAt desc, l.id desc
+            """)
+    List<AuditLog> findAdminPage(
+            @Param("action") AuditAction action,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("cursorCreatedAt") Instant cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable limit);
 }

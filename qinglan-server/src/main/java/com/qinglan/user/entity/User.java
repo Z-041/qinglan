@@ -90,6 +90,18 @@ public class User extends BaseEntity {
         this.creditScore = Math.max(MIN_CREDIT_SCORE, Math.min(MAX_CREDIT_SCORE, this.creditScore + delta));
     }
 
+    /**
+     * 变更角色（P5 权限下放 / 收回）。
+     *
+     * <p>与封禁一样走业务方法而不是暴露 setter：角色是安全资产，任何变更都必须能被审计追到
+     * （由 {@code UserService#changeRole} 落 {@code ROLE_GRANT} / {@code ROLE_REVOKE}）。
+     * 本方法只承担状态变更，不承担「谁有权改、上限是多少、超管能不能动」这些判断——
+     * 那些在 Service 层。</p>
+     */
+    public void changeRole(UserRole role) {
+        this.role = role;
+    }
+
     public boolean isBannedAt(Instant moment) {
         return status == UserStatus.BANNED && bannedUntil != null && bannedUntil.isAfter(moment);
     }

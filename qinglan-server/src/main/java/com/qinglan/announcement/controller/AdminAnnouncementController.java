@@ -19,8 +19,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 管理端公告接口。类级 {@code ADMIN / SUPER_ADMIN} 且默认拒绝（计划 D8）：
- * 建草稿普通管理员可做，发布 / 撤回收窄到仅 {@code SUPER_ADMIN}。
+ * 管理端公告接口。权限点全部写在方法级（P5 设计 7.1）：
+ * 建草稿与查看归 {@code ANNOUNCEMENT_DRAFT}（管理员可用，保持 P3 以来的现状），
+ * 发布 / 撤回是仅超管的 {@code ANNOUNCEMENT_MANAGE}。
  *
  * <p>所有动作通过 Service 落审计日志（不变量 #7）。</p>
  */
@@ -28,26 +29,26 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/announcements")
 @RequiredArgsConstructor
 @Validated
-@PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
 public class AdminAnnouncementController {
 
     private final AnnouncementService announcementService;
 
     @PostMapping
+    @PreAuthorize("hasAuthority('ANNOUNCEMENT_DRAFT')")
     public ApiResponse<AdminAnnouncementItemResponse> create(@Valid @RequestBody CreateAnnouncementRequest request) {
         Long id = announcementService.createDraft(CurrentUser.requireUserId(), request);
         return ApiResponse.ok(announcementService.adminItem(id));
     }
 
     @PostMapping("/{id}/publish")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('ANNOUNCEMENT_MANAGE')")
     public ApiResponse<Void> publish(@PathVariable Long id) {
         announcementService.publish(CurrentUser.requireUserId(), id);
         return ApiResponse.ok();
     }
 
     @PostMapping("/{id}/revoke")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('ANNOUNCEMENT_MANAGE')")
     public ApiResponse<Void> revoke(@PathVariable Long id) {
         announcementService.revoke(CurrentUser.requireUserId(), id);
         return ApiResponse.ok();
@@ -55,6 +56,7 @@ public class AdminAnnouncementController {
 
     /** 公告列表：全状态、游标分页 */
     @GetMapping
+    @PreAuthorize("hasAuthority('ANNOUNCEMENT_DRAFT')")
     public ApiResponse<CursorPage<AdminAnnouncementItemResponse>> list(
             @RequestParam(required = false) String cursor) {
         return ApiResponse.ok(announcementService.adminList(cursor));

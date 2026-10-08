@@ -31,6 +31,10 @@ public enum AuditAction {
     REPORT_UPHOLD,
     /** 复审申诉（通过时另有 POST_RESTORE 记录内容状态变更，本条记录审核决定本身） */
     APPEAL_REVIEW,
+    /** 下放管理权限：把某用户提升为管理员 / 学生评议员（P5） */
+    ROLE_GRANT,
+    /** 收回管理权限：把某用户的角色降回学生，或委员会内部降档（P5） */
+    ROLE_REVOKE,
     /** 创建公告草稿（仅 SUPER_ADMIN 可发布，普通管理员只能建草稿） */
     ANNOUNCEMENT_CREATE,
     /** 发布公告（仅 SUPER_ADMIN），发布后进入强制阅读 */

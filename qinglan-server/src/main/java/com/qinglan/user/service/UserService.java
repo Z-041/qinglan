@@ -6,11 +6,15 @@ import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.crypto.CryptoService;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.security.AdminPermission;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
+import com.qinglan.user.dto.AdminMeResponse;
 import com.qinglan.user.dto.AdminUserQuery;
+import com.qinglan.user.dto.AssignableRole;
 import com.qinglan.user.dto.UserProfileResponse;
 import com.qinglan.user.entity.User;
+import com.qinglan.user.entity.UserRole;
 import com.qinglan.user.entity.UserStatus;
 import com.qinglan.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +30,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -43,6 +48,8 @@ public class UserService {
     private static final String KEY_SEPARATOR = ":";
     /** 游标段数：注册微秒 : 用户 id */
     private static final int CURSOR_SEGMENTS = 2;
+    /** 委员会成员的角色集合（参与表决的人）：上限与名单查询都用它 */
+    private static final List<UserRole> COMMITTEE_ROLES = List.of(UserRole.ADMIN, UserRole.REVIEWER);
 
     private final UserRepository userRepository;
     private final CryptoService cryptoService;
@@ -110,6 +117,10 @@ public class UserService {
     @Transactional
     public void ban(Long userId, Duration duration, String reason, Long operatorId) {
         User user = requireById(userId);
+        // 唯一超管是后台的最后一道保险：封掉它就没有人能解锁，只能改库（P5 D4）
+        if (user.getRole() == UserRole.SUPER_ADMIN) {
+            throw new BizException(ErrorCode.SUPER_ADMIN_PROTECTED);
+        }
         Instant until = Instant.now().plus(duration);
         user.banUntil(until);
         auditLogService.record(AuditTargetType.USER, userId, AuditAction.BAN, operatorId, reason);
@@ -122,6 +133,82 @@ public class UserService {
         user.unban();
         auditLogService.record(AuditTargetType.USER, userId, AuditAction.UNBAN, operatorId, reason);
         log.info("解除封禁 userId={}，操作人 operatorId={}", userId, operatorId);
+    }
+
+    /**
+     * 下放 / 收回 / 互转管理角色（P5 设计 7.3）。
+     *
+     * <p>四条规则，缺一条都会出事故：</p>
+     * <ol>
+     *   <li><b>操作人必须是可用的超管</b>——角色判断由端点注解收口（{@code ROLE_GRANT} 只有超管有），
+     *       这里只按写入口的统一约定复查账号可用性；</li>
+     *   <li><b>不能改自己</b>——否则超管可以把自己降级，直接锁死后台；</li>
+     *   <li><b>不能动超管</b>——超管唯一且是初始账号，被降级同样等于锁死；</li>
+     *   <li><b>新增委员受上限约束</b>——授予前先锁超管行再计数，避免并发把第 7 个人放进来。
+     *       互转（ADMIN ↔ REVIEWER）不改变在册人数，因此不受上限影响。</li>
+     * </ol>
+     *
+     * <p>幂等：目标角色与现状相同则直接返回，不写审计——否则反复点同一个按钮会刷出一串无意义的
+     * 「授权」记录，把真正的变更加淹没（与 {@code ReviewService.restore} 的幂等同一取向）。</p>
+     */
+    @Transactional
+    public void changeRole(Long targetId, AssignableRole newRole, String reason, Long operatorId) {
+        requireUsableById(operatorId);
+        if (Objects.equals(targetId, operatorId)) {
+            throw new BizException(ErrorCode.ROLE_SELF_CHANGE_FORBIDDEN);
+        }
+        User target = requireById(targetId);
+        if (target.getRole() == UserRole.SUPER_ADMIN) {
+            throw new BizException(ErrorCode.SUPER_ADMIN_PROTECTED);
+        }
+        UserRole targetRole = newRole.toUserRole();
+        if (target.getRole() == targetRole) {
+            return;
+        }
+        boolean addedToCommittee = newRole.isCommittee() && !target.getRole().isCommittee();
+        if (addedToCommittee) {
+            lockCommitteeMutex();
+            if (userRepository.countByRoleIn(COMMITTEE_ROLES) >= UserRole.MAX_COMMITTEE_SIZE) {
+                throw new BizException(ErrorCode.COMMITTEE_FULL);
+            }
+        }
+        UserRole previous = target.getRole();
+        target.changeRole(targetRole);
+        auditLogService.record(AuditTargetType.USER, targetId,
+                newRole.isCommittee() ? AuditAction.ROLE_GRANT : AuditAction.ROLE_REVOKE,
+                operatorId, describeRoleChange(previous, targetRole, reason));
+        log.info("变更用户角色 userId={} {} → {}，操作人 operatorId={}", targetId, previous, targetRole, operatorId);
+    }
+
+    /**
+     * 委员会成员（管理员 + 评议员），按加入时间升序。
+     *
+     * <p>不外泄身份：{@link UserProfileResponse} 只有 id / 角色 / 状态 / 信用分 / 时间，
+     * 与不变量 #3 一致（管理员本来就看不清真实身份，授权也只能按 userId 操作）。</p>
+     */
+    @Transactional(readOnly = true)
+    public List<UserProfileResponse> listCommittee() {
+        return userRepository.findByRoleInOrderByCreatedAtAsc(COMMITTEE_ROLES).stream()
+                .map(this::toProfile)
+                .toList();
+    }
+
+    /**
+     * 以唯一超管行为互斥锁，把「数人数 → 授予」变成临界区。
+     *
+     * <p>拿不到那一行就显式失败，而不是静默跳过锁：超管唯一是种子保证的不变量，
+     * 若它不成立（例如被人为改库），互斥锁会悄悄失效、上限随之可被绕过——宁可在授予时报错。</p>
+     */
+    private void lockCommitteeMutex() {
+        List<User> superAdmins = userRepository.findForUpdate(UserRole.SUPER_ADMIN);
+        if (superAdmins.size() != 1) {
+            throw new IllegalStateException(
+                    "超级管理员应唯一，实际 %d 个，无法校验委员会上限".formatted(superAdmins.size()));
+        }
+    }
+
+    private static String describeRoleChange(UserRole from, UserRole to, String reason) {
+        return "%s → %s：%s".formatted(from, to, reason == null ? "" : reason.trim());
     }
 
     @Transactional
@@ -145,6 +232,23 @@ public class UserService {
                 user.getBannedUntil(),
                 user.getCreatedAt()
         );
+    }
+
+    /**
+     * 当前管理端身份：角色 + 权限点集合（P5 设计 7.2）。
+     *
+     * <p>角色取自**数据库**而非令牌：令牌在签发时固化，被收回或降级后旧令牌仍带旧角色，
+     * 而前端要显示与渲染的是「现在是什么」。权限点由 {@link UserRole#permissions()} 派生，
+     * 排序后返回，便于前端与测试做稳定断言。</p>
+     */
+    @Transactional(readOnly = true)
+    public AdminMeResponse currentAdminIdentity(Long userId) {
+        User user = requireById(userId);
+        List<String> permissions = user.getRole().permissions().stream()
+                .map(AdminPermission::name)
+                .sorted()
+                .toList();
+        return new AdminMeResponse(user.getId(), user.getRole().name(), permissions);
     }
 
     private String generateAnonymousSalt() {

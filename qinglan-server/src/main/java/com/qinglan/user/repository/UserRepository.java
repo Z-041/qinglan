@@ -3,8 +3,10 @@ package com.qinglan.user.repository;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.entity.UserRole;
 import com.qinglan.user.entity.UserStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -60,4 +62,25 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByStatusIn(Collection<UserStatus> statuses);
 
     long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(Instant from, Instant to);
+
+    /**
+     * 委员会成员（管理员 + 评议员），按加入时间升序。
+     *
+     * <p>刻意不分页：成员数受 {@code UserRole#MAX_COMMITTEE_SIZE} 硬约束，是一个有界集合
+     * （最多 6 行）。安全红线禁的是「无限制全表扫描」，不是「有界小集合」。</p>
+     */
+    List<User> findByRoleInOrderByCreatedAtAsc(Collection<UserRole> roles);
+
+    long countByRoleIn(Collection<UserRole> roles);
+
+    /**
+     * 以唯一超管那一行为互斥锁，串行化「委员会名额」的授予。
+     *
+     * <p>为什么需要一个互斥点：上限校验是「先数再插」，而并发下两个请求可能都数到 5，于是把第 7 个人
+     * 放进来。锁住行数为 1 的超管行，就把所有授予动作排成队（超管只有一个，它天然是单一的争用点）。
+     * 计数本身不需要加锁——它已被锁在这段临界区里。</p>
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.role = :role")
+    List<User> findForUpdate(@Param("role") UserRole role);
 }

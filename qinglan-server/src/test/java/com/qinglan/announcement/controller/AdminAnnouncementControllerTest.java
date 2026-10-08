@@ -6,6 +6,7 @@ import com.qinglan.announcement.entity.AnnouncementStatus;
 import com.qinglan.announcement.service.AnnouncementService;
 import com.qinglan.auth.security.JwtService;
 import com.qinglan.common.web.CursorPage;
+import com.qinglan.user.entity.UserRole;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,10 +60,14 @@ class AdminAnnouncementControllerTest {
         SecurityContextHolder.clearContext();
     }
 
+    /** 认证态按真实过滤器写入的权威集合构造：ROLE_* + 该角色的权限点（P5 权限模型） */
     private void authenticateAsSuperAdmin() {
+        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+        authorities.add(new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"));
+        UserRole.SUPER_ADMIN.permissions().forEach(permission ->
+                authorities.add(new SimpleGrantedAuthority(permission.name())));
         SecurityContextHolder.getContext().setAuthentication(
-                UsernamePasswordAuthenticationToken.authenticated(
-                        OPERATOR_ID, null, List.of(new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"))));
+                UsernamePasswordAuthenticationToken.authenticated(OPERATOR_ID, null, authorities));
     }
 
     @Test

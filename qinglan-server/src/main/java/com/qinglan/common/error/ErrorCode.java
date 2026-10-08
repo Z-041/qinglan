@@ -33,6 +33,9 @@ public enum ErrorCode {
     CREDIT_TOO_LOW(HttpStatus.FORBIDDEN, "QL-403-004", "信用分不足，暂时无法发帖"),
     // 「复审人 ≠ 原处置人」的落点：同一个管理员不能复核自己的裁决
     SELF_REVIEW_FORBIDDEN(HttpStatus.FORBIDDEN, "QL-403-005", "不能复审自己处置过的内容"),
+    // 唯一超管是后台的最后一道保险：被降级/封禁后没人能解锁，只能改库（P5 D4）
+    SUPER_ADMIN_PROTECTED(HttpStatus.FORBIDDEN, "QL-403-006", "超级管理员账号不可变更角色，也不可被封禁"),
+    ROLE_SELF_CHANGE_FORBIDDEN(HttpStatus.FORBIDDEN, "QL-403-007", "不能修改自己的角色"),
 
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-001", "用户不存在"),
     POST_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-002", "帖子不存在或已被删除"),
@@ -56,6 +59,8 @@ public enum ErrorCode {
     APPEAL_WINDOW_EXPIRED(HttpStatus.CONFLICT, "QL-409-007", "申诉期已过，无法再提交申诉"),
     // 公告状态机（计划 D7）：仅 DRAFT 可发布、仅 PUBLISHED 可撤回，其余一律拒绝
     ANNOUNCEMENT_STATE_ILLEGAL(HttpStatus.CONFLICT, "QL-409-008", "公告当前状态不允许该操作"),
+    // P5：委员会（管理员 + 评议员）合计上限 6 人，它是表决法定人数的基础（决策 D3）
+    COMMITTEE_FULL(HttpStatus.CONFLICT, "QL-409-009", "管理员名额已满，请先收回其他成员的权限"),
 
     CODE_SEND_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "QL-429-001", "验证码发送过于频繁，请稍后再试"),
     VERIFY_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "QL-429-002", "验证失败次数过多，请重新获取验证码"),

@@ -112,7 +112,7 @@ class SecuritySkeletonTest {
     @Test
     @DisplayName("管理员封禁成功，用户状态变更并写入审计日志")
     void shouldAllowAdminToBanAndRecordAuditLog() throws Exception {
-        User admin = createStudent("admin@qinglan.edu.cn", "2023010004");
+        User admin = createAdmin("admin@qinglan.edu.cn", "2023010004");
         User target = createStudent("rule-breaker@qinglan.edu.cn", "2023010005");
         String token = jwtService.issueAccessToken(admin.getId(), UserRole.ADMIN);
 
@@ -129,6 +129,93 @@ class SecuritySkeletonTest {
         assertThat(auditCount).isEqualTo(1);
     }
 
+    // ---------------------------------------------------------------- P5 权限模型
+
+    @Test
+    @DisplayName("评议员可看待审帖子（MODERATION_VIEW），但进不了用户管理（无 USER_MANAGE）")
+    void shouldScopeReviewerToModerationOnly() throws Exception {
+        User reviewer = createUser("reviewer@qinglan.edu.cn", "2023010010", UserRole.REVIEWER);
+        String token = jwtService.issueAccessToken(reviewer.getId(), UserRole.REVIEWER);
+
+        mockMvc.perform(get("/api/admin/pending-posts").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/admin/users").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-001"));
+    }
+
+    @Test
+    @DisplayName("审计日志只对超管开放：管理员读它是 403（AUDIT_READ 不在管理员的权限集里）")
+    void shouldRestrictAuditLogToSuperAdmin() throws Exception {
+        User admin = createAdmin("auditor@qinglan.edu.cn", "2023010011");
+        User superAdmin = createUser("root@qinglan.edu.cn", "2023010012", UserRole.SUPER_ADMIN);
+        String adminToken = jwtService.issueAccessToken(admin.getId(), UserRole.ADMIN);
+        String superAdminToken = jwtService.issueAccessToken(superAdmin.getId(), UserRole.SUPER_ADMIN);
+
+        mockMvc.perform(get("/api/admin/audit-logs").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-001"));
+
+        mockMvc.perform(get("/api/admin/audit-logs").header("Authorization", "Bearer " + superAdminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isArray());
+    }
+
+    @Test
+    @DisplayName("权限被收回后旧令牌立即失效：写请求 403，不必等令牌到期（P5 D9）")
+    void shouldRejectStaleTokenAfterRoleRevoked() throws Exception {
+        User admin = createAdmin("was-admin@qinglan.edu.cn", "2023010013");
+        User target = createStudent("target@qinglan.edu.cn", "2023010014");
+        String token = jwtService.issueAccessToken(admin.getId(), UserRole.ADMIN);
+
+        // 令牌仍然写着 ROLE_ADMIN，但数据库里已被收回成学生
+        admin.changeRole(UserRole.STUDENT);
+
+        mockMvc.perform(post("/api/admin/users/{userId}/ban", target.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(banBody()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-001"));
+    }
+
+    @Test
+    @DisplayName("超级管理员不可被封禁（唯一超管被锁死就没人能解锁）")
+    void shouldProtectSuperAdminFromBan() throws Exception {
+        User superAdmin = createUser("root2@qinglan.edu.cn", "2023010015", UserRole.SUPER_ADMIN);
+        User anotherSuperAdmin = createUser("root3@qinglan.edu.cn", "2023010016", UserRole.SUPER_ADMIN);
+        String token = jwtService.issueAccessToken(superAdmin.getId(), UserRole.SUPER_ADMIN);
+
+        mockMvc.perform(post("/api/admin/users/{userId}/ban", anotherSuperAdmin.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(banBody()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-006"));
+    }
+
+    @Test
+    @DisplayName("下放权限：超管把学生提为评议员，角色落库并写 ROLE_GRANT 审计")
+    void shouldGrantRoleThroughEndpoint() throws Exception {
+        User superAdmin = createUser("root4@qinglan.edu.cn", "2023010017", UserRole.SUPER_ADMIN);
+        User candidate = createStudent("candidate@qinglan.edu.cn", "2023010018");
+        String token = jwtService.issueAccessToken(superAdmin.getId(), UserRole.SUPER_ADMIN);
+
+        mockMvc.perform(post("/api/admin/users/{userId}/role", candidate.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"role\":\"REVIEWER\",\"reason\":\"学生自助申请，已审批\"}"))
+                .andExpect(status().isOk());
+
+        assertThat(candidate.getRole()).isEqualTo(UserRole.REVIEWER);
+        Integer auditCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM review_log WHERE target_type = 'USER' AND target_id = ? "
+                        + "AND action = 'ROLE_GRANT' AND operator_id = ?",
+                Integer.class, candidate.getId(), superAdmin.getId());
+        assertThat(auditCount).isEqualTo(1);
+    }
+
     private String banBody() throws Exception {
         return objectMapper.writeValueAsString(new BanRequestBody(7, "人身攻击"));
     }
@@ -138,5 +225,21 @@ class SecuritySkeletonTest {
 
     private User createStudent(String email, String studentId) {
         return userService.createVerifiedStudent(cryptoService.hashEmail(email), studentId);
+    }
+
+    /**
+     * 建一个**数据库里也是该角色**的用户。
+     *
+     * <p>P5 之后这是必需的：管理端写入口会比对「令牌角色 = 数据库角色」，若只发一个 ADMIN 令牌
+     * 而库里还是 STUDENT，请求会被当场拒掉（那正是 D9 要的效果）。</p>
+     */
+    private User createUser(String email, String studentId, UserRole role) {
+        User user = createStudent(email, studentId);
+        user.changeRole(role);
+        return user;
+    }
+
+    private User createAdmin(String email, String studentId) {
+        return createUser(email, studentId, UserRole.ADMIN);
     }
 }

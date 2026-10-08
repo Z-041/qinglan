@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -29,7 +31,8 @@ import java.util.Optional;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
-    private static final String ROLE_AUTHORITY_PREFIX = "ROLE_";
+    /** 角色权威前缀。管理端写入口复查（AdminWriteGuardFilter）也用它比对令牌里的角色 */
+    public static final String ROLE_AUTHORITY_PREFIX = "ROLE_";
 
     private final JwtService jwtService;
 
@@ -55,9 +58,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (SecurityContextHolder.getContext().getAuthentication() != null) {
             return;
         }
-        String authority = ROLE_AUTHORITY_PREFIX + payload.role().name().toUpperCase(Locale.ROOT);
+        List<GrantedAuthority> authorities = new ArrayList<>();
+        authorities.add(new SimpleGrantedAuthority(
+                ROLE_AUTHORITY_PREFIX + payload.role().name().toUpperCase(Locale.ROOT)));
+        // 权限点由角色派生后在这里展开，**不写进令牌**（P5 设计 4.4 的偏差，已回写方案）：
+        // 令牌本来就带 role，再存一份权限点既冗余，又会让「矩阵改了、旧令牌仍按旧矩阵放行」
+        // 成为可能。角色 → 权限点只有 UserRole#permissions 一处映射。
+        payload.role().permissions().forEach(permission ->
+                authorities.add(new SimpleGrantedAuthority(permission.name())));
         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                payload.userId(), null, List.of(new SimpleGrantedAuthority(authority)));
+                payload.userId(), null, authorities);
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         SecurityContextHolder.getContext().setAuthentication(authentication);
     }

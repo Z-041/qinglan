@@ -10,17 +10,17 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 运营看板接口。类级角色限定且默认拒绝，与审核工作台同口径。
+ * 运营看板接口。权限点写在方法级（P5 设计 7.1），类上不做任何放宽。
  */
 @RestController
 @RequestMapping("/api/admin/stats")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
 public class AdminStatsController {
 
     private final AdminStatsService adminStatsService;
 
     @GetMapping("/overview")
+    @PreAuthorize("hasAuthority('STATS_VIEW')")
     public ApiResponse<AdminStatsResponse> overview() {
         return ApiResponse.ok(adminStatsService.overview());
     }
