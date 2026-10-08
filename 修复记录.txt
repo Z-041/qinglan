@@ -17,6 +17,81 @@
 
 
 --------------------------------------------------------------------------------
+R-32 续查全链路：修掉「干净 checkout 跑不了自己的测试」等 5 处缺陷
+--------------------------------------------------------------------------------
+[2026-10-08]  类型：审查 + 缺陷修复  状态：已交付
+来源：用户要求「继续顺着链路检查」。本轮补查上一轮未深挖的三条链路（通知 / 图片上传 / 管理端
+      页面态），并把上一轮遗留的 6 条「待确认」逐条实证。
+
+一、交付级缺陷（P0）
+  A 仓库提交的代码跑不了自己的测试：`src/main/resources/application.yml` 被 .gitignore 忽略
+    （含本地密钥，这是对的），但 `src/test/resources/application-test.yml` 只配了 crypto / jwt /
+    review / auth 四段——`qinglan.announcement` / `post` / `upload` / `moderation` / `storage`
+    全靠那份本地文件兜着。**干净的 checkout（CI 就是）里根本没有它**，于是
+    `@SpringBootTest` 起不来，报
+      Could not bind properties to 'AnnouncementProperties' : prefix=qinglan.announcement
+    本地一直绿，只因为本地多一个不入库的文件。
+    验证手法：删掉 `target/classes/application.yml`（不 clean，其余资源仍在）+ 跑测试时加
+    `-Dmaven.resources.skip=true`（阻止它被重新拷贝），即复刻 CI 的 classpath；跑
+    ReviewFlowIntegrationTest / PostFlowIntegrationTest / SecuritySkeletonTest / LocalContentGuardTest
+    四类全上下文测试，**修前必红**（已实测复现）。
+    修：application-test.yml 补齐缺失五段，取值与 application.example.yml 的生产默认一致；文件头
+    写明「本文件必须自成一套」的原因。注意 LocalContentGuardTest 是 @SpringBootTest，它同时验证
+    词库路径与隐私正则能不能真的用起来，所以 moderation 段不能留空。
+    验证：干净 checkout 条件下全量 `./mvnw test` → 313 用例全过、BUILD SUCCESS（见「验证」）。
+
+二、功能性缺陷（P1/P2）
+  B 复审独立性可被绕过：`AppealService.review` 用 `post.review_by` 判定「复审人 ≠ 原处置人」，
+    但 `upholdReports`（维持下架）**不写这个字段**，而自动降级路径把它置成了 null——于是刚点过
+    「维持下架」的管理员，转手就能去 accept 同一帖的申诉，设计方案 113 行的「换人复审」形同虚设。
+    修：`Post.recordHandler(operatorId)` + upholdReports 调用它（只改这一个字段，状态仍只走状态机）。
+    测试：ReviewServiceTest 加 1 例，用 TestFixtures.autoTakenDownPost（review_by 为空的自动降级帖）。
+
+  C 回复一级评论不通知被回复者：`CommentService.create` 只 notify 帖主，`parentId` 仅用于校验，
+    从不解析父评论作者——B 回复 A 的评论，只有帖主 C 收到通知，A 永远不知道被回复了。
+    修：`requireReplyableRoot` 改为返回父评论；被回复者与帖主不同人时补一条通知（同人只发一条），
+    正文照旧不含任何评论者身份（不变量 #1）。
+    测试：CommentServiceTest 加 2 例（各收一条 / 同人只发一条）。
+
+  D 公告结束时间不晚于开始时间没有后端校验：草稿能正常发布、管理端显示「已发布」，但生效判定
+    （startAt <= now < endAt）永远为假，用户侧一条都收不到，属静默失效。
+    修：CreateAnnouncementRequest 加跨字段 @AssertTrue（参数校验归 DTO，不该等业务层才发现）。
+    测试：AdminAnnouncementControllerTest 加 1 例断言 400。
+
+三、一致性缺陷（P3）
+  E 看板是唯一漏挂请求序号的 composable：`useDashboard.load` 无 requestSeq，首屏加载与「刷新」
+    并发时旧响应会把新数据盖回去、loading 被先到的 finally 提前复位（R-31 已修 4 个队列
+    composable + AnnouncementManageView，唯独漏了它）。
+    修：补齐序号判断；测试：useDashboard.spec 加 1 例并发用例。
+
+四、已核实但**不是**缺陷（记录结论，避免下次重复怀疑）
+  - `useImageUpload` 用单个 `uploading` 布尔，理论上两次并发 addFiles 会让先结束者提前复位；
+    实际不可达：唯一的入口按钮 `:disabled="props.uploading"`，上传期间点不到第二次。
+  - 上传链路的校验顺序（可写 → 频次 → 非空 → 大小 → 文件头嗅探）、路径穿越双重兜底、
+    `/uploads/YYYY/MM/<32hex>` 不可枚举、5MB 与 multipart 上限一致：逐条读过，无问题。
+  - 通知写入端的 self-skip、单条已读的越权防护、批量已读清一级缓存、两个索引、三态区分：无问题。
+
+五、本轮发现但未修（记入 T-27，均为架构/产品决策）
+  - 下架内容的图片仍可被公开直取（`/uploads/**` 静态放行，处置时不摘链、不封禁）
+  - 图片归属未绑定、孤儿不回收（既有 T-12'）
+  - 点赞反复 toggle 与连续评论无聚合节流（既有 T-15）
+  - 「恢复可见」不通知作者（设计方案未要求，属产品预期）
+  - 弹层在提交中仍可 ESC / 点遮罩关闭，关闭后请求继续
+  - ReviewQueueView 对被移除的目标仍 reload 上下文，可能落到失败态
+
+验证（真跑）
+  - **干净 checkout 条件**（classpath 上无 application.yml）跑全量：313 个用例全过、BUILD SUCCESS
+    —— 这一条同时验证 A 的修复与 R-31/R-32 全部新用例
+  - 前端三包 lint / typecheck / test / build 全绿：shared 9 文件/37 用例、qinglan-web 20/117、
+    qinglan-admin 19/105
+  - 修复前后对照：同一条件下修前 4 个 @SpringBootTest 类必红（Could not bind AnnouncementProperties）
+
+遗留
+  - 五节的未修项见 T-27；A 的验证手法（删 target/classes 的本地配置 + resources.skip）建议保留为
+    「CI 复刻」的常规动作，见经验 44
+
+
+--------------------------------------------------------------------------------
 R-31 全链路审查：补齐 2 处功能缺陷、2 处安全缺口、5 处健壮性与索引缺口
 --------------------------------------------------------------------------------
 [2026-10-08]  类型：审查 + 缺陷修复  状态：已交付
@@ -1682,6 +1757,18 @@ T-26  R-31 全链路审查里「已核实但未修」的项（每条都是产品
       「非本地 profile 且 expose-code=true 即启动失败」的守卫；属部署决策
       ⑦F4 未修项的补充：以上第①条同时需要一个「同一 deviceId 不再无上限新增」的兜底思路
 
+T-27  R-32 续查里「已核实但未修」的项
+      ①下架内容的图片仍可被公开直取：/uploads/** 是静态放行（浏览器取图不带令牌），处置时不摘链、
+      不封禁对应文件。修法要么把图片改为带可见性校验的受控端点，要么在下架时把关联 URL 加入屏蔽集，
+      属架构决策
+      ②图片归属未绑定、孤儿不回收（既有 T-12'）：上传后弃用或发帖失败的文件永久留存且可公开访问，
+      且用户可复制他人图片 URL 直接发帖
+      ③点赞反复 toggle、连续评论无聚合节流（既有 T-15）：同一人赞→取消→赞循环或多条评论会刷出
+      多条通知
+      ④「恢复可见」不通知作者（只有结案举报会通知举报人）：设计方案未要求，属产品预期待确认
+      ⑤各 el-dialog 在 submitting 期间仍可 ESC / 点遮罩关闭，关闭后请求继续在飞
+      ⑥ReviewQueueView 执行「移除评论」后仍 reload 该目标的上下文，可能落到失败态
+
 说明：T-05（P3–P4 未开始）已由 R-24 完成并移出（P3 管理后台在上一轮交付，P4 打磨上线见 R-24，
 其交付留痕的缺失已记入 R-24 的「遗留」）；T-06（未激活徽标填充色）已由 R-18 解决并移出；
 T-09（软删残留 like_record）已由 R-15 解决并移出；T-12（R-19 复核 E–O 共 10 项）已由 R-20
@@ -1914,3 +2001,16 @@ T-09（软删残留 like_record）已由 R-15 解决并移出；T-12（R-19 复�
     十余条，逐条读代码后收敛为 9 条；其中「BLACKLISTED 无入口」「处置不扣分」「通知不聚合」等其实
     早已躺在待办里，属产品未定的取舍，不是新发现的漏洞——把它们混进修复清单会平白改动产品行为。
     做法：报告里把「已确认缺陷」与「已核实但需决策」分成两节，后者的每条都写清「为什么不擅自改」。
+
+44. 本地绿 ≠ 仓库能跑。R-32：`application.yml` 含本地密钥、必须 gitignore，但一旦测试配置依赖它，
+    干净的 checkout（CI 就是）就成了另一套环境——`@SpringBootTest` 直接起不来，而本地永远绿。
+    判据：把「只有本机才有的东西」从 classpath 上移走再跑一遍。本项目的手法最省事：**不 clean**、
+    删掉 `target/classes/<本地配置>`（其余资源仍在），跑测试时加 `-Dmaven.resources.skip=true`
+    阻止它被重新拷贝——比另 clone 一份仓库快得多，而且与 CI 的 classpath 等价。
+    对应的书写要求：测试 profile 必须自成一套，并在文件头写明「删了就会红」，否则下一个人会把某段
+    配置删回去（本次就补了 qinglan.post / upload / announcement / moderation / storage 五段）。
+
+45. 审计报出的「待确认」不能留着不管。R-31 留了 6 条「待确认」，R-32 逐条实证后的分布是：
+    1 条真缺陷（复审独立性可绕过）、1 条不是缺陷（上传并发实际不可达）、其余是产品/架构决策。
+    三种结论都要落文档：真缺陷进修复清单；**不是缺陷的也要写进「已核实但不是缺陷」并给出否证依据**
+    （否则下一轮审计还会把它当疑点重新翻一遍，白烧时间）；决策项进待办并写明为何不擅自改。
