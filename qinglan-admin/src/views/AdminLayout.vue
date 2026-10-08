@@ -6,9 +6,10 @@ import { useRouter } from 'vue-router'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useUserStore } from '@shared/stores/user'
 
-/** 侧边栏五项（spec 5.4）；name 与路由名一一对应 */
+/** 侧边栏六项（spec 5.4）；name 与路由名一一对应 */
 const NAV_ITEMS = [
   { name: 'admin-dashboard', label: '看板' },
+  { name: 'admin-pending-posts', label: '待审帖子' },
   { name: 'admin-review-queue', label: '审核队列' },
   { name: 'admin-appeals', label: '申诉复审' },
   { name: 'admin-users', label: '用户管理' },

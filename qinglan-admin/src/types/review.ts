@@ -20,6 +20,22 @@ export interface AdminQueueItem {
   reasons: ReportReason[]
 }
 
+/**
+ * 与后端 review/dto/PendingPostItemResponse 一一对应（管理端待审帖子队列）。
+ * 不含作者字段——作者身份不出队列（不变量 #1 引申）。
+ */
+export interface AdminPendingPostItem {
+  /** 处置接口（approve / reject）与上下文面板所需的目标 id */
+  postId: number
+  preview: string
+  /** 帖子当前状态码（PENDING / REVIEWING），文案映射见 useUserLabels.targetStatusLabel */
+  targetStatus: string
+  /** 提交审核时间（发布与提交同刻），据它展示等待时长 */
+  submittedAt: string
+  /** 待处理举报数：新帖通常为 0，非 0 说明该帖同时被举报，是排队时的重要线索 */
+  reportCount: number
+}
+
 /** 与后端 review/dto/AdminReviewContextResponse 一一对应；只含聚合值，不含任何人的身份 */
 export interface AdminReviewContext {
   targetType: ReviewTargetType

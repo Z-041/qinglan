@@ -5,6 +5,7 @@ import type { CursorPage } from '@shared/types/api'
 import type { ReviewTargetType } from '@shared/types/review-common'
 import type {
   AdminAppealItem,
+  AdminPendingPostItem,
   AdminQueueItem,
   AdminReviewContext,
   DismissReportsPayload,
@@ -33,6 +34,14 @@ export function fetchAdminReviewContext(
 /** 待复审申诉队列：FIFO 游标分页；响应不含申诉人身份 */
 export function fetchAdminAppeals(cursor: string | null): Promise<CursorPage<AdminAppealItem>> {
   return httpGet<CursorPage<AdminAppealItem>>('/admin/appeals', { cursor })
+}
+
+/**
+ * 待审帖子队列：先审后发下放行新帖的唯一入口（举报队列按被举报目标聚合，新帖不在其中），
+ * FIFO 游标分页；响应不含作者身份。
+ */
+export function fetchAdminPendingPosts(cursor: string | null): Promise<CursorPage<AdminPendingPostItem>> {
+  return httpGet<CursorPage<AdminPendingPostItem>>('/admin/pending-posts', { cursor })
 }
 
 export function approvePost(postId: number): Promise<void> {

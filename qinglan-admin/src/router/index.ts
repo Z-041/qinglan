@@ -36,6 +36,11 @@ const router = createRouter({
           component: () => import('@/views/DashboardView.vue'),
         },
         {
+          path: 'pending-posts',
+          name: 'admin-pending-posts',
+          component: () => import('@/views/PendingPostQueueView.vue'),
+        },
+        {
           path: 'review-queue',
           name: 'admin-review-queue',
           component: () => import('@/views/ReviewQueueView.vue'),
