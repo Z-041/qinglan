@@ -8,7 +8,7 @@ import BaseButton from '@/components/base/BaseButton.vue'
 import { useUserLabels } from '@/composables/useUserLabels'
 import { useUserManage } from '@/composables/useUserManage'
 import type { AdminUserItem } from '@/types/admin'
-import type { UserRole, UserStatus } from '@/types/user'
+import type { UserRole, UserStatus } from '@shared/types/user'
 
 const {
   filters,

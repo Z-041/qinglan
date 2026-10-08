@@ -1,9 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import { useAuth } from '@/composables/useAuth'
-import { pushToast } from '@/composables/useToast'
+import { pushToast } from '@shared/composables/useToast'
 import { useUserStore } from '@/stores/user'
-import type { UserRole } from '@/types/user'
+import { isAdminRole } from '@shared/types/user'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -22,13 +22,6 @@ declare module 'vue-router' {
      */
     wide?: boolean
   }
-}
-
-/** 管理后台的准入角色（spec D3：REVIEWER 本轮不放行） */
-const ADMIN_ROLES: UserRole[] = ['ADMIN', 'SUPER_ADMIN']
-
-function isAdmin(role: UserRole | null | undefined): boolean {
-  return role !== null && role !== undefined && ADMIN_ROLES.includes(role)
 }
 
 const router = createRouter({
@@ -137,7 +130,7 @@ router.beforeEach(async (to) => {
         return { name: 'admin-login', query: { redirect: to.fullPath } }
       }
     }
-    if (!isAdmin(userStore.profile?.role)) {
+    if (!isAdminRole(userStore.profile?.role)) {
       pushToast('无权访问管理后台', 'error')
       return { name: 'home' }
     }

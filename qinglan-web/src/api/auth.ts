@@ -1,4 +1,4 @@
-import { httpPost } from './http'
+import { httpPost } from '@shared/api/http'
 
 import type {
   AuthTokenResult,

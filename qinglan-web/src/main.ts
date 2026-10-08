@@ -6,7 +6,7 @@ import 'virtual:uno.css'
 import './styles/main.css'
 
 import App from './App.vue'
-import { setPreconditionRequiredHandler, setUnauthorizedHandler } from './api/http'
+import { setPreconditionRequiredHandler, setUnauthorizedHandler } from '@shared/api/http'
 import { openFromPrecondition } from './composables/useAnnouncement'
 import router from './router'
 import { useUserStore } from './stores/user'

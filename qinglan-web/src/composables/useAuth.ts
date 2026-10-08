@@ -2,7 +2,7 @@ import { ref } from 'vue'
 
 import { bindStudentId, sendEmailCode, verifyEmail } from '@/api/auth'
 import { fetchCurrentUser } from '@/api/user'
-import { pushToast } from '@/composables/useToast'
+import { pushToast } from '@shared/composables/useToast'
 import { useUserStore } from '@/stores/user'
 
 /**

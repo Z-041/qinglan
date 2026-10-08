@@ -1,4 +1,4 @@
-import { httpPostForm } from './http'
+import { httpPostForm } from '@shared/api/http'
 
 import type { UploadedImage } from '@/types/post'
 

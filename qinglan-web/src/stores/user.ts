@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
-import { getAuthToken, setAuthToken } from '@/api/http'
-import type { UserProfile } from '@/types/user'
+import { getAuthToken, setAuthToken } from '@shared/api/http'
+import type { UserProfile } from '@shared/types/user'
 
 /**
  * 用户态：仅保存访问令牌与当前用户档案。

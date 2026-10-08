@@ -1,7 +1,7 @@
 import axios, { type AxiosError } from 'axios'
 
-import { pushToast } from '@/composables/useToast'
-import { SUCCESS_CODE, type ApiResponse } from '@/types/api'
+import { pushToast } from '@shared/composables/useToast'
+import { SUCCESS_CODE, type ApiResponse } from '@shared/types/api'
 
 /** 访问令牌在 localStorage 中的键名 */
 export const TOKEN_STORAGE_KEY = 'qinglan.access-token'

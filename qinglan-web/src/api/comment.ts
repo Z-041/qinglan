@@ -1,4 +1,4 @@
-import { httpDelete, httpGet, httpPost } from './http'
+import { httpDelete, httpGet, httpPost } from '@shared/api/http'
 
 import type { Comment, CreateCommentRequest } from '@/types/comment'
 import type { LikeState } from '@/types/interaction'

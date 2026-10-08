@@ -1,6 +1,6 @@
-import { httpDelete, httpGet, httpPost } from './http'
+import { httpDelete, httpGet, httpPost } from '@shared/api/http'
 
-import type { CursorPage } from '@/types/api'
+import type { CursorPage } from '@shared/types/api'
 import type { LikeState } from '@/types/interaction'
 import type { CreatePostRequest, PostDetail, PostSummary } from '@/types/post'
 

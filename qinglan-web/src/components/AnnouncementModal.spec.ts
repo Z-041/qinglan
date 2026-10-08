@@ -4,7 +4,7 @@ import { nextTick } from 'vue'
 
 import AnnouncementModal from './AnnouncementModal.vue'
 import { markAnnouncementRead } from '@/api/announcement'
-import { ApiError } from '@/api/http'
+import { ApiError } from '@shared/api/http'
 import { useAnnouncement } from '@/composables/useAnnouncement'
 import type { PendingAnnouncement } from '@/types/announcement'
 

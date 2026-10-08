@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { bindStudentId, sendEmailCode, verifyEmail } from '@/api/auth'
 import { useAuth } from '@/composables/useAuth'
-import { TOKEN_STORAGE_KEY } from '@/api/http'
+import { TOKEN_STORAGE_KEY } from '@shared/api/http'
 import { useUserStore } from '@/stores/user'
-import type { UserProfile } from '@/types/user'
+import type { UserProfile } from '@shared/types/user'
 
 vi.mock('@/api/auth', () => ({
   sendEmailCode: vi.fn(),

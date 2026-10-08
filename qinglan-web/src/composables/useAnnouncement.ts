@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 
 import { fetchPendingAnnouncement, markAnnouncementRead } from '@/api/announcement'
-import { ApiError, readStoredValue, writeStoredValue } from '@/api/http'
+import { ApiError, readStoredValue, writeStoredValue } from '@shared/api/http'
 import type { PendingAnnouncement } from '@/types/announcement'
 
 /** 游客设备标识在 localStorage 中的键名（计划 D4） */

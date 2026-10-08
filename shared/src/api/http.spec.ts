@@ -1,7 +1,7 @@
 import { AxiosError, type AxiosResponse } from 'axios'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { useToast } from '@/composables/useToast'
+import { useToast } from '@shared/composables/useToast'
 
 import instance, {
   httpGet,

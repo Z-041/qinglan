@@ -8,6 +8,9 @@ import BaseInput from '@/components/base/BaseInput.vue'
 import FormField from '@/components/base/FormField.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useCodeCooldown } from '@/composables/useCodeCooldown'
+import { pushToast } from '@shared/composables/useToast'
+import { useUserStore } from '@/stores/user'
+import { isAdminRole } from '@shared/types/user'
 
 type Step = 'email' | 'code' | 'student'
 
@@ -22,6 +25,7 @@ const STEP_INDEX: Record<Step, number> = { email: 0, code: 1, student: 2 }
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
 const { sending, verifying, binding, devCode, requestCode, verify, bind } = useAuth()
 const { remaining: resendRemaining, start: startResendCooldown } = useCodeCooldown()
 
@@ -47,7 +51,17 @@ async function attempt<T>(action: () => Promise<T>): Promise<T | null> {
   }
 }
 
+/**
+ * 认证成功后的统一收尾。
+ *
+ * 会话只有一份（一个浏览器 = 一个账号 = 一份会话，见 AGENTS.md 第七章），管理员账号
+ * 与学生账号走的是同一个登录流程，因此这里不拒绝管理员，只**明确告知当前身份**——
+ * 否则管理员从前台登录后，导航栏那个角色徽标很容易被忽略，误以为自己在用学生身份。
+ */
 function afterAuthenticated(): void {
+  if (isAdminRole(userStore.profile?.role)) {
+    pushToast('当前为管理员账号，可访问管理后台', 'info')
+  }
   const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
   void router.replace(redirect)
 }

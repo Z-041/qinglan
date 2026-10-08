@@ -11,7 +11,7 @@ import ImagePicker from '@/components/ImagePicker.vue'
 import TopicFilter from '@/components/TopicFilter.vue'
 import { MAX_IMAGES_PER_POST, useImageUpload } from '@/composables/useImageUpload'
 import { usePublish } from '@/composables/usePublish'
-import { pushToast } from '@/composables/useToast'
+import { pushToast } from '@shared/composables/useToast'
 
 const router = useRouter()
 

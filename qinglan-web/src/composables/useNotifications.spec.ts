@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { setAuthToken } from '@/api/http'
+import { setAuthToken } from '@shared/api/http'
 import {
   fetchNotifications,
   fetchUnreadCount,

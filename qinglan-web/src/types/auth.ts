@@ -1,4 +1,4 @@
-import type { UserProfile } from './user'
+import type { UserProfile } from '@shared/types/user'
 
 /** 与后端 auth/dto/SendCodeRequest 对应 */
 export interface SendCodePayload {

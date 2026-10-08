@@ -1,6 +1,6 @@
-import { httpGet, httpPost } from './http'
+import { httpGet, httpPost } from '@shared/api/http'
 
-import type { CursorPage } from '@/types/api'
+import type { CursorPage } from '@shared/types/api'
 import type {
   AnnouncementSummary,
   MarkAnnouncementReadPayload,

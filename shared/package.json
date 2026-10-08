@@ -1,0 +1,37 @@
+{
+  "name": "@qinglan/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "学生端与管理端共用：HTTP 拦截器、基础组件、用户态、公共类型、uno 基础配置",
+  "scripts": {
+    "build": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "axios": "^1.8.4"
+  },
+  "peerDependencies": {
+    "pinia": "^3.0.1",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@vitejs/plugin-vue": "^5.2.3",
+    "@vue/eslint-config-typescript": "^14.5.0",
+    "@vue/test-utils": "^2.4.6",
+    "eslint": "^9.22.0",
+    "eslint-plugin-vue": "^10.0.0",
+    "jiti": "^2.4.2",
+    "jsdom": "^26.0.0",
+    "pinia": "^3.0.1",
+    "typescript": "~5.8.2",
+    "typescript-eslint": "^8.26.0",
+    "vite": "^6.2.1",
+    "vitest": "^3.1.0",
+    "vue": "^3.5.13",
+    "vue-tsc": "^2.2.8"
+  }
+}

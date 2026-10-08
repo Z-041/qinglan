@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import AnnouncementModal from '@/components/AnnouncementModal.vue'
 import AppHeader from '@/components/AppHeader.vue'
@@ -18,8 +18,26 @@ const { unreadCount } = storeToRefs(notificationStore)
 const { refreshUnread } = useNotifications()
 const { refreshPending, reset: resetAnnouncements, clearSkippedAnnouncements } = useAnnouncement()
 const route = useRoute()
+const router = useRouter()
 
 const authenticated = computed(() => userStore.isAuthenticated)
+
+/**
+ * 前台退出登录。
+ *
+ * 必须显式导航：路由守卫只在**导航时**运行，只清登录态而不跳转的话，用户会停在一个
+ * 已经不可用的页面上——`/profile` 会只剩标题（档案已清空，三个分支都不命中），
+ * `/publish` 会停在一张提交不了的表单上。管理端退出是有跳转的，两边行为必须一致。
+ *
+ * 去向分两种：需要认证的页面回首页；游客本就能浏览的页面（首页、详情）留在原地，
+ * 由 `authenticated` 驱动自动切成游客态，不打断浏览。
+ */
+function handleSignOut(): void {
+  userStore.signOut()
+  if (route.meta.requiresAuth) {
+    void router.replace('/')
+  }
+}
 
 /**
  * 管理端（/admin 子树）自带 AdminLayout：PC 满宽、自带侧边栏，
@@ -84,7 +102,7 @@ watch(
       :role="profile?.role ?? null"
       :wide="fullWidth"
       :unread-count="unreadCount"
-      @sign-out="userStore.signOut()"
+      @sign-out="handleSignOut"
     />
 
     <main :class="fullWidth ? 'flex-1' : 'ql-container flex-1 py-10 max-sm:py-6'">

@@ -8,15 +8,12 @@ import BaseInput from '@/components/base/BaseInput.vue'
 import FormField from '@/components/base/FormField.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useCodeCooldown } from '@/composables/useCodeCooldown'
-import { pushToast } from '@/composables/useToast'
+import { pushToast } from '@shared/composables/useToast'
 import { useUserStore } from '@/stores/user'
-import type { UserRole } from '@/types/user'
+import { isAdminRole } from '@shared/types/user'
 
 /** 与后端 qinglan.auth.code-ttl 默认值保持一致，仅用于文案提示 */
 const CODE_TTL_MINUTES = 5
-
-/** 管理后台的准入角色（spec D3：REVIEWER 本轮不放行） */
-const ADMIN_ROLES: UserRole[] = ['ADMIN', 'SUPER_ADMIN']
 
 const router = useRouter()
 const route = useRoute()
@@ -70,7 +67,7 @@ async function handleVerify(): Promise<void> {
     pushToast('该邮箱尚未绑定学号，无法登录管理后台', 'error')
     return
   }
-  if (!userStore.profile || !ADMIN_ROLES.includes(userStore.profile.role)) {
+  if (!isAdminRole(userStore.profile?.role)) {
     // 学生账号可能被用来试后台：必须清干净登录态，不能把令牌留在本地
     userStore.signOut()
     pushToast('该账号没有管理后台权限', 'error')

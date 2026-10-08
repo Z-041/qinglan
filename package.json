@@ -1,0 +1,14 @@
+{
+  "name": "qinglan",
+  "version": "0.1.0",
+  "private": true,
+  "description": "青栏 Qinglan —— 校园匿名社区（前端 monorepo 根）",
+  "scripts": {
+    "dev:web": "pnpm --filter qinglan-web dev",
+    "dev:admin": "pnpm --filter qinglan-admin dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  }
+}

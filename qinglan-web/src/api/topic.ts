@@ -1,4 +1,4 @@
-import { httpGet } from './http'
+import { httpGet } from '@shared/api/http'
 
 import type { Topic } from '@/types/post'
 

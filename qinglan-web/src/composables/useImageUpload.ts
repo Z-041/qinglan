@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 
 import { uploadImage } from '@/api/upload'
-import { pushToast } from '@/composables/useToast'
+import { pushToast } from '@shared/composables/useToast'
 
 /** 与后端 qinglan.post.max-images-per-post 保持一致 */
 export const MAX_IMAGES_PER_POST = 9

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { uploadImage } from '@/api/upload'
 import { MAX_IMAGES_PER_POST, useImageUpload } from '@/composables/useImageUpload'
-import { useToast } from '@/composables/useToast'
+import { useToast } from '@shared/composables/useToast'
 
 vi.mock('@/api/upload', () => ({
   uploadImage: vi.fn(),

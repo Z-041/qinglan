@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { fetchPendingAnnouncement, markAnnouncementRead } from '@/api/announcement'
-import { ApiError } from '@/api/http'
+import { ApiError } from '@shared/api/http'
 import { DEVICE_ID_STORAGE_KEY, useAnnouncement } from '@/composables/useAnnouncement'
 import type { PendingAnnouncement } from '@/types/announcement'
 

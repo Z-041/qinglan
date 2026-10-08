@@ -1,5 +1,5 @@
 import type { AnnouncementLevel } from './announcement'
-import type { UserProfile, UserRole, UserStatus } from './user'
+import type { UserProfile, UserRole, UserStatus } from '@shared/types/user'
 
 /**
  * 公告等级直接复用学生端公告的类型（单一来源），管理端不再另造同枚举。

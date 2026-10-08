@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { deleteComment, fetchComments } from '@/api/comment'
-import { setAuthToken } from '@/api/http'
+import { setAuthToken } from '@shared/api/http'
 import { fetchPostDetail } from '@/api/post'
 import { useUserStore } from '@/stores/user'
 import PostDetailView from '@/views/PostDetailView.vue'

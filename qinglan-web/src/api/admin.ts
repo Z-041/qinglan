@@ -1,4 +1,4 @@
-import { httpGet, httpPost } from './http'
+import { httpGet, httpPost } from '@shared/api/http'
 
 import type {
   AdminAnnouncementItem,
@@ -8,9 +8,9 @@ import type {
   CreateAnnouncementPayload,
   CreditAdjustPayload,
 } from '@/types/admin'
-import type { CursorPage } from '@/types/api'
+import type { CursorPage } from '@shared/types/api'
 import type { ReasonPayload } from '@/types/review'
-import type { UserProfile } from '@/types/user'
+import type { UserProfile } from '@shared/types/user'
 
 /**
  * 只把非空字段交给 axios（null / undefined 会被 axios 序列化时忽略，见 http.ts）。
