@@ -7,7 +7,7 @@ import type {
   SendCodeResult,
   VerifyEmailPayload,
   VerifyEmailResult,
-} from '@/types/auth'
+} from '@shared/types/auth'
 
 export function sendEmailCode(payload: SendCodePayload): Promise<SendCodeResult> {
   return httpPost<SendCodeResult>('/auth/email/code', payload)

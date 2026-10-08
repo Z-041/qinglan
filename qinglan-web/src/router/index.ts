@@ -1,8 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import { useAuth } from '@/composables/useAuth'
+import { useAuth } from '@shared/composables/useAuth'
 import { pushToast } from '@shared/composables/useToast'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 import { isAdminRole } from '@shared/types/user'
 
 declare module 'vue-router' {

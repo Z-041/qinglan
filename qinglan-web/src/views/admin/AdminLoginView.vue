@@ -6,10 +6,10 @@ import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
 import BaseInput from '@shared/components/base/BaseInput.vue'
 import FormField from '@shared/components/base/FormField.vue'
-import { useAuth } from '@/composables/useAuth'
-import { useCodeCooldown } from '@/composables/useCodeCooldown'
+import { useAuth } from '@shared/composables/useAuth'
+import { useCodeCooldown } from '@shared/composables/useCodeCooldown'
 import { pushToast } from '@shared/composables/useToast'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 import { isAdminRole } from '@shared/types/user'
 
 /** 与后端 qinglan.auth.code-ttl 默认值保持一致，仅用于文案提示 */

@@ -9,7 +9,7 @@ import ToastHost from '@shared/components/ToastHost.vue'
 import { useAnnouncement } from '@/composables/useAnnouncement'
 import { useNotifications } from '@/composables/useNotifications'
 import { useNotificationStore } from '@/stores/notification'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 
 const userStore = useUserStore()
 const { profile } = storeToRefs(userStore)

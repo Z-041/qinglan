@@ -2,10 +2,10 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { sendEmailCode, verifyEmail } from '@/api/auth'
+import { sendEmailCode, verifyEmail } from '@shared/api/auth'
 import { setAuthToken, TOKEN_STORAGE_KEY } from '@shared/api/http'
 import { useToast } from '@shared/composables/useToast'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 import LoginView from '@/views/LoginView.vue'
 import type { UserProfile } from '@shared/types/user'
 
@@ -14,7 +14,7 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
 }))
 
-vi.mock('@/api/auth', () => ({
+vi.mock('@shared/api/auth', () => ({
   sendEmailCode: vi.fn(),
   verifyEmail: vi.fn(),
   bindStudentId: vi.fn(),

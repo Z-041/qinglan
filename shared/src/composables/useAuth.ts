@@ -1,9 +1,9 @@
 import { ref } from 'vue'
 
-import { bindStudentId, sendEmailCode, verifyEmail } from '@/api/auth'
-import { fetchCurrentUser } from '@/api/user'
+import { bindStudentId, sendEmailCode, verifyEmail } from '@shared/api/auth'
+import { fetchCurrentUser } from '@shared/api/user'
 import { pushToast } from '@shared/composables/useToast'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 
 /**
  * 认证流程编排：邮箱验证码 → 校验 → （新用户）绑定学号。

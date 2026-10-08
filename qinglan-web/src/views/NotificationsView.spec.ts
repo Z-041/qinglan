@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { fetchNotifications, fetchUnreadCount } from '@/api/notification'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 import NotificationsView from '@/views/NotificationsView.vue'
 import type { NotificationItem } from '@/types/notification'
 

@@ -11,7 +11,7 @@ import { usePostDetail } from '@/composables/usePostDetail'
 import { useReport } from '@/composables/useReport'
 import { useToast } from '@shared/composables/useToast'
 import { useUserLabels } from '@/composables/useUserLabels'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 import type { Comment } from '@/types/comment'
 import type { ReportReason } from '@/types/review'
 

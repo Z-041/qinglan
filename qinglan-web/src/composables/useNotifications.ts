@@ -7,7 +7,7 @@ import {
   markNotificationRead,
 } from '@/api/notification'
 import { useNotificationStore } from '@/stores/notification'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 import type { NotificationItem } from '@/types/notification'
 
 /**

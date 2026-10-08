@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 import ProfileView from '@/views/ProfileView.vue'
 
 /** ProfileView 的右栏入口卡与空态卡都是 RouterLink，用桩替换以免引入路由实例 */

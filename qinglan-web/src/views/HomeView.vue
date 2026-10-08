@@ -7,7 +7,7 @@ import HomeSidebar from '@/components/HomeSidebar.vue'
 import PostCard from '@/components/PostCard.vue'
 import TopicFilter from '@/components/TopicFilter.vue'
 import { useFeed } from '@/composables/useFeed'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 import type { Topic } from '@/types/post'
 
 const userStore = useUserStore()

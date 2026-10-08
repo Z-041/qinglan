@@ -10,7 +10,7 @@ import {
 } from '@/api/notification'
 import { useNotifications } from '@/composables/useNotifications'
 import { useNotificationStore } from '@/stores/notification'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 import type { NotificationItem } from '@/types/notification'
 
 // 工厂必须覆盖 useNotifications 从该模块导入的全部符号

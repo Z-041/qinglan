@@ -9,7 +9,7 @@ import App from './App.vue'
 import { setPreconditionRequiredHandler, setUnauthorizedHandler } from '@shared/api/http'
 import { openFromPrecondition } from './composables/useAnnouncement'
 import router from './router'
-import { useUserStore } from './stores/user'
+import { useUserStore } from '@shared/stores/user'
 import type { PendingAnnouncement } from './types/announcement'
 
 const pinia = createPinia()

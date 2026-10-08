@@ -10,7 +10,7 @@ import {
 import AnnouncementFormDialog from '@/components/admin/AnnouncementFormDialog.vue'
 import AnnouncementTable from '@/components/admin/AnnouncementTable.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 import type { AdminAnnouncementItem, CreateAnnouncementPayload } from '@/types/admin'
 
 const userStore = useUserStore()

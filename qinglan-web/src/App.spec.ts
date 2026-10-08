@@ -5,7 +5,7 @@ import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 
 import App from '@/App.vue'
 import { setAuthToken } from '@shared/api/http'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 import type { UserProfile } from '@shared/types/user'
 
 // App 挂载即会拉待读公告与未读计数；这两处不是本用例关注点，给桩避免真发请求

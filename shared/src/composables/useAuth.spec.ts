@@ -1,19 +1,19 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { bindStudentId, sendEmailCode, verifyEmail } from '@/api/auth'
-import { useAuth } from '@/composables/useAuth'
+import { bindStudentId, sendEmailCode, verifyEmail } from '@shared/api/auth'
+import { useAuth } from '@shared/composables/useAuth'
 import { TOKEN_STORAGE_KEY } from '@shared/api/http'
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@shared/stores/user'
 import type { UserProfile } from '@shared/types/user'
 
-vi.mock('@/api/auth', () => ({
+vi.mock('@shared/api/auth', () => ({
   sendEmailCode: vi.fn(),
   verifyEmail: vi.fn(),
   bindStudentId: vi.fn(),
 }))
 
-vi.mock('@/api/user', () => ({
+vi.mock('@shared/api/user', () => ({
   fetchCurrentUser: vi.fn(),
 }))
 
