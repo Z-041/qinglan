@@ -51,7 +51,7 @@ describe('useFeed', () => {
     const feed = useFeed()
     await feed.load(null)
 
-    expect(mockedFetchPosts).toHaveBeenCalledWith({ topic: null, sort: 'latest' })
+    expect(mockedFetchPosts).toHaveBeenCalledWith({ topic: null, sort: 'latest', cursor: null })
     expect(feed.posts.value.map((item) => item.id)).toEqual([9, 8])
     expect(feed.hasMore.value).toBe(true)
     expect(feed.loading.value).toBe(false)
@@ -91,7 +91,7 @@ describe('useFeed', () => {
     await feed.load(null)
     await feed.load(3)
 
-    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: 3, sort: 'latest' })
+    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: 3, sort: 'latest', cursor: null })
     expect(feed.topicId.value).toBe(3)
     expect(feed.posts.value.map((item) => item.id)).toEqual([1])
   })
@@ -106,7 +106,7 @@ describe('useFeed', () => {
 
     await feed.setSort('hot')
 
-    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: 3, sort: 'hot' })
+    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: 3, sort: 'hot', cursor: null })
     expect(feed.sort.value).toBe('hot')
     expect(feed.posts.value.map((item) => item.id)).toEqual([5])
   })

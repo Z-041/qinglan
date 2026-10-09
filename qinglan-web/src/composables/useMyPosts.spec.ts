@@ -36,7 +36,7 @@ describe('useMyPosts', () => {
     const state = useMyPosts()
     await state.load()
 
-    expect(mockedFetchMyPosts).toHaveBeenCalledWith({})
+    expect(mockedFetchMyPosts).toHaveBeenCalledWith({ cursor: null })
     expect(state.items.value.map((i) => i.id)).toEqual([9, 8])
     expect(state.hasMore.value).toBe(true)
     expect(state.loading.value).toBe(false)

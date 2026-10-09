@@ -94,13 +94,13 @@ describe('HomeView', () => {
     await wrapper.findAll('button').find((b) => b.text() === '热门')?.trigger('click')
     await flushPromises()
 
-    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: null, sort: 'hot' })
+    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: null, sort: 'hot', cursor: null })
     expect(wrapper.text()).toContain('第 9 条')
 
     await wrapper.findAll('button').find((b) => b.text() === '最新')?.trigger('click')
     await flushPromises()
 
-    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: null, sort: 'latest' })
+    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: null, sort: 'latest', cursor: null })
   })
 
   it('空列表不渲染任何卡片，只渲染空态', async () => {
@@ -146,7 +146,7 @@ describe('HomeView', () => {
     await chip?.trigger('click')
     await flushPromises()
 
-    expect(mockedFetchPosts).toHaveBeenCalledWith({ topic: 3, sort: 'latest' })
+    expect(mockedFetchPosts).toHaveBeenCalledWith({ topic: 3, sort: 'latest', cursor: null })
     expect(wrapper.text()).toContain('第 9 条')
     expect(wrapper.text()).not.toContain('第 1 条')
   })
