@@ -7,6 +7,7 @@ import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import { useAppealQueue } from '@/composables/useAppealQueue'
 import { useDispositionFinisher } from '@/composables/useDispositionFinisher'
+import { usePermissions } from '@/composables/usePermissions'
 import { useQueuePolling } from '@/composables/useQueuePolling'
 import { useQueueShortcuts, type QueueShortcut } from '@/composables/useQueueShortcuts'
 import { useReviewActions } from '@/composables/useReviewActions'
@@ -45,6 +46,9 @@ const {
 )
 
 const shortcuts = useQueueShortcuts<AppealAction>(SHORTCUTS)
+
+/** 与快捷键同口径：无 APPEAL_REVIEW 则「复审」按钮不渲染（AGENTS.md 第九章） */
+const { can } = usePermissions()
 
 const busy = computed(() => submitting.value || dialogOpen.value)
 
@@ -145,6 +149,7 @@ async function handleSubmit(approved: boolean, reason: string): Promise<void> {
         :loading="loading"
         :failed="failed"
         :active-key="activeKey"
+        :can-review="can('APPEAL_REVIEW')"
         @review="openReview($event, true)"
       />
 

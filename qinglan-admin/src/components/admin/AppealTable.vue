@@ -9,6 +9,11 @@ const props = defineProps<{
   failed?: boolean
   /** 键盘行焦点所在行的键（appealId 字符串）；用于高亮当前处置目标 */
   activeKey?: string | null
+  /**
+   * 是否可发起复审（`APPEAL_REVIEW`）。不传即视为无权限——**默认安全**：
+   * 漏传时表现为「按钮不出现」，而不是「任何人都能点」。真正的防线仍是后端注解。
+   */
+  canReview?: boolean
 }>()
 
 const emit = defineEmits<{ review: [item: AdminAppealItem] }>()
@@ -53,6 +58,7 @@ function takenDownText(reason: string | null): string {
         </td>
         <td class="px-3 py-3">
           <button
+            v-if="props.canReview"
             type="button"
             class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-primary hover:text-primary-deep"
             @click="emit('review', row)"

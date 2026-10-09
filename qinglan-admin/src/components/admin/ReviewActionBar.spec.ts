@@ -1,7 +1,9 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import ReviewActionBar from '@/components/admin/ReviewActionBar.vue'
+import { usePermissions } from '@/composables/usePermissions'
+import type { AdminPermission } from '@/types/permission'
 import type { ReviewTargetType } from '@shared/types/review-common'
 
 function mountBar(
@@ -25,6 +27,23 @@ function labels(targetType: ReviewTargetType, targetStatus: string): string[] {
 }
 
 describe('ReviewActionBar', () => {
+  /** 按钮已按权限点过滤：先授予全部相关权限，让「按状态给哪些动作」的用例聚焦动作集合 */
+  const ALL_PERMISSIONS: AdminPermission[] = [
+    'POST_REVIEW',
+    'PROPOSAL_CREATE',
+    'REPORT_DISMISS',
+    'DISPOSITION_REVOKE',
+  ]
+
+  beforeEach(() => {
+    usePermissions().permissions.value = [...ALL_PERMISSIONS]
+  })
+
+  afterEach(() => {
+    // usePermissions 是模块级单例，测试之间不会自动复位
+    usePermissions().reset()
+  })
+
   it('评论只给「移除评论 / 举报不成立」，不出现帖子类动作', () => {
     expect(labels('COMMENT', 'PENDING')).toEqual(['移除评论', '举报不成立'])
   })
@@ -147,5 +166,12 @@ describe('ReviewActionBar', () => {
 
     expect(result).not.toContain('恢复可见')
     expect(result).not.toContain('恢复联系方式')
+  })
+
+  it('未获某动作的权限点时不渲染该按钮（与快捷键同口径；默认安全）', () => {
+    // 只有「举报不成立」的权限：通过 / 驳回 / 下架 / 隐藏联系方式 等一律不出现
+    usePermissions().permissions.value = ['REPORT_DISMISS']
+
+    expect(labels('POST', 'PENDING')).toEqual(['举报不成立'])
   })
 })

@@ -7,6 +7,7 @@ import ReviewContextPanel from '@/components/admin/ReviewContextPanel.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import { useDispositionFinisher } from '@/composables/useDispositionFinisher'
 import { usePendingPostQueue } from '@/composables/usePendingPostQueue'
+import { usePermissions } from '@/composables/usePermissions'
 import { useQueuePolling } from '@/composables/useQueuePolling'
 import { useQueueShortcuts, type QueueShortcut } from '@/composables/useQueueShortcuts'
 import { useReviewActions } from '@/composables/useReviewActions'
@@ -53,6 +54,8 @@ const {
 )
 
 const shortcuts = useQueueShortcuts<PendingAction>(SHORTCUTS)
+
+const { can } = usePermissions()
 
 const busy = computed(() => submitting.value || reasonPromptOpen.value)
 
@@ -208,8 +211,9 @@ async function handleReject(): Promise<void> {
       :failed="contextFailed"
     >
       <!-- 只用「通过 / 驳回」两个动作，因此不挂 ReviewActionBar：那条处置栏还会给出
-           「下架 / 隐藏联系方式 / 举报不成立」，而待审帖从未对外可见，下架会触发非法状态迁移 -->
-      <div v-if="context" class="flex flex-wrap gap-2">
+           「下架 / 隐藏联系方式 / 举报不成立」，而待审帖从未对外可见，下架会触发非法状态迁移。
+           与快捷键同口径：无 POST_REVIEW 则不渲染（AGENTS.md 第九章） -->
+      <div v-if="context && can('POST_REVIEW')" class="flex flex-wrap gap-2">
         <BaseButton variant="primary" size="sm" :disabled="submitting" :loading="submitting" @click="handleApprove">
           通过
         </BaseButton>

@@ -28,3 +28,10 @@ export const ADMIN_ROLES: UserRole[] = ['ADMIN', 'SUPER_ADMIN']
 export function isAdminRole(role: UserRole | null | undefined): boolean {
   return role != null && ADMIN_ROLES.includes(role)
 }
+
+/**
+ * 全部角色（枚举取值清单），供「列出所有角色」的场景（如用户管理的筛选下拉）使用。
+ *
+ * <p>与 {@link UserRole} 联合类型同源：新增角色时改这里一处即可，避免各页面各抄一份而漏掉新角色。</p>
+ */
+export const ALL_ROLES: readonly UserRole[] = ['STUDENT', 'REVIEWER', 'ADMIN', 'SUPER_ADMIN']

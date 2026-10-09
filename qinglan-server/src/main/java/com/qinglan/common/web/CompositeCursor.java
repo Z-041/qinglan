@@ -8,7 +8,7 @@ import com.qinglan.common.error.ErrorCode;
  *
  * <p>游标对客户端不透明，只要求原样回传；服务端用它定位「上一页最后一条」。各列表的游标形态不同
  * （微秒时间戳 + id、热门分数 + id、举报数 + 微秒 + id + 类型序…），但「按段拆分 → 段数校验 →
- * 逐段解析 → 逐段取值校验 → 非法即 {@link ErrorCode#CURSOR_INVALID}」这套模板此前在 5 个 Service
+ * 逐段解析 → 逐段取值校验 → 非法即 {@link ErrorCode#CURSOR_INVALID}」这套模板此前在多个 Service
  * 里各写一遍，且各存一套分隔符 / 段数常量。这里按**键规格**收敛成一份。</p>
  *
  * <p>本类只做「解析 / 格式化 / 校验」，<b>不决定首页语义</b>：无游标（首页）各列表的默认值不同

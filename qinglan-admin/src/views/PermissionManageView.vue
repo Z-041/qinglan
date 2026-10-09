@@ -72,7 +72,7 @@ async function submitChange(userId: number, role: AssignableRole, title: string)
   // 失败（名额已满 / 不可动超管 / 不能改自己）已由拦截器提示
   return run(async () => {
     await changeUserRole(userId, { role, reason })
-    pushToast(role === 'STUDENT' ? '已收回管理权限' : '已下放权限', 'info')
+    pushToast(isCommitteeRole(role) ? '已下放权限' : '已收回管理权限', 'info')
     await load()
   })
 }

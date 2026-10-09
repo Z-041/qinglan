@@ -8,6 +8,8 @@ import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.security.AdminPermission;
 import com.qinglan.common.web.CsvWriter;
+import com.qinglan.common.web.CompositeCursor;
+import com.qinglan.common.web.CompositeCursor.KeyKind;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.user.dto.AdminMeResponse;
@@ -51,9 +53,6 @@ public class UserService {
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
     private static final int ANONYMOUS_SALT_BYTES = 16;
     private static final int DEFAULT_PAGE_SIZE = 20;
-    private static final String KEY_SEPARATOR = ":";
-    /** 游标段数：注册微秒 : 用户 id */
-    private static final int CURSOR_SEGMENTS = 2;
     /** 委员会成员的角色集合（参与表决的人）：上限与名单查询都用它 */
     private static final List<UserRole> COMMITTEE_ROLES = List.of(UserRole.ADMIN, UserRole.REVIEWER);
     /** 导出动作写入审计时 target_id 的哨兵值（导出没有单一目标实体） */
@@ -360,19 +359,12 @@ public class UserService {
         if (raw == null || raw.isBlank()) {
             return new AdminUserCursor(null, null);
         }
-        String[] parts = raw.split(KEY_SEPARATOR);
-        if (parts.length != CURSOR_SEGMENTS) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
-        try {
-            return new AdminUserCursor(CursorCodec.decode(Long.parseLong(parts[0])), Long.parseLong(parts[1]));
-        } catch (NumberFormatException ex) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
+        long[] key = CompositeCursor.parse(raw, KeyKind.MICROS, KeyKind.POSITIVE_LONG);
+        return new AdminUserCursor(CursorCodec.decode(key[0]), key[1]);
     }
 
     private String formatCursor(User last) {
-        return CursorCodec.encode(last.getCreatedAt()) + KEY_SEPARATOR + last.getId();
+        return CompositeCursor.format(CursorCodec.encode(last.getCreatedAt()), last.getId());
     }
 
     /** 用户列表游标：与 {@code UserRepository#findAdminPage} 的排序键逐一对应 */

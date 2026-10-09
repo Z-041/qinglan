@@ -10,7 +10,7 @@ import { exportAdminUsers } from '@/api/admin'
 import { useCsvExport } from '@/composables/useCsvExport'
 import { toQuery, useUserManage } from '@/composables/useUserManage'
 import type { AdminUserItem } from '@/types/admin'
-import type { UserRole, UserStatus } from '@shared/types/user'
+import { ALL_ROLES, type UserStatus } from '@shared/types/user'
 
 const {
   filters,
@@ -32,7 +32,7 @@ const {
 const { roleLabel, statusLabel } = useUserLabels()
 
 const STATUSES: UserStatus[] = ['ACTIVE', 'BANNED', 'BLACKLISTED']
-const ROLES: UserRole[] = ['STUDENT', 'REVIEWER', 'ADMIN', 'SUPER_ADMIN']
+const ROLES = ALL_ROLES
 
 /** 当前被操作的行；对话框/确认框只认它，不额外存 id */
 const selected = ref<AdminUserItem | null>(null)

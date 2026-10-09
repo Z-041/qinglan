@@ -8,6 +8,8 @@ import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.web.CsvWriter;
+import com.qinglan.common.web.CompositeCursor;
+import com.qinglan.common.web.CompositeCursor.KeyKind;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.review.dto.AdminAuditLogItemResponse;
@@ -36,9 +38,6 @@ import java.util.List;
 public class AuditLogQueryService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
-    private static final String KEY_SEPARATOR = ":";
-    /** 游标段数：审计微秒 : 日志 id */
-    private static final int CURSOR_SEGMENTS = 2;
 
     /** 导出审计动作时 {@code review_log.target_id} 的哨兵值（导出没有单一目标实体） */
     private static final long EXPORT_TARGET_ID = 0L;
@@ -138,24 +137,12 @@ public class AuditLogQueryService {
         if (raw == null || raw.isBlank()) {
             return new AuditLogCursor(null, null);
         }
-        String[] parts = raw.split(KEY_SEPARATOR);
-        if (parts.length != CURSOR_SEGMENTS) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
-        try {
-            long micros = Long.parseLong(parts[0]);
-            long id = Long.parseLong(parts[1]);
-            if (micros <= 0 || id <= 0) {
-                throw new NumberFormatException("游标各段不合法");
-            }
-            return new AuditLogCursor(CursorCodec.decode(micros), id);
-        } catch (NumberFormatException ex) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
+        long[] key = CompositeCursor.parse(raw, KeyKind.MICROS, KeyKind.POSITIVE_LONG);
+        return new AuditLogCursor(CursorCodec.decode(key[0]), key[1]);
     }
 
     private String formatCursor(AuditLog log) {
-        return CursorCodec.encode(log.getCreatedAt()) + KEY_SEPARATOR + log.getId();
+        return CompositeCursor.format(CursorCodec.encode(log.getCreatedAt()), log.getId());
     }
 
     /** 审计查询游标：与 {@link AuditLogRepository#findAdminPage} 的排序键逐一对应 */

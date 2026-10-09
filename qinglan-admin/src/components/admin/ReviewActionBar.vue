@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import type { ReviewTargetType } from '@shared/types/review-common'
 import { availableReviewActions, blockedByOpenProposal } from '@/composables/reviewActionSet'
+import { usePermissions } from '@/composables/usePermissions'
 import type { ReviewAction } from '@/types/review'
 
 const props = defineProps<{
@@ -25,6 +26,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ action: [action: ReviewAction] }>()
+
+const { can } = usePermissions()
 
 /**
  * 本次点击触发的动作。
@@ -48,15 +51,19 @@ watch(
 )
 
 /**
- * 可执行动作集合。判定逻辑下沉到 `reviewActionSet`，与队列页的快捷键绑定共用同一份——
- * 否则「按钮不给的动作，快捷键却能按」这类不一致迟早出现。
+ * 可执行动作集合：先按目标类型 / 状态取候选，再按**权限点**过滤。
+ *
+ * <p>判定逻辑下沉到 `reviewActionSet`，且与队列页的快捷键绑定共用同一份
+ * （`useQueueShortcuts` 也按 `permission` 过滤）——否则会出现「按钮能点、快捷键却不出现」
+ * 这类口径不一致（AGENTS.md 第九章：同一动作的按钮与快捷键必须同一口径）。
+ * 未加载权限时 `can` 恒 false，表现为「一个按钮都不出现」，即默认安全。</p>
  */
 const actions = computed(() =>
   availableReviewActions({
     targetType: props.targetType,
     targetStatus: props.targetStatus,
     canRevoke: props.canRevoke === true,
-  }),
+  }).filter((action) => can(action.permission)),
 )
 </script>
 

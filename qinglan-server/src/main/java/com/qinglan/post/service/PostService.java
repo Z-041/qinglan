@@ -196,7 +196,7 @@ public class PostService {
         }
         List<Long> postIds = page.stream().map(Post::getId).toList();
         Map<Long, Long> likeCounts = loadLikeCounts(LikeTargetType.POST, postIds);
-        String nextCursor = hasMore ? page.get(page.size() - 1).getId().toString() : null;
+        String nextCursor = hasMore ? CompositeCursor.format(page.get(page.size() - 1).getId()) : null;
         return CursorPage.of(assembleSummaries(page, likeCounts, viewer), nextCursor);
     }
 

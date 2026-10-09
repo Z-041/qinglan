@@ -6,6 +6,8 @@ import com.qinglan.common.notify.NotificationMessage;
 import com.qinglan.common.notify.NotificationPort;
 import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.store.EphemeralStore;
+import com.qinglan.common.web.CompositeCursor;
+import com.qinglan.common.web.CompositeCursor.KeyKind;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.notification.dto.NotificationItemResponse;
 import com.qinglan.notification.entity.Notification;
@@ -109,7 +111,7 @@ public class NotificationService implements NotificationPort {
             return CursorPage.empty();
         }
         List<NotificationItemResponse> items = page.stream().map(NotificationService::toItem).toList();
-        String nextCursor = hasMore ? page.get(page.size() - 1).getId().toString() : null;
+        String nextCursor = hasMore ? CompositeCursor.format(page.get(page.size() - 1).getId()) : null;
         return CursorPage.of(items, nextCursor);
     }
 
@@ -158,14 +160,6 @@ public class NotificationService implements NotificationPort {
     }
 
     private static long parseCursor(String raw) {
-        try {
-            long cursor = Long.parseLong(raw.trim());
-            if (cursor <= 0) {
-                throw new NumberFormatException("游标必须为正整数");
-            }
-            return cursor;
-        } catch (NumberFormatException ex) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
+        return CompositeCursor.parse(raw, KeyKind.POSITIVE_LONG)[0];
     }
 }

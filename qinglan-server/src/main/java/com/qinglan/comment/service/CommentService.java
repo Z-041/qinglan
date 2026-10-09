@@ -21,6 +21,8 @@ import com.qinglan.common.notify.NotificationMessage;
 import com.qinglan.common.notify.NotificationPort;
 import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
+import com.qinglan.common.web.CompositeCursor;
+import com.qinglan.common.web.CompositeCursor.KeyKind;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.common.web.TextPreview;
@@ -63,9 +65,6 @@ public class CommentService {
     private static final int NOTIFICATION_BODY_LENGTH = 50;
     /** 一级评论每页条数；回复随所属一级评论整页带出，不单独分页 */
     private static final int DEFAULT_PAGE_SIZE = 20;
-    private static final String KEY_SEPARATOR = ":";
-    /** 评论列表游标段数：评论微秒 : 评论 id */
-    private static final int CURSOR_SEGMENTS = 2;
 
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
@@ -305,24 +304,12 @@ public class CommentService {
         if (raw == null || raw.isBlank()) {
             return new CommentCursor(null, null);
         }
-        String[] parts = raw.split(KEY_SEPARATOR);
-        if (parts.length != CURSOR_SEGMENTS) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
-        try {
-            long micros = Long.parseLong(parts[0]);
-            long id = Long.parseLong(parts[1]);
-            if (micros <= 0 || id <= 0) {
-                throw new NumberFormatException("游标各段不合法");
-            }
-            return new CommentCursor(CursorCodec.decode(micros), id);
-        } catch (NumberFormatException ex) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
+        long[] key = CompositeCursor.parse(raw, KeyKind.MICROS, KeyKind.POSITIVE_LONG);
+        return new CommentCursor(CursorCodec.decode(key[0]), key[1]);
     }
 
     private String formatCursor(Comment comment) {
-        return CursorCodec.encode(comment.getCreatedAt()) + KEY_SEPARATOR + comment.getId();
+        return CompositeCursor.format(CursorCodec.encode(comment.getCreatedAt()), comment.getId());
     }
 
     /** 评论列表游标：与 {@code CommentRepository#findRootPage} 的排序键逐一对应 */

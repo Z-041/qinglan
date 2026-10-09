@@ -17,6 +17,8 @@ import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.store.EphemeralStore;
+import com.qinglan.common.web.CompositeCursor;
+import com.qinglan.common.web.CompositeCursor.KeyKind;
 import com.qinglan.common.web.CursorPage;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -252,7 +254,7 @@ public class AnnouncementService {
         List<AnnouncementSummaryResponse> items = page.stream()
                 .map(announcement -> toSummary(announcement, readIds.contains(announcement.getId())))
                 .toList();
-        String nextCursor = hasMore ? page.get(page.size() - 1).getId().toString() : null;
+        String nextCursor = hasMore ? CompositeCursor.format(page.get(page.size() - 1).getId()) : null;
         return CursorPage.of(items, nextCursor);
     }
 
@@ -268,7 +270,7 @@ public class AnnouncementService {
             return CursorPage.empty();
         }
         List<AdminAnnouncementItemResponse> items = page.stream().map(this::toAdminItem).toList();
-        String nextCursor = hasMore ? page.get(page.size() - 1).getId().toString() : null;
+        String nextCursor = hasMore ? CompositeCursor.format(page.get(page.size() - 1).getId()) : null;
         return CursorPage.of(items, nextCursor);
     }
 
@@ -368,14 +370,6 @@ public class AnnouncementService {
             // 首页游标取 Long.MAX_VALUE，省掉 SQL 里的 null 分支
             return Long.MAX_VALUE;
         }
-        try {
-            long cursor = Long.parseLong(raw.trim());
-            if (cursor <= 0) {
-                throw new NumberFormatException("游标必须为正整数");
-            }
-            return cursor;
-        } catch (NumberFormatException ex) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
+        return CompositeCursor.parse(raw, KeyKind.POSITIVE_LONG)[0];
     }
 }
