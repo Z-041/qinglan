@@ -9,6 +9,7 @@ import com.qinglan.common.store.InMemoryEphemeralStore;
 import com.qinglan.post.config.UploadProperties;
 import com.qinglan.post.dto.UploadedImageResponse;
 import com.qinglan.post.entity.UploadedFile;
+import com.qinglan.post.repository.PostRepository;
 import com.qinglan.post.repository.UploadedFileRepository;
 import com.qinglan.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,6 +57,9 @@ class ImageUploadServiceTest {
     @Mock
     private UploadedFileRepository uploadedFileRepository;
 
+    @Mock
+    private PostRepository postRepository;
+
     private ImageUploadService imageUploadService;
 
     @BeforeEach
@@ -66,8 +70,10 @@ class ImageUploadServiceTest {
         ImageUrlSigner signer = new ImageUrlSigner(
                 new StorageProperties(null, null, null, "unit-test-image-signing-secret", null),
                 new MockEnvironment());
+        // 上传只走 forUpload（不查库），仓储仅用于满足接口装配
+        ImageAccessService imageAccessService = new ImageAccessService(signer, uploadedFileRepository, postRepository);
         imageUploadService = new ImageUploadService(
-                storageService, signer, userService, new InMemoryEphemeralStore(), uploadProperties,
+                storageService, imageAccessService, userService, new InMemoryEphemeralStore(), uploadProperties,
                 uploadedFileRepository);
     }
 

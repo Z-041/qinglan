@@ -11,7 +11,7 @@ import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.post.repository.UploadedFileRepository;
-import com.qinglan.post.service.ImageUrlAssembler;
+import com.qinglan.post.service.ImageAccessService;
 import com.qinglan.review.dto.PendingPostItemResponse;
 import com.qinglan.support.TestFixtures;
 import org.junit.jupiter.api.BeforeEach;
@@ -81,8 +81,8 @@ class PendingPostQueueServiceTest {
                 new StorageProperties(null, null, null, "unit-test-image-signing-secret", null),
                 new MockEnvironment());
         // forPost 只用签名器，装配时不会触碰上传仓储
-        ImageUrlAssembler assembler = new ImageUrlAssembler(signer, uploadedFileRepository, postRepository);
-        pendingPostQueueService = new PendingPostQueueService(postRepository, postImageRepository, assembler);
+        ImageAccessService imageAccessService = new ImageAccessService(signer, uploadedFileRepository, postRepository);
+        pendingPostQueueService = new PendingPostQueueService(postRepository, postImageRepository, imageAccessService);
     }
 
     @Test

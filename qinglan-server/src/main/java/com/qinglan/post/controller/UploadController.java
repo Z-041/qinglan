@@ -5,8 +5,8 @@ import com.qinglan.common.web.ApiResponse;
 import com.qinglan.post.dto.ImageUrlRefreshItem;
 import com.qinglan.post.dto.ImageUrlRefreshRequest;
 import com.qinglan.post.dto.UploadedImageResponse;
+import com.qinglan.post.service.ImageAccessService;
 import com.qinglan.post.service.ImageUploadService;
-import com.qinglan.post.service.ImageUrlAssembler;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,7 +29,7 @@ import java.util.List;
 public class UploadController {
 
     private final ImageUploadService imageUploadService;
-    private final ImageUrlAssembler imageUrlAssembler;
+    private final ImageAccessService imageAccessService;
 
     @PostMapping("/images")
     public ApiResponse<UploadedImageResponse> uploadImage(@RequestParam("file") MultipartFile file) {
@@ -48,6 +48,11 @@ public class UploadController {
     @PostMapping("/image-urls")
     public ApiResponse<List<ImageUrlRefreshItem>> refreshImageUrls(
             @Valid @RequestBody ImageUrlRefreshRequest request) {
-        return ApiResponse.ok(imageUrlAssembler.refresh(request.urls(), CurrentUser.requireUserId()));
+        List<ImageUrlRefreshItem> items = imageAccessService
+                .resolveAll(request.urls(), CurrentUser.requireUserId())
+                .stream()
+                .map(access -> new ImageUrlRefreshItem(access.cleanUrl(), access.readable(), access.usableUrl()))
+                .toList();
+        return ApiResponse.ok(items);
     }
 }

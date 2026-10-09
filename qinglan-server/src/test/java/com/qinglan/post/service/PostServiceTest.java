@@ -141,14 +141,14 @@ class PostServiceTest {
         return new PostService(postRepository, postImageRepository, uploadedFileRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
                 new PostProperties(60, 9, Duration.ofDays(7), 500),
-                ALLOW_ALL, announcementService, notificationPort, store, assembler());
+                ALLOW_ALL, announcementService, notificationPort, store, imageAccess());
     }
 
-    private ImageUrlAssembler assembler() {
+    private ImageAccessService imageAccess() {
         ImageUrlSigner signer = new ImageUrlSigner(
                 new StorageProperties(null, null, null, "unit-test-image-signing-secret", null),
                 new MockEnvironment());
-        return new ImageUrlAssembler(signer, uploadedFileRepository, postRepository);
+        return new ImageAccessService(signer, uploadedFileRepository, postRepository);
     }
 
     /** 已通过、可进信息流的帖子，补一个确定的时间戳（信息流排序依赖它） */
@@ -401,7 +401,7 @@ class PostServiceTest {
                 topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
                 new PostProperties(60, 9, Duration.ofDays(7), 500),
-                blocking, announcementService, notificationPort, ephemeralStore, assembler());
+                blocking, announcementService, notificationPort, ephemeralStore, imageAccess());
 
         assertThatThrownBy(() -> strict.create(AUTHOR_ID, new CreatePostRequest(TOPIC_ID, "正文", null, null)))
                 .isInstanceOf(BizException.class)

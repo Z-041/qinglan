@@ -120,7 +120,12 @@ public class PostService {
     private final AnnouncementService announcementService;
     private final NotificationPort notificationPort;
     private final EphemeralStore ephemeralStore;
-    private final ImageUrlAssembler imageUrlAssembler;
+    private final ImageAccessService imageAccessService;
+
+    /** 装配处只关心「可用的对外地址」；可见性判定与 URL 形态口径全部收在 {@link ImageAccessService}。 */
+    private static List<String> usableUrls(List<ImageAccessService.ImageAccess> accesses) {
+        return accesses.stream().map(ImageAccessService.ImageAccess::usableUrl).toList();
+    }
 
     /**
      * 发布。落 Pending 而非直接可见——主帖先审后发，是设计方案第一章的红线 2。
@@ -155,7 +160,7 @@ public class PostService {
         log.info("用户发布帖子 postId={} topicId={}", saved.getId(), topic.getId());
         // 待审帖图属私有：装配时签发签名 URL，作者在详情页/我的帖子里才能立刻看到自己的图
         return toDetail(saved, topic.getName(), topic.getRules(),
-                imageUrlAssembler.forPost(saved.getStatus(), images.urls()), 0L, false, new Viewer(authorId));
+                usableUrls(imageAccessService.forPost(saved.getStatus(), images.urls())), 0L, false, new Viewer(authorId));
     }
 
     /**
@@ -283,8 +288,8 @@ public class PostService {
                         post.getTopicId(),
                         topicNames.get(post.getTopicId()),
                         post.getContent(),
-                        imageUrlAssembler.forPost(post.getStatus(),
-                                imagesByPost.getOrDefault(post.getId(), List.of())),
+                        usableUrls(imageAccessService.forPost(post.getStatus(),
+                                imagesByPost.getOrDefault(post.getId(), List.of()))),
                         post.getAnonymousCode(),
                         post.getStatus(),
                         post.getReviewReason(),
@@ -326,8 +331,8 @@ public class PostService {
         Post post = requireVisiblePost(postId, viewer.userId());
         Topic topic = topicRepository.findById(post.getTopicId()).orElse(null);
         // 私有帖图（待审/驳回/下架）装配为签名 URL：作者在浏览器里 <img> 不带令牌也能取到
-        List<String> images = imageUrlAssembler.forPost(post.getStatus(),
-                loadImageUrls(List.of(postId)).getOrDefault(postId, List.of()));
+        List<String> images = usableUrls(imageAccessService.forPost(post.getStatus(),
+                loadImageUrls(List.of(postId)).getOrDefault(postId, List.of())));
         long likeCount = likeRepository.countByTargetTypeAndTargetId(LikeTargetType.POST, postId);
         boolean liked = viewer.userId() != null
                 && likeRepository.findByTargetTypeAndTargetIdAndUserId(

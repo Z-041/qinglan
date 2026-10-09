@@ -11,7 +11,7 @@ import com.qinglan.post.entity.PostImage;
 import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.post.repository.UploadedFileRepository;
-import com.qinglan.post.service.ImageUrlAssembler;
+import com.qinglan.post.service.ImageAccessService;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
 import com.qinglan.review.dto.ReviewQueueProposalResponse;
 import com.qinglan.review.dto.ReviewQueueQuery;
@@ -113,9 +113,9 @@ class ReviewQueueServiceTest {
                 new StorageProperties(null, null, null, "unit-test-image-signing-secret", null),
                 new MockEnvironment());
         // forPost 只用签名器，装配时不会触碰上传仓储
-        ImageUrlAssembler assembler = new ImageUrlAssembler(signer, uploadedFileRepository, postRepository);
+        ImageAccessService imageAccessService = new ImageAccessService(signer, uploadedFileRepository, postRepository);
         reviewQueueService = new ReviewQueueService(reportRepository, postRepository, postImageRepository,
-                commentRepository, proposalRepository, voteRepository, assembler);
+                commentRepository, proposalRepository, voteRepository, imageAccessService);
     }
 
     @Test

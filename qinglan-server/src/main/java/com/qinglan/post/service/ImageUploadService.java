@@ -3,7 +3,6 @@ package com.qinglan.post.service;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.storage.ImageType;
-import com.qinglan.common.storage.ImageUrlSigner;
 import com.qinglan.common.storage.StorageService;
 import com.qinglan.common.storage.StorageUrl;
 import com.qinglan.common.store.EphemeralStore;
@@ -40,7 +39,7 @@ public class ImageUploadService {
     private static final String RATE_KEY_PREFIX = "ql:upload:rate:";
 
     private final StorageService storageService;
-    private final ImageUrlSigner imageUrlSigner;
+    private final ImageAccessService imageAccessService;
     private final UserService userService;
     private final EphemeralStore ephemeralStore;
     private final UploadProperties uploadProperties;
@@ -84,6 +83,6 @@ public class ImageUploadService {
         uploadedFileRepository.save(UploadedFile.of(userId, objectKey));
         // 未绑定上传属私有：返回签名 URL，让发帖页预览（浏览器 <img> 不带令牌）即刻可取。
         // 前端把它填进发帖请求后，服务端仍按 objectKey 归一（签名查询串被忽略），落库的是干净 URL。
-        return new UploadedImageResponse(imageUrlSigner.sign(url));
+        return new UploadedImageResponse(imageAccessService.forUpload(url).usableUrl());
     }
 }

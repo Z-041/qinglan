@@ -10,7 +10,7 @@ import com.qinglan.post.entity.PostImage;
 import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
-import com.qinglan.post.service.ImageUrlAssembler;
+import com.qinglan.post.service.ImageAccessService;
 import com.qinglan.review.dto.PendingPostItemResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -35,7 +35,7 @@ import java.util.Map;
  *
  * <p><b>图片地址按帖子状态签发</b>：待审帖图是私有图，而管理端 {@code <img>} 请求不带 Bearer 令牌
  * （等价游客），干净 URL 只会 404 破图——管理员看不到图就无法审图。故装配时统一经
- * {@link ImageUrlAssembler#forPost} 处理：待审（非 APPROVED）签为短时签名 URL，前端零改动即可显示。
+ * {@link ImageAccessService#forPost} 处理：待审（非 APPROVED）签为短时签名 URL，前端零改动即可显示。
  * 状态随帖子实体已在手，不额外查库，也不产生 N+1。</p>
  */
 @Service
@@ -57,7 +57,7 @@ public class PendingPostQueueService {
 
     private final PostRepository postRepository;
     private final PostImageRepository postImageRepository;
-    private final ImageUrlAssembler imageUrlAssembler;
+    private final ImageAccessService imageAccessService;
 
     @Transactional(readOnly = true)
     public CursorPage<PendingPostItemResponse> queue(String cursorRaw) {
@@ -100,7 +100,8 @@ public class PendingPostQueueService {
                 post.getId(),
                 preview(post.getContent()),
                 // 待审帖图属私有：签为短时签名 URL，管理端 <img> 不带令牌也能取到（不另写一份判断）
-                imageUrlAssembler.forPost(post.getStatus(), images),
+                imageAccessService.forPost(post.getStatus(), images)
+                        .stream().map(ImageAccessService.ImageAccess::usableUrl).toList(),
                 post.getStatus().name(),
                 post.getCreatedAt(),
                 post.getReportCount());
