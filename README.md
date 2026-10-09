@@ -58,6 +58,6 @@ cp AGENTS.md <你的项目根>/AGENTS.md
 | --- | --- |
 | 后端 | Java 21 + Spring Boot 3.x + Spring Data JPA + MySQL 8 + Redis 7 |
 | 前端 | Vue 3 + TypeScript + Vite + Pinia + Vue Router 4 |
-| 测试 | JUnit 5 + Mockito + Testcontainers / Vitest + Playwright |
-| 内容安全 | 第三方文本 API + 本地词库（不做图像识别） |
+| 测试 | JUnit 5 + Mockito + ArchUnit（后端）/ Vitest（前端） |
+| 内容安全 | 本地敏感词库 + 隐私正则（**第三方内容安全 API 未接入**，图像识别未做，人工审核兜底） |
 | 主色 | `#2E8B7A` |

@@ -5,6 +5,11 @@ qinglan-server/src/main/resources/application.yml
 **/application-local.*
 *.local.yml
 
+# ---- 部署密钥（docker compose 用，禁止入库）；可提交的模板是根目录 .env.example ----
+.env
+*.env
+!.env.example
+
 # ---- Java / Maven ----
 target/
 *.class

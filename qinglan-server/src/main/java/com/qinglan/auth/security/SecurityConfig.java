@@ -63,6 +63,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/error").permitAll()
+                        // 容器编排的探活需要匿名可读：只放行 health（含 liveness/readiness 子路径），
+                        // 其余 actuator 端点既未在 exposure 中开放（不存在映射），也会被 anyRequest 拦成 401
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         // 「我的帖子」需登录：它匹配 /api/posts/* 这一通配（单段），必须先在放行之前拦截，
                         // 否则会被当成游客可读的信息流详情放行
                         .requestMatchers(HttpMethod.GET, "/api/posts/mine").authenticated()
@@ -73,7 +76,9 @@ public class SecurityConfig {
                                 "/api/posts",
                                 "/api/posts/*",
                                 "/api/posts/*/comments").permitAll()
-                        // 上传后的图片由静态资源映射直接返回，浏览器取图不带令牌
+                        // 上传的图片由受控端点下发（UploadedImageController，接管 /uploads/**）：
+                        // 游客必须能看**已通过帖**的图，故这里放行；可见性由端点按 Post.canBeViewedBy
+                        // 判定（浏览器 <img> 不带令牌，等同于游客），不可见与不存在一律 404。
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         // 公告：游客也要能读与记已读（计划 D4/D5）。GET 放行待读与历史；
                         // POST 仅放行单个已读标记——只写一条已读记录、有唯一键幂等、不落任何身份明文。

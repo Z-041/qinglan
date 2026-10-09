@@ -4,10 +4,14 @@ import com.qinglan.comment.entity.Comment;
 import com.qinglan.comment.repository.CommentRepository;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.storage.ImageUrlSigner;
+import com.qinglan.common.storage.StorageProperties;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.entity.PostImage;
 import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
+import com.qinglan.post.repository.UploadedFileRepository;
+import com.qinglan.post.service.ImageUrlAssembler;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
 import com.qinglan.review.dto.ReviewQueueProposalResponse;
 import com.qinglan.review.dto.ReviewQueueQuery;
@@ -26,14 +30,15 @@ import com.qinglan.review.repository.ReviewProposalRepository;
 import com.qinglan.review.repository.ReviewQueueRow;
 import com.qinglan.review.repository.ReviewVoteRepository;
 import com.qinglan.support.TestFixtures;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
+import org.springframework.mock.env.MockEnvironment;
 
 import java.lang.reflect.RecordComponent;
 import java.time.Duration;
@@ -74,6 +79,10 @@ class ReviewQueueServiceTest {
     /** 无筛选、默认排序的条件（等价于改造前的行为） */
     private static final ReviewQueueQuery DEFAULT_QUERY = new ReviewQueueQuery(null, null, false, null);
 
+    /** 合法对外地址（签名器只接受本服务生成的形态） */
+    private static final String IMAGE_A = "/uploads/2026/10/" + "a".repeat(32) + ".jpg";
+    private static final String IMAGE_B = "/uploads/2026/10/" + "b".repeat(32) + ".jpg";
+
     @Mock
     private ReportRepository reportRepository;
 
@@ -92,8 +101,22 @@ class ReviewQueueServiceTest {
     @Mock
     private ReviewVoteRepository voteRepository;
 
-    @InjectMocks
+    @Mock
+    private UploadedFileRepository uploadedFileRepository;
+
     private ReviewQueueService reviewQueueService;
+
+    @BeforeEach
+    void setUp() {
+        // 真实签名器：队列里的私有帖图必须真签，断言签名 URL 的形态才有意义（与 ImageUploadServiceTest 同法）
+        ImageUrlSigner signer = new ImageUrlSigner(
+                new StorageProperties(null, null, null, "unit-test-image-signing-secret", null),
+                new MockEnvironment());
+        // forPost 只用签名器，装配时不会触碰上传仓储
+        ImageUrlAssembler assembler = new ImageUrlAssembler(signer, uploadedFileRepository, postRepository);
+        reviewQueueService = new ReviewQueueService(reportRepository, postRepository, postImageRepository,
+                commentRepository, proposalRepository, voteRepository, assembler);
+    }
 
     @Test
     @DisplayName("没有待处理举报时返回空页，不产生多余的装配查询")
@@ -180,6 +203,31 @@ class ReviewQueueServiceTest {
         assertThat(items.get(1).images()).containsExactly("/uploads/c.jpg");
         // 整页一次批量查询，而不是逐行一次
         verify(postImageRepository, times(1)).findByPostIdInOrderBySortOrderAsc(anyList());
+    }
+
+    @Test
+    @DisplayName("待审帖图签为短时 URL、已通过帖图保持干净：管理端 <img> 不带令牌也看得见图")
+    void shouldSignPendingImagesButKeepApprovedClean() {
+        stubFirstPageRows(List.of(
+                new ReviewQueueRow(ReviewTargetType.POST, 1L, 2L, BASE),
+                new ReviewQueueRow(ReviewTargetType.POST, 2L, 1L, BASE.plusSeconds(1))));
+        when(postRepository.findAllById(List.of(1L, 2L))).thenReturn(List.of(
+                TestFixtures.pendingPost(1L, 7L, 3L, "待审带图"),
+                TestFixtures.approvedPost(2L, 8L, 3L, "wx-demo")));
+        when(reportRepository.findByTargetTypeAndTargetIdInAndStatus(
+                ReviewTargetType.POST, List.of(1L, 2L), ReportStatus.PENDING)).thenReturn(List.of());
+        when(postImageRepository.findByPostIdInOrderBySortOrderAsc(List.of(1L, 2L))).thenReturn(List.of(
+                image(1L, IMAGE_A, 0),
+                image(2L, IMAGE_B, 0)));
+
+        List<ReviewQueueItemResponse> items = reviewQueueService.queue(null, DEFAULT_QUERY, VIEWER_ID).items();
+
+        // 待审（非 APPROVED）：签为短时签名 URL——管理端 <img> 不带令牌才取得到，否则破图漏审
+        assertThat(items.get(0).targetStatus()).isEqualTo("PENDING");
+        assertThat(items.get(0).images().get(0)).startsWith(IMAGE_A + "?").contains("exp=").contains("sig=");
+        // 已通过：保持干净原 URL（可缓存、游客可直取），不得被签名污染
+        assertThat(items.get(1).targetStatus()).isEqualTo("APPROVED");
+        assertThat(items.get(1).images()).containsExactly(IMAGE_B);
     }
 
     @Test

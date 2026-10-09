@@ -17,6 +17,145 @@
 
 
 --------------------------------------------------------------------------------
+R-39 私有图片在浏览器中取不到（<img> 不带令牌）：按 viewer 签发短时签名 URL
+--------------------------------------------------------------------------------
+[2026-10-09]  类型：设计疏漏修正  状态：已交付；后端真跑验证，浏览器真实取图与真实对象存储未实测
+来源：用户反馈——刚上线的图片可见性改造（T-27①，/uploads/** 由应用校验可见性）在浏览器里失效。
+
+现象
+  - 发帖页图片预览 404 破图（上传后还没发帖的「未绑定上传」）。
+  - 作者打开自己「待审 / 已下架」的帖子，配图 404 破图。
+  - 而同一地址带上作者令牌用 curl 取却 200 —— 差别只在「浏览器 <img> 不发 Authorization」。
+
+根因（设计疏漏，不是实现 bug）
+  - T-27① 把 /uploads/** 从静态资源改成受控端点、按 accessor 判可见，方向正确；但它默认「请求方
+    携身份」。浏览器 <img> 请求**不携带 Bearer 令牌**，被服务端当成游客——未绑定上传只对上传者可见、
+    待审/下架帖图只对作者可见，于是作者本人也被判成无权，404。前端加不了这个头（<img> 没有该能力）。
+
+处理（已与用户确认的方案：服务端下发 DTO 时按 viewer 决定 URL，前端零改动）
+  1 签名 URL 形态（StorageUrl 为唯一出处，签名的拼装/解析都在它附近）：
+      /uploads/YYYY/MM/<hex>.<ext>?exp=<epochSeconds>&sig=<base64url(HMAC-SHA256(objectKey + ":" + exp, secret))>
+  2 校验（在图片下发端点）：带 exp+sig → 常量时间比较（MessageDigest.isEqual）+ 未过期 + 不超过
+    「now + 有效期上限」→ 放行，**不依赖 viewer 身份**；非法/过期/超上限 → 与「不存在」同码同状态
+    404（不给攻击者区分信号）；无签名（或只带其一）→ 走原有身份判定路径，行为不变。
+  3 密钥：新增 qinglan.storage.image-signing-secret；留空回落 qinglan.jwt.secret（**权宜**，仅本地/
+    测试便利）。prod 启动守卫追加一条：该密钥必须显式配置、不得依赖回落。日志与错误信息不打印密钥
+    或完整签名。
+  4 装配侧（按 viewer 签发，收敛在 ImageUrlAssembler 一处）：所属帖子 APPROVED（对所有人公开）→
+    原 URL（保持干净、可缓存、可被浏览器缓存）；其余（PENDING/REJECTED/TAKEN_DOWN + 未绑定上传）→
+    签名 URL。落点：帖子详情、我的帖子、上传接口返回。
+  5 批量换取端点 POST /api/uploads/image-urls（需登录）：入参一组 URL，出参每项 {url, available,
+    usableUrl}；只对本人有权访问的对象签发，无权者明确 available=false 且 usableUrl=null，**绝不签发**。
+  6 草稿场景：草稿只存原 URL（保存时剥离签名查询串）；恢复时前端调批量端点换取当前可用地址，
+    换取不到的剔除并提示「需重新上传」，不静默破图。
+  7 文档：application.example.yml、.env.example（密钥只走环境变量）、deploy/README.md（签名机制、
+    有效期、守卫表）。
+
+为什么选签名 URL，而不是「前端用 fetch 带令牌取 blob 再喂给 <img>」
+  - fetch+blob 要把每个 <img> 换成一个带令牌的请求 + URL.createObjectURL + 手动 revoke，改动面覆盖
+    所有展示图片的组件；且拿不到 HTTP 缓存/断点续传，列表页每张图都重复下载。
+  - 签名 URL 对前端是普通 <img src>，缓存、CSP（img-src 'self'）、懒加载全部照旧；后端一处 helper 即可。
+  - 签名校验不依赖身份，绕开了「<img> 无法带令牌」这个根本约束。
+
+签名带来的小泄漏面与缓解（诚实登记）
+  - 签名 URL 一旦被复制/转发，在过期前「谁拿到谁能看」。缓解：exp 取短（默认 10 分钟）+ 硬上限 1 小时
+    （配置更大值会被收敛），并拒绝远期 exp；签名只绑定单个 objectKey，不能跨对象复用。
+  - 密钥单一：泄露即可为任意对象签发。缓解：与 JWT 密钥分离（生产强制独立配置），可单独轮换（轮换只
+    使已签发链接失效，影响面小于 JWT）；不进日志。
+  - 未做：按 IP/UA 绑定签名、签名吊销列表（当前短 exp + 单一密钥已覆盖已知威胁，是否加强由部署方定）。
+
+验证（真跑）
+  - 后端 ./mvnw test：589 用例、0 失败、0 错误、6 跳过。新增 17 条：ImageUrlSignerTest（9）、
+    ImageSignedUrlIntegrationTest（7）、ProdEnvironmentGuardTest 签名密钥 1 条。
+  - 覆盖：正确签名游客可取；篡改/过期/超上限 → 404；缺参数按无签名走身份路径；APPROVED 图 URL
+    不带签名且游客 200；待审/下架帖作者视角带签名且不带令牌可取；下架后旧干净 URL 立即 404
+    （T-27① 不失效）；上传返回立即可用；批量端点本人签发、他人私有图不签发、公开图返回原 URL、
+    需登录（401）；TTL 硬上限收敛；密钥回落。
+  - 前端三包 lint/typecheck/test/build 全绿（见本轮交付输出）。
+  - 未验证（须写明）：真实浏览器 <img> 取图（无浏览器环境）、真实对象存储（S3 兼容）端到端表现、
+    下架「即时失效」依赖的短 TTL 缓存行为。
+
+未做 / 残留风险
+  - 管理端审核队列图片未纳入签名装配（本轮范围只含详情/我的帖子/上传返回/批量换取）。管理员在
+    浏览器看 PENDING 帖原图同样会 404 —— 与 R-39 同源，属遗留缺口，建议下一轮按同一 helper 处理。
+  - 草稿恢复的边界：换取失败的请求（网络）只保留原地址、不提示（错误由拦截器 toast）；被孤儿回收
+    任务清理的上传会 unavailable，需重新上传。
+  - 回落配置键：任务说明里写作 qinglan.auth.jwt.secret，实际配置键是 qinglan.jwt.secret
+    （JwtProperties prefix=qinglan.jwt），实现按**实际**键回落。
+
+
+--------------------------------------------------------------------------------
+R-38 第三层审计（架构与生产环境 30 项）的复核与落地：P0/P1 运行时项 + 部署产物
+--------------------------------------------------------------------------------
+[2026-10-09]  类型：生产就绪改造  状态：运行时项已真跑验证；部署产物本机无 Docker/nginx，未运行验证
+来源：用户转来的第三层审计《青栏架构与生产环境全量问题清单与建议》（30 项：8 P0 / 13 P1 / 9 P2）。
+
+先纠正三处前提（复核后不成立，未照改）
+  1【「仓库无任何 CI 配置」】不成立：.github/workflows/ci.yml 已有 3 个 job——ArchUnit + javac
+    lint / 后端测试（用 service container 起 mysql:8.0）/ 前端三包矩阵四道门禁。
+    真实缺口只是「CI 里没起 Redis」。
+  2【「测试依赖本机 MySQL，CI 必须先解决数据库供给」】不成立：CI 早已用 service container
+    自给；真实缺口是 Redis 代码路径**从未在 CI 里跑过** → 本轮补上。
+  3【「与 AGENTS 声称的 Testcontainers 不符」】属实，但正解是改文档而不是引依赖：本机与 CI
+    都不需要 Docker-in-Docker，service container 更省事。已把 AGENTS 那句改成如实描述。
+  另发现 README 三处名实不符（第三方文本 API、Testcontainers、Playwright），已改为如实描述。
+  其中「第三方内容安全 API 未接入」意味着内容安全实际只有本地词库 + 隐私正则 + 人工审核，
+  产品侧需知晓。
+
+已交付（运行时项——以下每条都本机真跑验证过）
+  1 环境隔离 + prod 启动守卫：约定 dev（默认，不激活 profile）/ test / prod；prod 激活时
+    expose-code 必须 false、code-store 与 store.type 必须 redis、不得自动建表，否则启动失败
+    并逐条给出中文原因；本地与 CI 不激活 prod → 行为不变（关键：不打断本地开发）。
+    真跑：SPRING_PROFILES_ACTIVE=prod 启动失败且原因清晰；默认启动成功
+  2 SMTP 邮件通道：新增 SmtpVerificationMailSender（transport=smtp 才启用），默认仍走日志实现；
+    password 只允许环境变量注入。真跑：内嵌 GreenMail 真发一封信，断言收件人/主题/正文
+  3 健康检查：引入 actuator，只暴露 /actuator/health（含 liveness/readiness），其余端点 401。
+    真跑：GET /actuator/health → 200 {"status":"UP",...}
+  4 traceId + 结构化日志：过滤器读入站 X-Request-Id（无则生成）、写 MDC、回传响应头、结束清理；
+    日志 pattern 带 traceId；JSON 结构化日志留开关（默认人类可读）。真跑：响应头回传、
+    两次请求不同、入站非法字符被拒（防响应头注入）
+  5 IP 维度限流：默认只保护 /api/auth/email/code，超限 429 QL-429-006。**默认不信任
+    X-Forwarded-For**（trusted-proxy-hops=0 → 只取 TCP 对端地址，客户端无法伪造）；仅当部署方
+    明确前置代理层数时才按右侧第 N 跳取，链长不足回退到对端地址。真跑：第 21 次 429
+  6 CI 补 Redis：backend job 加 redis:7 service 并新增 Redis 真跑用例（RedisVerificationCodeStore
+    含 attempts 的 TTL 自愈、RedisEphemeralStore），用 QINGLAN_REDIS_TEST 开关；本机无 Redis →
+    自动跳过（本机 551 用例中 6 跳过），CI 里会真跑。同时把 AGENTS 的 Testcontainers 措辞改对
+
+已交付（部署产物——本机无 Docker/nginx，**未经运行验证**，已在 deploy/README.md 末尾逐项列出）
+  - Dockerfile（多阶段、非 root、HEALTHCHECK → /actuator/health）+ .dockerignore
+    （**挡住本机 application.yml 与 .env，避免本地密钥随 jar 进镜像层**）
+  - docker-compose.yml（mysql8 + redis7 带密码 + app + nginx，密码全部来自 .env）
+  - .env.example（31 项，标注必填/生产必须/不可轮换 + 生成命令，**值全为空**）
+  - deploy/nginx.conf：/ → 学生端、/admin/ → 管理端，**两处 try_files 各自回退各自的
+    index.html**（T-14 的已知坑）；补 X-Frame-Options 与 CSP frame-ancestors（写在 meta 里会被
+    浏览器忽略）；assets immutable、index.html 不缓存；反代层数与 trusted-proxy-hops 的对应写进注释
+  - deploy/backup.sh（mysqldump + 上传目录打包、保留 N 份、失败非零退出）+ deploy/README.md
+    （环境变量、发布与回滚、迁移演练、已知缺口与待拍板项）
+  - .gitignore 新增忽略 .env（原来没忽略，是安全缺口）；application.example.yml 补 Redis password
+
+顺带修掉一个「自己引入的」运行时漏洞
+  - pnpm audit 查出 6 个漏洞，其中**唯一致生产面的是 echarts 5.6.0 的 XSS**——正是本轮前端改造
+    为管理端看板引入的依赖。已升级到 ^6.1.0 并跑通三包门禁；升级后 `pnpm audit --prod` = 0 漏洞
+  - 并把审计接进 CI（新增 frontend-audit job：`pnpm audit --prod --audit-level=high`，
+    显式指定官方 registry——国内镜像未实现 audit 端点，本机已复现该报错）
+
+未做 / 待决策
+  - 对象存储实现（P0）：需选型（S3 兼容 or 厂商 SDK）且须与 T-12'/T-27① 同轮设计，未擅自做
+  - 开发依赖漏洞 5 个（2 critical 在 tinypool、1 high 在 braces 且**无修复版本**）：全在 vitest
+    链上、不进生产产物；升 vitest 到 4.x 属 major 且会动 300+ 前端用例，应独立一轮做
+  - 后端 OWASP dependency-check 未接（CI 需下载 NVD 库，代价大）；Playwright E2E（T-07）、
+    压测基线、审计归档任务、通知聚合与实时推送、PII 合规流程、灰度/回滚自动化、镜像仓库：
+    均为独立工作或产品/部署决策
+  - 需部署方填值：trusted-proxy-hops（建议 1）、备份保留份数与周期、SMTP 服务商与 SPF/DKIM、
+    邮箱白名单、密钥托管方式、是否启用 JSON 日志
+
+验证
+  - 后端 ./mvnw test：551 用例、0 失败、6 跳过（Redis 条件跳过）
+  - 前端三包 lint/typecheck/test/build 全绿（shared 56 / qinglan-web 154 / qinglan-admin 239）
+  - pnpm audit --prod：0 漏洞（升级 echarts 后）
+
+
+--------------------------------------------------------------------------------
 R-37 工作区整理归档（旧方案文档废弃 + 悬空引用清理 + 产物清理）
 --------------------------------------------------------------------------------
 [2026-10-09]  类型：仓库整理  状态：已交付

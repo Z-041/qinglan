@@ -21,6 +21,11 @@
         <java.version>21</java.version>
         <jjwt.version>0.12.6</jjwt.version>
         <archunit.version>1.5.1</archunit.version>
+        <greenmail.version>2.1.0</greenmail.version>
+        <!-- 对象存储客户端：S3 兼容协议（自建 MinIO / 腾讯 COS / 阿里 OSS 均可对接），同步 client -->
+        <awssdk.version>2.31.78</awssdk.version>
+        <!-- 内嵌 S3 测试服务器：纯 Java、不需要 Docker，本机与 CI 都能真跑，见 S3StorageServiceTest -->
+        <s3mock.version>3.9.1</s3mock.version>
     </properties>
 
     <dependencies>
@@ -44,6 +49,16 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
+        <!-- 真实 SMTP 发送验证码（qinglan.auth.mail.transport=smtp 时启用），见 SmtpVerificationMailSender -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <!-- 健康检查与基础指标：仅暴露 /actuator/health（liveness/readiness），见 SecurityConfig -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.flywaydb</groupId>
@@ -58,6 +73,14 @@
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- 对象存储（S3 兼容）。用同步 client：上传/下发都在请求线程内，虚拟线程已足够，
+             不需要异步 API 带来的额外复杂度（见 AGENTS.md 第六章「虚拟线程仅用于 IO 密集」） -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${awssdk.version}</version>
         </dependency>
 
         <dependency>
@@ -99,6 +122,22 @@
             <groupId>com.tngtech.archunit</groupId>
             <artifactId>archunit-junit5</artifactId>
             <version>${archunit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- 内嵌 SMTP 测试服务器：真实发一封信验证 SMTP 通道，见 SmtpVerificationMailSenderTest。
+             本机与 CI 都无需 Docker，GreenMail 是纯 Java 内嵌服务 -->
+        <dependency>
+            <groupId>com.icegreen</groupId>
+            <artifactId>greenmail</artifactId>
+            <version>${greenmail.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- 内嵌 S3 测试服务器（S3Mock）：纯 Java、无需 Docker，用来真跑 S3StorageService 的
+             put/get/delete/path-style。与 GreenMail 同一思路——本机不装、CI 不额外起 service 也能测 -->
+        <dependency>
+            <groupId>com.adobe.testing</groupId>
+            <artifactId>s3mock-junit5</artifactId>
+            <version>${s3mock.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

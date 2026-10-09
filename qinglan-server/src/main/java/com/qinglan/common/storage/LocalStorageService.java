@@ -7,8 +7,10 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -23,7 +25,7 @@ import java.util.UUID;
 @Slf4j
 public class LocalStorageService implements StorageService {
 
-    /** 对外访问前缀，与 {@link StorageWebConfig} 的映射保持一致 */
+    /** 对外访问前缀，与 {@link StorageUrl#PUBLIC_PREFIX} 对应（此处不带结尾斜杠，便于 startsWith 判断） */
     private static final String PUBLIC_PREFIX = "/uploads";
 
     private final Path root;
@@ -54,11 +56,8 @@ public class LocalStorageService implements StorageService {
 
     @Override
     public void delete(String url) {
-        if (url == null || !url.startsWith(PUBLIC_PREFIX + "/")) {
-            return;
-        }
-        Path target = root.resolve(url.substring(PUBLIC_PREFIX.length() + 1)).normalize();
-        if (!target.startsWith(root)) {
+        Path target = resolve(url);
+        if (target == null) {
             return;
         }
         try {
@@ -66,5 +65,43 @@ public class LocalStorageService implements StorageService {
         } catch (IOException ex) {
             log.warn("删除文件失败 path={}", target, ex);
         }
+    }
+
+    @Override
+    public Optional<StoredObject> load(String url) {
+        Path target = resolve(url);
+        if (target == null || !Files.isRegularFile(target)) {
+            return Optional.empty();
+        }
+        try {
+            byte[] content = Files.readAllBytes(target);
+            Instant lastModified = Files.getLastModifiedTime(target).toInstant();
+            // 本地实现无对象 ETag，用「长度-修改时间」生成一个弱标识，够做 HTTP 缓存协商
+            String etag = "\"" + content.length + "-" + lastModified.toEpochMilli() + "\"";
+            return Optional.of(new StoredObject(content, lastModified, etag));
+        } catch (IOException ex) {
+            log.warn("读取文件失败 path={}", target, ex);
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public boolean exists(String url) {
+        Path target = resolve(url);
+        return target != null && Files.isRegularFile(target);
+    }
+
+    /**
+     * 把对外 URL 还原为磁盘路径；地址非法或解析到根目录之外时返回 null。
+     *
+     * <p>{@code normalize()} 会把 {@code ..} 折叠掉，随后必须再确认结果仍在 root 之内——否则
+     * 一个精心构造的地址可能指到上传目录之外。</p>
+     */
+    private Path resolve(String url) {
+        if (url == null || !url.startsWith(PUBLIC_PREFIX + "/")) {
+            return null;
+        }
+        Path target = root.resolve(url.substring(PUBLIC_PREFIX.length() + 1)).normalize();
+        return target.startsWith(root) ? target : null;
     }
 }

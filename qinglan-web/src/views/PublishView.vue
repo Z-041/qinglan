@@ -15,7 +15,7 @@ import { pushToast } from '@shared/composables/useToast'
 
 const router = useRouter()
 
-const { uploading: uploadingImages, addFiles } = useImageUpload()
+const { uploading: uploadingImages, addFiles, refresh: refreshDraftImages } = useImageUpload()
 
 const {
   topics,
@@ -67,6 +67,29 @@ async function handleSelectImages(files: File[]): Promise<void> {
   images.value = merged.slice(0, MAX_IMAGES_PER_POST)
 }
 
+/**
+ * 恢复草稿：先回填字段，再用批量端点把草稿里的原 URL 换成当前可用的地址。
+ *
+ * 私有图在浏览器 `<img>` 请求里不带令牌，草稿保存的原 URL 取不到图；换取不到的（已清理 / 无权访问）
+ * 从列表中剔除并明确提示「需重新上传」，避免留下破图。换取请求失败由拦截器统一提示，此处保留原值。
+ */
+async function handleRestoreDraft(): Promise<void> {
+  restoreDraft()
+  const restored = images.value
+  if (!restored.length) {
+    return
+  }
+  try {
+    const { images: usable, missing } = await refreshDraftImages(restored)
+    images.value = usable
+    if (missing > 0) {
+      pushToast(`${missing} 张图片已失效，请重新上传`, 'error')
+    }
+  } catch {
+    // 换取失败：错误已由拦截器提示，保留原地址（公开图仍可正常显示）
+  }
+}
+
 async function handleSubmit(): Promise<void> {
   // 图片还在上传时不允许提交：此时 images 里没有这些图，提交会发出缺图的帖子，
   // 上传完成后页面已卸载，图被静默丢弃（对象存储里留孤儿）
@@ -97,7 +120,7 @@ async function handleSubmit(): Promise<void> {
       <p class="min-w-0 flex-1 text-xs leading-relaxed text-warning">
         发现上次未提交的草稿（含正文 / 图片），是否恢复？恢复会覆盖当前输入。
       </p>
-      <BaseButton size="sm" @click="restoreDraft">恢复草稿</BaseButton>
+      <BaseButton size="sm" @click="handleRestoreDraft">恢复草稿</BaseButton>
       <BaseButton variant="ghost" size="sm" @click="discardDraft">丢弃</BaseButton>
     </div>
 

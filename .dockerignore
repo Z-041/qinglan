@@ -1,0 +1,32 @@
+# Docker 构建上下文（仓库根）排除清单。
+# 目的有二：① 缩小上下文、加快构建；② **绝不把本机密钥带进镜像层**。
+
+# ---- 版本控制与依赖（镜像构建不需要）----
+.git
+.gitignore
+**/node_modules
+
+# ---- 构建产物（镜像内重新构建；前端 dist 由 nginx 挂载，不进后端镜像）----
+**/target
+**/dist
+**/dist-ssr
+**/*.tsbuildinfo
+**/.vite
+**/coverage
+
+# ---- 本机密钥文件（关键！绝不入库、更不进镜像）----
+# 本机开发用的 application.yml：若被拷进构建阶段，生产密钥会随 jar 进入镜像层
+qinglan-server/src/main/resources/application.yml
+qinglan-server/config/
+.env
+*.env
+
+# ---- 本地存储实现的上传目录 ----
+qinglan-server/data
+
+# ---- IDE / OS ----
+.idea
+*.iml
+.vscode
+.DS_Store
+Thumbs.db

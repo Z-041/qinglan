@@ -46,6 +46,17 @@ function hasContent(draft: PostDraft): boolean {
   return draft.content.trim().length > 0 || draft.contact.trim().length > 0 || draft.images.length > 0
 }
 
+/**
+ * 去掉签名查询串（`?exp=..&sig=..`），只存原 URL。
+ *
+ * 草稿要长期躺在 localStorage 里，而签名是短时的：存下签名既会过期又无意义。恢复时由批量端点
+ * 换取当前可用地址（见 `refreshImageUrls`）。
+ */
+function stripSignature(url: string): string {
+  const query = url.indexOf('?')
+  return query < 0 ? url : url.substring(0, query)
+}
+
 export function usePostDraft(fields: {
   topicId: Ref<number | null>
   content: Ref<string>
@@ -63,7 +74,8 @@ export function usePostDraft(fields: {
       topicId: fields.topicId.value,
       content: fields.content.value,
       contact: fields.contact.value,
-      images: [...fields.images.value],
+      // 只存原 URL：签名是短时的，不能落进长期草稿（见 stripSignature）
+      images: fields.images.value.map(stripSignature),
     }
     if (hasContent(next)) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next))

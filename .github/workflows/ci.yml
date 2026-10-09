@@ -43,6 +43,17 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+      # Redis 7 service：让 RedisVerificationCodeStore / RedisEphemeralStore 的真跑测试在 CI 真正执行
+      # （本地无 Redis 时这些测试由 QINGLAN_REDIS_TEST 条件自动跳过）
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     defaults:
       run:
         working-directory: qinglan-server
@@ -54,8 +65,14 @@ jobs:
           java-version: "21"
           distribution: temurin
           cache: maven
-      # 测试走真实 MySQL（application-test.yml 指向 localhost:3306/qinglan_test）
+      # 测试走真实 MySQL（application-test.yml 指向 localhost:3306/qinglan_test）；
+      # QINGLAN_REDIS_TEST=true 打开 Redis 路径的真跑测试，指向下面 redis service。
+      # S3 用例（S3StorageServiceTest）用内嵌 S3Mock，纯 Java、无需额外 service，随本次 test 一起真跑。
       - name: Run backend tests
+        env:
+          QINGLAN_REDIS_TEST: "true"
+          QINGLAN_REDIS_HOST: "127.0.0.1"
+          QINGLAN_REDIS_PORT: "6379"
         run: ./mvnw -B -ntp test
 
   frontend:
@@ -97,3 +114,19 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
+
+  frontend-audit:
+    name: Frontend dependency audit (production deps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - name: Audit production dependencies
+        # 只审生产依赖（--prod）：开发依赖链（vitest/tinypool/braces 等）的公告不阻断合并，
+        # 但生产面出现 high/critical 必须挡住——本轮就是靠它抓出 echarts 的 XSS 公告。
+        # 必须显式指定官方 registry：国内镜像（npmmirror）未实现 audit 端点，
+        # 用默认源会直接报 ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS（本机已复现）。
+        run: pnpm audit --prod --audit-level=high --registry=https://registry.npmjs.org

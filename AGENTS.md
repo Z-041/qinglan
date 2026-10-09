@@ -214,7 +214,10 @@ Skill 由**全局安装**提供（仓库内不再保留 `coding-skills/` 副本�
 在自己那一包跑绿不等于交付通过——改 `shared` 时必须把另外两包也跑一遍。
 
 - 修 bug 先写能复现的失败测试，再修
-- 测试用 Testcontainers 起真实 MySQL/Redis，不 mock 数据库行为
+- 测试用**真实** MySQL/Redis，不 mock 数据库行为：CI 里由 GitHub Actions 的 **service container** 起
+  `mysql:8.0` 与 `redis:7`（见 `.github/workflows/ci.yml`），本地则用 `application.yml` 指向本机 MySQL
+  （Redis 相关用例由 `QINGLAN_REDIS_TEST` 条件开关，本机无 Redis 时自动跳过）。不用 Testcontainers：
+  本机与 CI 都无需 Docker-in-Docker，service container 已能提供真实依赖，省一层复杂度
 - 禁止为了通过而删测试、放宽断言、加 `@Disabled`
 - **`vi.mock` 的路径按模块标识符拦截**：模块一旦搬到 `shared`，spec 里的 `vi.mock('@/api/xxx')` 必须
   同步改成 `vi.mock('@shared/api/xxx')`，否则 mock 不命中、测试会去发真请求

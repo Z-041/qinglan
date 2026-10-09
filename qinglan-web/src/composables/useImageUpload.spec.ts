@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { uploadImage } from '@/api/upload'
+import { uploadImage, refreshImageUrls } from '@/api/upload'
 import { MAX_IMAGES_PER_POST, useImageUpload } from '@/composables/useImageUpload'
 import { useToast } from '@shared/composables/useToast'
 
 vi.mock('@/api/upload', () => ({
   uploadImage: vi.fn(),
+  refreshImageUrls: vi.fn(),
 }))
 
 const mockedUpload = vi.mocked(uploadImage)
+const mockedRefresh = vi.mocked(refreshImageUrls)
 const { toasts } = useToast()
 
 function file(name: string): File {
@@ -83,5 +85,25 @@ describe('useImageUpload', () => {
     await pending
 
     expect(uploading.value).toBe(false)
+  })
+
+  it('refresh 只保留可用地址，并把换取不到的张数报出（草稿恢复）', async () => {
+    mockedRefresh.mockResolvedValue([
+      { url: '/uploads/a.jpg', available: true, usableUrl: '/uploads/a.jpg?exp=1&sig=x' },
+      { url: '/uploads/b.jpg', available: false, usableUrl: null },
+    ])
+    const { refresh } = useImageUpload()
+
+    const result = await refresh(['/uploads/a.jpg', '/uploads/b.jpg'])
+
+    expect(mockedRefresh).toHaveBeenCalledWith(['/uploads/a.jpg', '/uploads/b.jpg'])
+    expect(result).toEqual({ images: ['/uploads/a.jpg?exp=1&sig=x'], missing: 1 })
+  })
+
+  it('refresh 对空列表不发请求', async () => {
+    const { refresh } = useImageUpload()
+
+    expect(await refresh([])).toEqual({ images: [], missing: 0 })
+    expect(mockedRefresh).not.toHaveBeenCalled()
   })
 })

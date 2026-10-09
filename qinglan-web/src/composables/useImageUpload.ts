@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 
-import { uploadImage } from '@/api/upload'
+import { refreshImageUrls, uploadImage } from '@/api/upload'
 import { pushToast } from '@shared/composables/useToast'
 
 /** 与后端 qinglan.post.max-images-per-post 保持一致 */
@@ -58,5 +58,28 @@ export function useImageUpload() {
     return added
   }
 
-  return { uploading, addFiles }
+  return { uploading, addFiles, refresh }
+}
+
+/**
+ * 草稿恢复时批量换取当前可用的图片地址（私有图在 `<img>` 请求里不带令牌、草稿里的原 URL 取不到图）。
+ * 返回可用地址与「换取不到」的张数——后者须由调用方提示用户重新上传，不要静默破图。
+ *
+ * 请求失败不在此吞掉：由拦截器统一 toast，异常继续上抛，调用方据此决定是否保留原值。
+ */
+async function refresh(urls: string[]): Promise<{ images: string[]; missing: number }> {
+  if (!urls.length) {
+    return { images: [], missing: 0 }
+  }
+  const items = await refreshImageUrls(urls)
+  const images: string[] = []
+  let missing = 0
+  for (const item of items) {
+    if (item.available && item.usableUrl) {
+      images.push(item.usableUrl)
+    } else {
+      missing += 1
+    }
+  }
+  return { images, missing }
 }

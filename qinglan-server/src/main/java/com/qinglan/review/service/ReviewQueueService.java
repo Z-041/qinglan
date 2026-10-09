@@ -11,6 +11,7 @@ import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostImage;
 import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
+import com.qinglan.post.service.ImageUrlAssembler;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
 import com.qinglan.review.dto.ReviewQueueProposalResponse;
 import com.qinglan.review.dto.ReviewQueueQuery;
@@ -51,6 +52,11 @@ import java.util.stream.Collectors;
  * 只给正文摘要时，管理员根本看不到随帖的图，等于漏审。</p>
  *
  * <p>队列里不出现举报人的任何信息——举报人身份不出审核队列（不变量 #1 的引申）。</p>
+ *
+ * <p><b>图片地址按帖子状态签发</b>：待审（非 APPROVED）帖图是私有图，而管理端 {@code <img>} 请求
+ * 不带 Bearer 令牌（等价游客），干净 URL 只会 404 破图——管理员看不到图就无法审图。装配时统一经
+ * {@link ImageUrlAssembler#forPost} 处理：帖子状态随实体已在手，不额外查库，也不产生 N+1。
+ * 已通过（APPROVED）帖的图保持干净原 URL。</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -93,6 +99,7 @@ public class ReviewQueueService {
     private final CommentRepository commentRepository;
     private final ReviewProposalRepository proposalRepository;
     private final ReviewVoteRepository voteRepository;
+    private final ImageUrlAssembler imageUrlAssembler;
 
     /**
      * @param query    筛选与排序条件（理由 / 目标类型 / 只看超时 / 排序口径）
@@ -258,7 +265,10 @@ public class ReviewQueueService {
                         ReviewTargetType.POST,
                         row.targetId(),
                         preview(post == null ? null : post.getContent()),
-                        postImages.getOrDefault(row.targetId(), List.of()),
+                        // 非 APPROVED 帖图属私有：签为短时签名 URL，管理端 <img> 不带令牌也能取到；
+                        // APPROVED 保持干净原 URL。判断收在 ImageUrlAssembler，不在此另写一份。
+                        imageUrlAssembler.forPost(post == null ? null : post.getStatus(),
+                                postImages.getOrDefault(row.targetId(), List.of())),
                         post == null ? null : post.getStatus().name(),
                         (int) row.reportCount(),
                         row.firstReportedAt(),

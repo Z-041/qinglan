@@ -18,6 +18,7 @@ import com.qinglan.common.notify.NotificationMessage;
 import com.qinglan.common.notify.NotificationPort;
 import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
+import com.qinglan.common.storage.StorageUrl;
 import com.qinglan.common.store.EphemeralStore;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
@@ -32,9 +33,11 @@ import com.qinglan.post.entity.PostImage;
 import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.entity.RiskLevel;
 import com.qinglan.post.entity.Topic;
+import com.qinglan.post.entity.UploadedFile;
 import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.post.repository.TopicRepository;
+import com.qinglan.post.repository.UploadedFileRepository;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -50,10 +53,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -85,16 +88,6 @@ public class PostService {
     private static final long HOT_SCORE_SCALE = 1_000_000L;
 
     /**
-     * 帖子配图只接受本站上传产生的地址，格式与 {@code LocalStorageService} 的返回值一一对应：
-     * {@code /uploads/{yyyy}/{MM}/{32 位 hex}.{ext}}。
-     *
-     * <p>只判前缀是不够的——{@code /uploads/anything} 同样以 {@code /uploads/} 开头。更换存储实现
-     * （如对象存储）时必须同步修改本模式，否则发帖会被整体拒绝。</p>
-     */
-    private static final Pattern IMAGE_URL_PATTERN =
-            Pattern.compile("^/uploads/\\d{4}/\\d{2}/[0-9a-f]{32}\\.(?:jpg|png|webp)$");
-
-    /**
      * 联系方式查看审计的限流键前缀（AGENTS.md Redis key 约定 {@code ql:{domain}:{id}}）。
      */
     private static final String CONTACT_VIEW_RATE_KEY_PREFIX = "ql:post:contact-view:";
@@ -116,6 +109,7 @@ public class PostService {
 
     private final PostRepository postRepository;
     private final PostImageRepository postImageRepository;
+    private final UploadedFileRepository uploadedFileRepository;
     private final TopicRepository topicRepository;
     private final LikeRepository likeRepository;
     private final AnonymousCodeService anonymousCodeService;
@@ -126,6 +120,7 @@ public class PostService {
     private final AnnouncementService announcementService;
     private final NotificationPort notificationPort;
     private final EphemeralStore ephemeralStore;
+    private final ImageUrlAssembler imageUrlAssembler;
 
     /**
      * 发布。落 Pending 而非直接可见——主帖先审后发，是设计方案第一章的红线 2。
@@ -147,7 +142,7 @@ public class PostService {
             throw new BizException(ErrorCode.CONTACT_REQUIRED);
         }
         requireAllowedContent(request.content(), contact);
-        List<String> images = validateImageUrls(request.images());
+        ValidatedImages images = validateImages(request.images(), authorId);
 
         Post post = Post.draft(authorId, topic.getId(), request.content().trim(), contact);
         post.submit(RiskLevel.LOW);
@@ -155,10 +150,12 @@ public class PostService {
         // 代号依赖 post_id，只能在 INSERT 拿到主键之后回填（不变量 #1）
         saved.assignAnonymousCode(
                 anonymousCodeService.deriveCode(saved.getId(), authorId, author.getAnonymousSalt()));
-        saveImages(saved.getId(), images);
+        saveImages(saved.getId(), images.files());
 
         log.info("用户发布帖子 postId={} topicId={}", saved.getId(), topic.getId());
-        return toDetail(saved, topic.getName(), topic.getRules(), images, 0L, false, new Viewer(authorId));
+        // 待审帖图属私有：装配时签发签名 URL，作者在详情页/我的帖子里才能立刻看到自己的图
+        return toDetail(saved, topic.getName(), topic.getRules(),
+                imageUrlAssembler.forPost(saved.getStatus(), images.urls()), 0L, false, new Viewer(authorId));
     }
 
     /**
@@ -286,7 +283,8 @@ public class PostService {
                         post.getTopicId(),
                         topicNames.get(post.getTopicId()),
                         post.getContent(),
-                        imagesByPost.getOrDefault(post.getId(), List.of()),
+                        imageUrlAssembler.forPost(post.getStatus(),
+                                imagesByPost.getOrDefault(post.getId(), List.of())),
                         post.getAnonymousCode(),
                         post.getStatus(),
                         post.getReviewReason(),
@@ -327,7 +325,9 @@ public class PostService {
     public PostDetailResponse detail(Long postId, Viewer viewer) {
         Post post = requireVisiblePost(postId, viewer.userId());
         Topic topic = topicRepository.findById(post.getTopicId()).orElse(null);
-        List<String> images = loadImageUrls(List.of(postId)).getOrDefault(postId, List.of());
+        // 私有帖图（待审/驳回/下架）装配为签名 URL：作者在浏览器里 <img> 不带令牌也能取到
+        List<String> images = imageUrlAssembler.forPost(post.getStatus(),
+                loadImageUrls(List.of(postId)).getOrDefault(postId, List.of()));
         long likeCount = likeRepository.countByTargetTypeAndTargetId(LikeTargetType.POST, postId);
         boolean liked = viewer.userId() != null
                 && likeRepository.findByTargetTypeAndTargetIdAndUserId(
@@ -449,36 +449,65 @@ public class PostService {
     }
 
     /**
-     * 图片地址只接受本站上传产生的路径。
+     * 图片地址校验（P2 起升级为归属绑定，T-12'）：格式 → 存在 → 属本人 → 未被引用。
      *
-     * <p>放任客户端传任意字符串的话，可以把 {@code javascript:} 或外链塞进 img 的 src，
-     * 造成 XSS 与盗链；只校验 {@code /uploads/} 前缀也不够，需要与上传接口的返回格式严格对齐。
-     * 图片归属（不能引用他人上传的文件）与未使用文件的回收留到 P2 接对象存储时一并处理。</p>
+     * <p>格式校验挡住 {@code javascript:} / 外链 / 伪造的 {@code /uploads} 路径（XSS 与盗链）；
+     * 归属校验挡住「复制他人图片 URL 直接发帖」；绑定校验挡住「一图多帖」。返回登记行实体，
+     * 发帖落库后据此回填 {@code bound_post_id}，避免重复查库。</p>
      */
-    private List<String> validateImageUrls(List<String> images) {
+    private ValidatedImages validateImages(List<String> images, Long authorId) {
         if (images == null || images.isEmpty()) {
-            return List.of();
+            return new ValidatedImages(List.of(), List.of());
         }
         if (images.size() > postProperties.maxImagesPerPost()) {
             throw new BizException(ErrorCode.UPLOAD_INVALID);
         }
+        Set<String> seen = new HashSet<>();
+        List<String> urls = new ArrayList<>(images.size());
+        List<UploadedFile> files = new ArrayList<>(images.size());
         for (String url : images) {
-            if (url == null || !IMAGE_URL_PATTERN.matcher(url).matches()) {
-                throw new BizException(ErrorCode.UPLOAD_INVALID);
+            String objectKey = StorageUrl.objectKey(url)
+                    .orElseThrow(() -> new BizException(ErrorCode.UPLOAD_INVALID));
+            // 同帖内重复引用同一对象也按「已被使用」拒绝：一张图不能在一条帖子里占两个位置
+            if (!seen.add(objectKey)) {
+                throw new BizException(ErrorCode.UPLOAD_ALREADY_BOUND);
             }
+            UploadedFile file = uploadedFileRepository.findByObjectKey(objectKey)
+                    .orElseThrow(() -> new BizException(ErrorCode.UPLOAD_NOT_FOUND));
+            if (!file.isUploadedBy(authorId)) {
+                throw new BizException(ErrorCode.UPLOAD_NOT_OWNED);
+            }
+            if (file.isBound()) {
+                throw new BizException(ErrorCode.UPLOAD_ALREADY_BOUND);
+            }
+            // 归一为干净 URL（去掉可能的签名查询串）：落库与回显都只认原地址
+            urls.add(StorageUrl.publicUrl(objectKey));
+            files.add(file);
         }
-        return List.copyOf(images);
+        return new ValidatedImages(List.copyOf(urls), List.copyOf(files));
     }
 
-    private void saveImages(Long postId, List<String> urls) {
-        if (urls.isEmpty()) {
+    /**
+     * 落 {@code post_image} 行，并把登记行标记为已绑定。
+     *
+     * <p>两件事同一事务完成：否则会出现「图片已进帖子、登记却仍显示未绑定」的中间态，
+     * 让同一对象被另一个帖子再次引用（一图多帖）。URL 由 objectKey 重建，保证与对外形态一致。</p>
+     */
+    private void saveImages(Long postId, List<UploadedFile> files) {
+        if (files.isEmpty()) {
             return;
         }
-        List<PostImage> images = new ArrayList<>(urls.size());
-        for (int index = 0; index < urls.size(); index++) {
-            images.add(PostImage.of(postId, urls.get(index), index));
+        List<PostImage> images = new ArrayList<>(files.size());
+        for (int index = 0; index < files.size(); index++) {
+            UploadedFile file = files.get(index);
+            images.add(PostImage.of(postId, StorageUrl.publicUrl(file.getObjectKey()), index));
+            file.bindTo(postId);
         }
         postImageRepository.saveAll(images);
+    }
+
+    /** 校验通过的图片：对外地址（原样返回给前端）+ 对应登记行（发帖后回填绑定） */
+    private record ValidatedImages(List<String> urls, List<UploadedFile> files) {
     }
 
     private Map<Long, List<String>> loadImageUrls(Collection<Long> postIds) {

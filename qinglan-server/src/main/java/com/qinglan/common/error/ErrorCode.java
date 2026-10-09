@@ -27,6 +27,8 @@ public enum ErrorCode {
     PROPOSAL_TARGET_INVALID(HttpStatus.BAD_REQUEST, "QL-400-013", "目标当前状态与所选处置不匹配"),
     // 导出是敏感批量读取：超过单次行数上限时明确报错，绝不静默截断（截断的导出比不导出更危险）
     EXPORT_ROW_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "QL-400-014", "导出数据量超过单次上限，请缩小筛选范围后重试"),
+    // 发帖引用的图片地址在登记表里查不到：该对象不存在、或不是通过本站上传接口产生的（T-12'）
+    UPLOAD_NOT_FOUND(HttpStatus.BAD_REQUEST, "QL-400-015", "引用的图片不存在，请重新上传后发布"),
 
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "QL-401-001", "请先完成认证"),
     EMAIL_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "QL-401-002", "邮箱认证凭证无效或已过期"),
@@ -40,6 +42,8 @@ public enum ErrorCode {
     // 唯一超管是后台的最后一道保险：被降级/封禁后没人能解锁，只能改库（P5 D4）
     SUPER_ADMIN_PROTECTED(HttpStatus.FORBIDDEN, "QL-403-006", "超级管理员账号不可变更角色，也不可被封禁"),
     ROLE_SELF_CHANGE_FORBIDDEN(HttpStatus.FORBIDDEN, "QL-403-007", "不能修改自己的角色"),
+    // 图片归属绑定（T-12'）：只能引用本人上传、且尚未被使用的图片，避免盗链他人上传
+    UPLOAD_NOT_OWNED(HttpStatus.FORBIDDEN, "QL-403-008", "只能引用自己上传的图片"),
 
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-001", "用户不存在"),
     POST_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-002", "帖子不存在或已被删除"),
@@ -50,6 +54,8 @@ public enum ErrorCode {
     ANNOUNCEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-007", "公告不存在"),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-008", "通知不存在"),
     PROPOSAL_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-009", "处置提案不存在"),
+    // 图片下发：不可见与不存在**共用同一个码与状态**，不泄露「该对象是否存在」（T-27①）
+    IMAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "QL-404-010", "图片不存在"),
 
     // 428：存在未读紧急公告，发帖/评论等写操作被前置拦截。响应需携带公告内容（PreconditionRequiredException）
     PRECONDITION_REQUIRED(HttpStatus.PRECONDITION_REQUIRED, "QL-428-001", "存在未读的紧急公告"),
@@ -70,6 +76,8 @@ public enum ErrorCode {
     PROPOSAL_ALREADY_OPEN(HttpStatus.CONFLICT, "QL-409-010", "该内容已有进行中的处置提案，请等待表决结果"),
     // P5 二期：一人一票（uk_vote_proposal_voter），重复投票明确回报，不静默吞掉
     ALREADY_VOTED(HttpStatus.CONFLICT, "QL-409-011", "你已经投过票"),
+    // 图片归属绑定（T-12'）：已绑定过帖子的对象不能再被引用（含同一帖内重复引用），否则一图多帖
+    UPLOAD_ALREADY_BOUND(HttpStatus.CONFLICT, "QL-409-012", "该图片已被使用，不能重复引用"),
 
     CODE_SEND_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "QL-429-001", "验证码发送过于频繁，请稍后再试"),
     VERIFY_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "QL-429-002", "验证失败次数过多，请重新获取验证码"),
@@ -77,6 +85,8 @@ public enum ErrorCode {
     ANNOUNCEMENT_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "QL-429-004", "今日公告发布已达上限"),
     // 标记已读是匿名开放的写接口（游客也要能被强制阅读），按设备限流防止被刷表
     ANNOUNCEMENT_READ_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "QL-429-005", "操作过于频繁，请稍后再试"),
+    // IP 维度全局限流：保护验证码发送等敏感端点，超限明确回报（不做静默丢弃）
+    RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "QL-429-006", "请求过于频繁，请稍后再试"),
 
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "QL-500-001", "服务暂时不可用"),
     STORAGE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "QL-500-002", "文件存储暂时不可用，请稍后重试");

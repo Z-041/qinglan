@@ -2,7 +2,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { fetchTopics } from '@/api/topic'
-import { uploadImage } from '@/api/upload'
+import { refreshImageUrls, uploadImage } from '@/api/upload'
 import ImagePicker from '@/components/ImagePicker.vue'
 import { POST_DRAFT_STORAGE_KEY } from '@/composables/usePostDraft'
 import PublishView from '@/views/PublishView.vue'
@@ -13,10 +13,11 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/api/topic', () => ({ fetchTopics: vi.fn() }))
 vi.mock('@/api/post', () => ({ createPost: vi.fn() }))
-vi.mock('@/api/upload', () => ({ uploadImage: vi.fn() }))
+vi.mock('@/api/upload', () => ({ uploadImage: vi.fn(), refreshImageUrls: vi.fn() }))
 
 const mockedFetchTopics = vi.mocked(fetchTopics)
 const mockedUpload = vi.mocked(uploadImage)
+const mockedRefresh = vi.mocked(refreshImageUrls)
 
 function file(name: string): File {
   return new File(['x'], name, { type: 'image/png' })
@@ -112,6 +113,32 @@ describe('PublishView', () => {
 
     expect(textareaValue(wrapper)).toBe('旧草稿正文')
     expect(wrapper.text()).not.toContain('发现上次未提交的草稿')
+  })
+
+  it('恢复含图片的草稿：用批量端点换取可用地址，取不到的剔除（不静默破图）', async () => {
+    localStorage.setItem(
+      POST_DRAFT_STORAGE_KEY,
+      JSON.stringify({
+        topicId: 1,
+        content: '带图草稿',
+        contact: '',
+        images: ['/uploads/a.jpg', '/uploads/b.jpg'],
+      }),
+    )
+    mockedRefresh.mockResolvedValue([
+      { url: '/uploads/a.jpg', available: true, usableUrl: '/uploads/a.jpg?exp=1&sig=x' },
+      { url: '/uploads/b.jpg', available: false, usableUrl: null },
+    ])
+
+    const wrapper = mount(PublishView)
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === '恢复草稿')?.trigger('click')
+    await flushPromises()
+
+    // 用草稿里的原 URL 换取当前可用地址；可用的换成签名 URL，取不到的从列表剔除
+    expect(mockedRefresh).toHaveBeenCalledWith(['/uploads/a.jpg', '/uploads/b.jpg'])
+    expect(imageSources(wrapper)).toEqual(['/uploads/a.jpg?exp=1&sig=x'])
   })
 
   it('点「丢弃」后本地草稿被清除，不再提示恢复', async () => {

@@ -2,17 +2,23 @@ package com.qinglan.post.service;
 
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.storage.ImageUrlSigner;
+import com.qinglan.common.storage.StorageProperties;
 import com.qinglan.common.storage.StorageService;
 import com.qinglan.common.store.InMemoryEphemeralStore;
 import com.qinglan.post.config.UploadProperties;
 import com.qinglan.post.dto.UploadedImageResponse;
+import com.qinglan.post.entity.UploadedFile;
+import com.qinglan.post.repository.UploadedFileRepository;
 import com.qinglan.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.nio.charset.StandardCharsets;
@@ -47,26 +53,43 @@ class ImageUploadServiceTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private UploadedFileRepository uploadedFileRepository;
+
     private ImageUploadService imageUploadService;
 
     @BeforeEach
     void setUp() {
-        UploadProperties uploadProperties = new UploadProperties(MAX_PER_WINDOW, Duration.ofMinutes(1));
+        UploadProperties uploadProperties =
+                new UploadProperties(MAX_PER_WINDOW, Duration.ofMinutes(1), true, Duration.ofHours(24));
+        // 真实签名器：上传返回签名 URL 的行为要真跑（密钥走显式配置分支）
+        ImageUrlSigner signer = new ImageUrlSigner(
+                new StorageProperties(null, null, null, "unit-test-image-signing-secret", null),
+                new MockEnvironment());
         imageUploadService = new ImageUploadService(
-                storageService, userService, new InMemoryEphemeralStore(), uploadProperties);
+                storageService, signer, userService, new InMemoryEphemeralStore(), uploadProperties,
+                uploadedFileRepository);
     }
 
     @Test
-    @DisplayName("合法图片按真实类型落盘，返回可访问地址")
+    @DisplayName("合法图片按真实类型落盘，返回可立即访问的签名地址，并登记归属（T-12'）")
     void shouldStoreValidImage() {
         when(storageService.store(any(byte[].class), anyString())).thenReturn(STORED_URL);
 
         UploadedImageResponse response =
                 imageUploadService.upload(USER_ID, new MockMultipartFile("file", JPEG_CONTENT));
 
-        assertThat(response.url()).isEqualTo(STORED_URL);
+        // 未绑定上传属私有：返回签名 URL（含 exp/sig），浏览器 <img> 不带令牌也能取到
+        assertThat(response.url()).startsWith(STORED_URL).contains("exp=").contains("sig=");
         verify(userService).requireUsableById(USER_ID);
         verify(storageService).store(any(byte[].class), anyString());
+
+        // 上传即登记：objectKey = URL 去掉 /uploads/ 前缀，uploader 为本次上传者
+        ArgumentCaptor<UploadedFile> captor = ArgumentCaptor.forClass(UploadedFile.class);
+        verify(uploadedFileRepository).save(captor.capture());
+        assertThat(captor.getValue().getObjectKey()).isEqualTo("2026/10/" + "a".repeat(32) + ".jpg");
+        assertThat(captor.getValue().getUploaderId()).isEqualTo(USER_ID);
+        assertThat(captor.getValue().isBound()).isFalse();
     }
 
     @Test

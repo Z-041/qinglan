@@ -100,3 +100,16 @@ export interface CreatePostRequest {
 export interface UploadedImage {
   url: string
 }
+
+/**
+ * 与后端 post/dto/ImageUrlRefreshItem 一一对应（批量换取可用图片地址）。
+ *
+ * 私有图在浏览器 `<img>` 里不带令牌，故草稿保存的原 URL 取不到图；恢复草稿时调用批量端点换取
+ * `usableUrl`（签名 URL 或公开原 URL）。`available` 为 false 表示当前用户无权访问（已清理 / 无权），
+ * 此时 `usableUrl` 为 null，须提示用户重新上传，不要静默破图。
+ */
+export interface ImageUrlRefreshItem {
+  url: string
+  available: boolean
+  usableUrl: string | null
+}

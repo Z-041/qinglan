@@ -19,6 +19,8 @@ import com.qinglan.common.notify.NotificationMessage;
 import com.qinglan.common.notify.NotificationPort;
 import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
+import com.qinglan.common.storage.ImageUrlSigner;
+import com.qinglan.common.storage.StorageProperties;
 import com.qinglan.common.store.EphemeralStore;
 import com.qinglan.common.store.InMemoryEphemeralStore;
 import com.qinglan.common.web.CursorPage;
@@ -32,9 +34,11 @@ import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostImage;
 import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.entity.RiskLevel;
+import com.qinglan.post.entity.UploadedFile;
 import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.post.repository.TopicRepository;
+import com.qinglan.post.repository.UploadedFileRepository;
 import com.qinglan.support.TestFixtures;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.service.UserService;
@@ -46,6 +50,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.RecordComponent;
@@ -85,12 +90,17 @@ class PostServiceTest {
     private static final String SALT = "salt";
     /** 与 LocalStorageService 返回值同构：/uploads/{yyyy}/{MM}/{32 位 hex}.{ext} */
     private static final String IMAGE_URL = "/uploads/2026/10/" + "a".repeat(32) + ".jpg";
+    /** 与 {@link #IMAGE_URL} 对应的对象 key（对外 URL 去掉 /uploads/ 前缀），登记表按它索引 */
+    private static final String IMAGE_KEY = "2026/10/" + "a".repeat(32) + ".jpg";
 
     @Mock
     private PostRepository postRepository;
 
     @Mock
     private PostImageRepository postImageRepository;
+
+    @Mock
+    private UploadedFileRepository uploadedFileRepository;
 
     @Mock
     private TopicRepository topicRepository;
@@ -128,10 +138,17 @@ class PostServiceTest {
     }
 
     private PostService newService(EphemeralStore store) {
-        return new PostService(postRepository, postImageRepository, topicRepository,
+        return new PostService(postRepository, postImageRepository, uploadedFileRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
                 new PostProperties(60, 9, Duration.ofDays(7), 500),
-                ALLOW_ALL, announcementService, notificationPort, store);
+                ALLOW_ALL, announcementService, notificationPort, store, assembler());
+    }
+
+    private ImageUrlAssembler assembler() {
+        ImageUrlSigner signer = new ImageUrlSigner(
+                new StorageProperties(null, null, null, "unit-test-image-signing-secret", null),
+                new MockEnvironment());
+        return new ImageUrlAssembler(signer, uploadedFileRepository, postRepository);
     }
 
     /** 已通过、可进信息流的帖子，补一个确定的时间戳（信息流排序依赖它） */
@@ -248,7 +265,7 @@ class PostServiceTest {
     // ------------------------------------------------------------------ 发布
 
     @Test
-    @DisplayName("发布：落 Pending 待审，拿到主键后回填真实匿名代号")
+    @DisplayName("发布：落 Pending 待审，拿到主键后回填真实匿名代号，并把图片登记行绑定到本帖")
     void shouldCreatePendingPostWithDerivedAnonymousCode() {
         stubAuthor(activeAuthor());
         when(topicRepository.findById(TOPIC_ID))
@@ -259,6 +276,8 @@ class PostServiceTest {
             return post;
         });
         when(anonymousCodeService.deriveCode(POST_ID, AUTHOR_ID, SALT)).thenReturn("银杏#1a2b");
+        UploadedFile uploaded = UploadedFile.of(AUTHOR_ID, IMAGE_KEY);
+        when(uploadedFileRepository.findByObjectKey(IMAGE_KEY)).thenReturn(Optional.of(uploaded));
 
         PostDetailResponse response = postService.create(AUTHOR_ID,
                 new CreatePostRequest(TOPIC_ID, " 出个二手自行车 ", CONTACT, List.of(IMAGE_URL)));
@@ -276,6 +295,71 @@ class PostServiceTest {
         ArgumentCaptor<List<PostImage>> imagesCaptor = ArgumentCaptor.forClass(List.class);
         verify(postImageRepository).saveAll(imagesCaptor.capture());
         assertThat(imagesCaptor.getValue()).extracting(PostImage::getSortOrder).containsExactly(0);
+        // T-12'：发帖即绑定，登记行回填 bound_post_id
+        assertThat(uploaded.getBoundPostId()).isEqualTo(POST_ID);
+    }
+
+    @Test
+    @DisplayName("T-12'：引用他人上传的图片被拒绝（403 UPLOAD_NOT_OWNED）")
+    void shouldRejectImageUploadedByOthers() {
+        stubPublishableTopic();
+        when(uploadedFileRepository.findByObjectKey(IMAGE_KEY))
+                .thenReturn(Optional.of(UploadedFile.of(AUTHOR_ID + 1, IMAGE_KEY)));
+
+        assertThatThrownBy(() -> postService.create(AUTHOR_ID,
+                new CreatePostRequest(TOPIC_ID, "正文", null, List.of(IMAGE_URL))))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.UPLOAD_NOT_OWNED);
+    }
+
+    @Test
+    @DisplayName("T-12'：引用未登记的图片（不存在/非本站上传）被拒绝（400 UPLOAD_NOT_FOUND）")
+    void shouldRejectUnregisteredImage() {
+        stubPublishableTopic();
+        when(uploadedFileRepository.findByObjectKey(IMAGE_KEY)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> postService.create(AUTHOR_ID,
+                new CreatePostRequest(TOPIC_ID, "正文", null, List.of(IMAGE_URL))))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.UPLOAD_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("T-12'：已被其它帖子绑定的对象不能再被引用（409 UPLOAD_ALREADY_BOUND）")
+    void shouldRejectAlreadyBoundImage() {
+        stubPublishableTopic();
+        UploadedFile bound = UploadedFile.of(AUTHOR_ID, IMAGE_KEY);
+        bound.bindTo(999L);
+        when(uploadedFileRepository.findByObjectKey(IMAGE_KEY)).thenReturn(Optional.of(bound));
+
+        assertThatThrownBy(() -> postService.create(AUTHOR_ID,
+                new CreatePostRequest(TOPIC_ID, "正文", null, List.of(IMAGE_URL))))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.UPLOAD_ALREADY_BOUND);
+    }
+
+    @Test
+    @DisplayName("T-12'：同一帖内重复引用同一对象也被拒绝（409 UPLOAD_ALREADY_BOUND）")
+    void shouldRejectDuplicateReferenceInSamePost() {
+        stubPublishableTopic();
+        when(uploadedFileRepository.findByObjectKey(IMAGE_KEY))
+                .thenReturn(Optional.of(UploadedFile.of(AUTHOR_ID, IMAGE_KEY)));
+
+        assertThatThrownBy(() -> postService.create(AUTHOR_ID,
+                new CreatePostRequest(TOPIC_ID, "正文", null, List.of(IMAGE_URL, IMAGE_URL))))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.UPLOAD_ALREADY_BOUND);
+    }
+
+    /** 通过发布前置校验的桩：作者可用 + 话题存在且无需联系方式 */
+    private void stubPublishableTopic() {
+        stubAuthor(activeAuthor());
+        when(topicRepository.findById(TOPIC_ID))
+                .thenReturn(Optional.of(TestFixtures.topic(TOPIC_ID, "吐槽", false)));
     }
 
     @Test
@@ -313,10 +397,11 @@ class PostServiceTest {
         ContentGuard blocking = text -> {
             throw new BizException(ErrorCode.CONTENT_REJECTED);
         };
-        PostService strict = new PostService(postRepository, postImageRepository, topicRepository,
+        PostService strict = new PostService(postRepository, postImageRepository, uploadedFileRepository,
+                topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
                 new PostProperties(60, 9, Duration.ofDays(7), 500),
-                blocking, announcementService, notificationPort, ephemeralStore);
+                blocking, announcementService, notificationPort, ephemeralStore, assembler());
 
         assertThatThrownBy(() -> strict.create(AUTHOR_ID, new CreatePostRequest(TOPIC_ID, "正文", null, null)))
                 .isInstanceOf(BizException.class)

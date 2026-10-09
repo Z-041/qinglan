@@ -2,22 +2,27 @@ package com.qinglan.review.service;
 
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.storage.ImageUrlSigner;
+import com.qinglan.common.storage.StorageProperties;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostImage;
 import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
+import com.qinglan.post.repository.UploadedFileRepository;
+import com.qinglan.post.service.ImageUrlAssembler;
 import com.qinglan.review.dto.PendingPostItemResponse;
 import com.qinglan.support.TestFixtures;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.mock.env.MockEnvironment;
 
 import java.lang.reflect.RecordComponent;
 import java.time.Instant;
@@ -53,14 +58,32 @@ class PendingPostQueueServiceTest {
     private static final List<PostStatus> PENDING_STATUSES =
             List.of(PostStatus.PENDING, PostStatus.REVIEWING);
 
+    /** 合法对外地址（签名器只接受本服务生成的形态） */
+    private static final String IMAGE_A = "/uploads/2026/10/" + "a".repeat(32) + ".jpg";
+    private static final String IMAGE_B = "/uploads/2026/10/" + "b".repeat(32) + ".jpg";
+    private static final String IMAGE_C = "/uploads/2026/10/" + "c".repeat(32) + ".jpg";
+
     @Mock
     private PostRepository postRepository;
 
     @Mock
     private PostImageRepository postImageRepository;
 
-    @InjectMocks
+    @Mock
+    private UploadedFileRepository uploadedFileRepository;
+
     private PendingPostQueueService pendingPostQueueService;
+
+    @BeforeEach
+    void setUp() {
+        // 真实签名器：待审帖图必须真签，断言签名 URL 的形态才有意义（与 ImageUploadServiceTest 同法）
+        ImageUrlSigner signer = new ImageUrlSigner(
+                new StorageProperties(null, null, null, "unit-test-image-signing-secret", null),
+                new MockEnvironment());
+        // forPost 只用签名器，装配时不会触碰上传仓储
+        ImageUrlAssembler assembler = new ImageUrlAssembler(signer, uploadedFileRepository, postRepository);
+        pendingPostQueueService = new PendingPostQueueService(postRepository, postImageRepository, assembler);
+    }
 
     @Test
     @DisplayName("没有待审帖子时返回空页与空游标，不产生多余的图片装配查询")
@@ -104,22 +127,26 @@ class PendingPostQueueServiceTest {
     }
 
     @Test
-    @DisplayName("带图帖子按 sortOrder 返回全部图片 URL，且整页只批量查一次（杜绝 N+1）")
-    void shouldReturnAllImagesInOrderWithSingleBatchQuery() {
+    @DisplayName("待审帖图按排序签为短时 URL（管理端 <img> 不带令牌也能取到），且整页只批量查一次（杜绝 N+1）")
+    void shouldSignPrivateImagesInOrderWithSingleBatchQuery() {
         Post first = TestFixtures.pendingPost(7L, 100L, 1L, "带图帖子");
         TestFixtures.setCreatedAt(first, BASE);
         Post second = TestFixtures.pendingPost(8L, 101L, 1L, "另一帖子");
         TestFixtures.setCreatedAt(second, BASE.plusSeconds(1));
         stubFirstPage(List.of(first, second));
         when(postImageRepository.findByPostIdInOrderBySortOrderAsc(List.of(7L, 8L))).thenReturn(List.of(
-                image(7L, "/uploads/a.jpg", 0),
-                image(7L, "/uploads/b.jpg", 1),
-                image(8L, "/uploads/c.jpg", 0)));
+                image(7L, IMAGE_A, 0),
+                image(7L, IMAGE_B, 1),
+                image(8L, IMAGE_C, 0)));
 
         List<PendingPostItemResponse> items = pendingPostQueueService.queue(null).items();
 
-        assertThat(items.get(0).images()).containsExactly("/uploads/a.jpg", "/uploads/b.jpg");
-        assertThat(items.get(1).images()).containsExactly("/uploads/c.jpg");
+        // 待审帖图属私有：全部签为带 exp/sig 的短时 URL，且保持原排序与归属
+        assertThat(items.get(0).images()).hasSize(2);
+        assertThat(items.get(0).images().get(0)).startsWith(IMAGE_A + "?").contains("exp=").contains("sig=");
+        assertThat(items.get(0).images().get(1)).startsWith(IMAGE_B + "?").contains("exp=").contains("sig=");
+        assertThat(items.get(1).images()).hasSize(1);
+        assertThat(items.get(1).images().get(0)).startsWith(IMAGE_C + "?").contains("exp=").contains("sig=");
         // 整页一次批量查询，而不是逐帖一次
         verify(postImageRepository, times(1)).findByPostIdInOrderBySortOrderAsc(anyList());
     }

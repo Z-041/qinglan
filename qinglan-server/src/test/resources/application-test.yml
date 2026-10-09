@@ -46,6 +46,10 @@ qinglan:
   upload:
     max-per-window: 30
     window: 1m
+    # 测试里关掉定时回收：@SpringBootTest 会启动调度线程，后台任务不该在事务回滚的用例里跑。
+    # 回收逻辑由 UploadOrphanCleanupServiceTest 直接调方法验证
+    orphan-cleanup-enabled: false
+    orphan-retention: 24h
   announcement:
     min-read-seconds: 5
     max-publishes-per-day: 5
@@ -61,7 +65,24 @@ qinglan:
       - label: 银行卡
         regex: '(?<!\d)\d{16,19}(?!\d)'
   storage:
+    # 测试用本地磁盘实现（与生产 S3 走同一套 StorageService 契约）
+    type: local
     local-root: ./target/test-uploads
+
+# 健康检查：测试环境不跑 Redis（code-store=memory），故关掉 Redis 健康指示器，
+# 否则 /actuator/health 会因连不上 Redis 报 DOWN。liveness/readiness 子路径需显式开启
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    redis:
+      enabled: false
 
 logging:
   level:
