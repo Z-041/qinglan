@@ -3,6 +3,7 @@ package com.qinglan.review.service;
 import com.qinglan.common.audit.AuditAction;
 import com.qinglan.common.audit.AuditLog;
 import com.qinglan.common.audit.AuditLogRepository;
+import com.qinglan.common.audit.AuditLogService;
 import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
@@ -18,7 +19,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.lang.reflect.RecordComponent;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -47,6 +50,9 @@ class AuditLogQueryServiceTest {
 
     @Mock
     private AuditLogRepository auditLogRepository;
+
+    @Mock
+    private AuditLogService auditLogService;
 
     @InjectMocks
     private AuditLogQueryService auditLogQueryService;
@@ -130,6 +136,39 @@ class AuditLogQueryServiceTest {
                 "id", "targetType", "targetId", "action", "operatorId", "reason", "createdAt");
         assertThat(componentNames).doesNotContain(
                 "email", "studentId", "studentIdEnc", "emailHash", "anonymousCode", "anonymousSalt");
+    }
+
+    // ------------------------------------------------------------------ CSV 导出（阶段 B）
+
+    @Test
+    @DisplayName("导出：UTF-8 BOM + 表头 + 逐行数据，且写一条 DATA_EXPORT 审计")
+    void shouldExportCsvWithBomAndAudit() throws Exception {
+        when(auditLogRepository.findAdminPage(any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(List.of(log(1L, AuditAction.POST_TAKEDOWN, 7L, 99L, "=恶意公式", BASE)));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+        auditLogQueryService.exportCsv(null, null, null, 99L, out);
+
+        String csv = out.toString(StandardCharsets.UTF_8);
+        assertThat(csv).startsWith("\uFEFF");
+        assertThat(csv).contains("id,targetType,targetId,action,operatorId,reason,createdAt");
+        // CSV 注入防护：以 = 开头的理由被前置单引号
+        assertThat(csv).contains("'=恶意公式");
+        verify(auditLogService).record(eq(AuditTargetType.EXPORT), eq(0L), eq(AuditAction.DATA_EXPORT),
+                eq(99L), any());
+    }
+
+    @Test
+    @DisplayName("导出前置校验：行数超上限时明确报错（不静默截断），且不写审计")
+    void shouldRejectExportOverLimit() {
+        when(auditLogRepository.countAdminFiltered(any(), any(), any())).thenReturn(5001L);
+
+        assertThatThrownBy(() -> auditLogQueryService.requireExportable(null, null, null))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.EXPORT_ROW_LIMIT_EXCEEDED);
+
+        verifyNoInteractions(auditLogService);
     }
 
     // ------------------------------------------------------------------ 辅助

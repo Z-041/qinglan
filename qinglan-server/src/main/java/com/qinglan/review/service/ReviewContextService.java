@@ -2,11 +2,15 @@ package com.qinglan.review.service;
 
 import com.qinglan.comment.entity.Comment;
 import com.qinglan.comment.repository.CommentRepository;
+import com.qinglan.common.audit.AuditLog;
+import com.qinglan.common.audit.AuditLogRepository;
+import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.review.dto.AdminReviewContextResponse;
+import com.qinglan.review.dto.AdminReviewHistoryResponse;
 import com.qinglan.review.entity.Report;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReportStatus;
@@ -16,6 +20,7 @@ import com.qinglan.review.repository.ReviewContextRepository;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,11 +37,17 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ReviewContextService {
 
+    /** 「作者最近动态」取多少条：够判断惯犯 / 初犯即可，不必把该作者的帖子全列出来 */
+    private static final int RECENT_POST_LIMIT = 10;
+    /** 「目标处置历史」取多少条：最近的处置最有参考价值 */
+    private static final int DISPOSITION_LIMIT = 20;
+
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
     private final UserService userService;
     private final ReportRepository reportRepository;
     private final ReviewContextRepository reviewContextRepository;
+    private final AuditLogRepository auditLogRepository;
 
     @Transactional(readOnly = true)
     public AdminReviewContextResponse context(ReviewTargetType targetType, Long targetId) {
@@ -61,6 +72,43 @@ public class ReviewContextService {
                 reporterIds.size(),
                 repeated,
                 reasons);
+    }
+
+    /**
+     * 作者最近动态 + 目标处置历史（阶段 A 面板增强）。
+     *
+     * <p>作者 id 只在方法内部用于查帖子，出参只有帖子的 {@code id / status / createdAt}——
+     * 不含 authorId、匿名代号、学号、邮箱（不变量 #1 / #3）。</p>
+     */
+    @Transactional(readOnly = true)
+    public AdminReviewHistoryResponse history(ReviewTargetType targetType, Long targetId) {
+        Target target = resolveTarget(targetType, targetId);
+        List<AdminReviewHistoryResponse.AuthorPostItem> recentPosts = postRepository
+                .findMinePage(target.authorId(), null, null, null, PageRequest.of(0, RECENT_POST_LIMIT))
+                .stream()
+                .map(post -> new AdminReviewHistoryResponse.AuthorPostItem(
+                        post.getId(), post.getStatus().name(), post.getCreatedAt()))
+                .toList();
+        List<AdminReviewHistoryResponse.DispositionItem> dispositions = auditLogRepository
+                .findDispositionHistory(auditTargetType(targetType), targetId,
+                        PageRequest.of(0, DISPOSITION_LIMIT))
+                .stream()
+                .map(ReviewContextService::toDisposition)
+                .toList();
+        return new AdminReviewHistoryResponse(recentPosts, dispositions);
+    }
+
+    private static AdminReviewHistoryResponse.DispositionItem toDisposition(AuditLog log) {
+        return new AdminReviewHistoryResponse.DispositionItem(
+                log.getAction(), log.getOperatorId(), log.getReason(), log.getCreatedAt());
+    }
+
+    /** 审核目标类型 → 审计目标类型：两者取值一致（POST / COMMENT），但分属不同的枚举，需显式映射 */
+    private AuditTargetType auditTargetType(ReviewTargetType targetType) {
+        return switch (targetType) {
+            case POST -> AuditTargetType.POST;
+            case COMMENT -> AuditTargetType.COMMENT;
+        };
     }
 
     private Target resolveTarget(ReviewTargetType targetType, Long targetId) {

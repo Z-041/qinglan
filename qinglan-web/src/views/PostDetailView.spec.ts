@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { deleteComment, fetchComments } from '@/api/comment'
 import { setAuthToken } from '@shared/api/http'
 import { fetchPostDetail } from '@/api/post'
+import { fetchMyReportState } from '@/api/report'
 import { useUserStore } from '@shared/stores/user'
 import PostDetailView from '@/views/PostDetailView.vue'
 import type { Comment } from '@/types/comment'
@@ -28,6 +29,10 @@ vi.mock('@/api/comment', () => ({
   unlikeComment: vi.fn(),
 }))
 
+vi.mock('@/api/report', () => ({
+  fetchMyReportState: vi.fn(),
+}))
+
 vi.mock('@shared/api/report', () => ({
   createReport: vi.fn(),
   submitAppeal: vi.fn(),
@@ -36,6 +41,7 @@ vi.mock('@shared/api/report', () => ({
 const mockedFetchPostDetail = vi.mocked(fetchPostDetail)
 const mockedFetchComments = vi.mocked(fetchComments)
 const mockedDeleteComment = vi.mocked(deleteComment)
+const mockedFetchMyReportState = vi.mocked(fetchMyReportState)
 
 function detail(overrides: Partial<PostDetail> = {}): PostDetail {
   return {
@@ -211,5 +217,74 @@ describe('PostDetailView 评论分页', () => {
     expect(wrapper.text()).toContain('评论内容 2')
     // 已到末页，入口收起
     expect(moreButton(wrapper)).toBeUndefined()
+  })
+})
+
+describe('PostDetailView 举报反馈状态', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    setAuthToken(null)
+    vi.clearAllMocks()
+    useUserStore().setAccessToken('token')
+  })
+
+  function reportButton(wrapper: VueWrapper) {
+    return wrapper.findAll('button').find((b) => b.text() === '举报' || b.text() === '已举报')
+  }
+
+  it('未举报时举报入口可点（不置灰）', async () => {
+    mockedFetchMyReportState.mockResolvedValue({
+      reported: false,
+      status: null,
+      createdAt: null,
+      handledAt: null,
+    })
+
+    const wrapper = await mountView(detail())
+
+    const button = reportButton(wrapper)
+    expect(button?.text()).toBe('举报')
+    expect(button?.attributes('disabled')).toBeUndefined()
+  })
+
+  it('已举报（处理中）时入口置灰并展示「处理中」', async () => {
+    mockedFetchMyReportState.mockResolvedValue({
+      reported: true,
+      status: 'PENDING',
+      createdAt: '2026-10-01T08:00:00Z',
+      handledAt: null,
+    })
+
+    const wrapper = await mountView(detail())
+
+    expect(wrapper.text()).toContain('举报处理中')
+    expect(reportButton(wrapper)?.attributes('disabled')).toBeDefined()
+  })
+
+  it('举报成立展示「内容已处理」', async () => {
+    mockedFetchMyReportState.mockResolvedValue({
+      reported: true,
+      status: 'UPHELD',
+      createdAt: '2026-10-01T08:00:00Z',
+      handledAt: '2026-10-02T08:00:00Z',
+    })
+
+    const wrapper = await mountView(detail())
+
+    expect(wrapper.text()).toContain('举报成立，内容已处理')
+  })
+
+  it('举报未获支持展示「未获支持」', async () => {
+    mockedFetchMyReportState.mockResolvedValue({
+      reported: true,
+      status: 'DISMISSED',
+      createdAt: '2026-10-01T08:00:00Z',
+      handledAt: '2026-10-02T08:00:00Z',
+    })
+
+    const wrapper = await mountView(detail())
+
+    expect(wrapper.text()).toContain('举报未获支持')
   })
 })

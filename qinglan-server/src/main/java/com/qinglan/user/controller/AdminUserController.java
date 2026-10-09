@@ -2,6 +2,7 @@ package com.qinglan.user.controller;
 
 import com.qinglan.common.security.CurrentUser;
 import com.qinglan.common.web.ApiResponse;
+import com.qinglan.common.web.CsvDownload;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.user.dto.AdminUserQuery;
 import com.qinglan.user.dto.BanUserRequest;
@@ -12,6 +13,7 @@ import com.qinglan.user.dto.UserProfileResponse;
 import com.qinglan.user.entity.UserRole;
 import com.qinglan.user.entity.UserStatus;
 import com.qinglan.user.service.UserService;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -58,6 +61,30 @@ public class AdminUserController {
         AdminUserQuery query = new AdminUserQuery(
                 status, role, minCredit, maxCredit, createdFrom, createdTo, cursor);
         return ApiResponse.ok(userService.listUsers(query));
+    }
+
+    /**
+     * 按当前筛选条件流式导出用户列表 CSV（阶段 B，权限同列表）。
+     *
+     * <p>字段集沿用 {@link UserProfileResponse}，不含学号 / 邮箱（不变量 #3）；导出动作写
+     * {@code DATA_EXPORT} 审计（不变量 #7）。</p>
+     */
+    @GetMapping("/export")
+    @PreAuthorize("hasAuthority('USER_MANAGE')")
+    public void export(
+            @RequestParam(required = false) UserStatus status,
+            @RequestParam(required = false) UserRole role,
+            @RequestParam(required = false) @Min(0) @Max(100) Integer minCredit,
+            @RequestParam(required = false) @Min(0) @Max(100) Integer maxCredit,
+            @RequestParam(required = false) Instant createdFrom,
+            @RequestParam(required = false) Instant createdTo,
+            HttpServletResponse response) throws IOException {
+        AdminUserQuery query = new AdminUserQuery(
+                status, role, minCredit, maxCredit, createdFrom, createdTo, null);
+        // 先校验行数上限，再设置 CSV 响应头：校验失败时响应尚未被设为 text/csv，错误能按 JSON 返回
+        userService.requireExportable(query);
+        CsvDownload.prepare(response, "users");
+        userService.exportCsv(query, CurrentUser.requireUserId(), response.getOutputStream());
     }
 
     @PostMapping("/{userId}/ban")

@@ -40,6 +40,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -195,6 +196,18 @@ public class CommentService {
         int removed = removeWithReplies(comment);
         auditLogService.record(AuditTargetType.COMMENT, commentId, AuditAction.COMMENT_REMOVE, operatorId, reason);
         log.info("管理员移除评论 commentId={} 连同回复共 {} 条，操作人 operatorId={}", commentId, removed, operatorId);
+    }
+
+    /**
+     * 评论所属帖子 id（供 {@code review} 生成「举报反馈」通知的详情回链）。
+     *
+     * <p>评论只软删（{@code REMOVED}），从不硬删，故除非 id 根本不存在，否则总能解析出所属帖子。
+     * 解析不到时返回空 {@link Optional}，让通知退化为不可点的普通条目——通知是处置的副作用，
+     * 不该因为回链缺失而让整次处置回滚。评论内部结构由本模块独占，故解析放在这里。</p>
+     */
+    @Transactional(readOnly = true)
+    public Optional<Long> findPostId(Long commentId) {
+        return commentRepository.findById(commentId).map(Comment::getPostId);
     }
 
     /** 给评论点赞，幂等 */

@@ -46,6 +46,24 @@ describe('UserTable', () => {
     expect(wrapper.text()).not.toContain('987654')
   })
 
+  it('注册时间渲染相对时间，绝对时间落在 title 上', () => {
+    const createdAt = new Date().toISOString()
+    const wrapper = mount(UserTable, { props: { items: [user({ createdAt })] } })
+
+    const cell = wrapper
+      .findAll('td')
+      .find((element) => element.attributes('title') === new Date(createdAt).toLocaleString())
+
+    expect(cell?.text()).toBe('刚刚')
+  })
+
+  it('表头固定：thead 带 sticky + 不透明底色', () => {
+    const thead = mount(UserTable, { props: { items: [user()] } }).find('thead')
+
+    expect(thead.classes()).toContain('sticky')
+    expect(thead.classes()).toContain('bg-surface')
+  })
+
   it('封禁中的用户只给「解封」，并展示封禁截止时间', () => {
     const wrapper = mount(UserTable, {
       props: { items: [user({ status: 'BANNED', bannedUntil: '2026-12-01T00:00:00Z' })] },

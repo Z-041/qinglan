@@ -30,9 +30,10 @@ function remove(url: string): void {
 </script>
 
 <template>
-  <div class="flex flex-wrap gap-2">
-    <div v-for="url in model" :key="url" class="relative">
-      <img :src="url" alt="已上传图片" class="size-20 rounded-lg border border-line object-cover" />
+  <!-- 九宫格：固定 3 列、方格单元（最多 9 张） -->
+  <div class="grid max-w-[420px] grid-cols-3 gap-2">
+    <div v-for="url in model" :key="url" class="relative aspect-square">
+      <img :src="url" alt="已上传图片" class="size-full rounded-md border border-line object-cover" />
       <button
         type="button"
         class="absolute -top-1.5 -right-1.5 flex size-5 cursor-pointer items-center justify-center rounded-full bg-danger text-xs leading-none text-white"
@@ -46,7 +47,7 @@ function remove(url: string): void {
     <button
       v-if="model.length < props.max"
       type="button"
-      class="flex size-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-line-strong text-xs text-muted transition hover:border-primary hover:text-primary-deep disabled:cursor-not-allowed"
+      class="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed border-line-strong text-xs text-muted transition hover:border-primary hover:text-primary-deep disabled:cursor-not-allowed"
       :disabled="props.uploading"
       @click="fileInput?.click()"
     >

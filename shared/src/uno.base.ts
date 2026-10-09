@@ -26,7 +26,6 @@ export const theme = {
     'primary-tint': 'var(--ql-primary-tint)',
     canvas: 'var(--ql-canvas)',
     surface: 'var(--ql-surface)',
-    'surface-glass': 'var(--ql-surface-glass)',
     line: 'var(--ql-line)',
     'line-strong': 'var(--ql-line-strong)',
     ink: 'var(--ql-ink)',
@@ -62,21 +61,25 @@ export const shortcuts = {
   // 窄屏（<1024px）回退到与 ql-container 等价的窄容器，观感与此前一致
   'ql-shell': 'mx-auto w-full max-w-[1200px] px-6 max-lg:(max-w-[720px] px-4)',
 
-  // 卡片
+  // 卡片（管理端与详情/表单等仍在使用，语义保持不变；学生端列表行改用下方的 ql-row）
   'ql-card': 'rounded-xl border border-line bg-surface shadow-sm',
   'ql-card-interactive':
     'ql-card relative transition duration-200 hover:-translate-y-0.5 hover:border-primary-soft hover:shadow-md',
 
-  // 圆形小标签（角色、状态等）
+  // 社区列表行：白底 + 底部 1px 分割线 + 悬停仅换底色（不浮起、不圆角、不投影）
+  // 学生端信息流用，管理端不使用
+  'ql-row': 'block border-b border-line transition hover:bg-primary-tint',
+
+  // 圆形小标签（角色、状态等）；管理端沿用，语义保持胶囊形不变
   'ql-badge': 'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium',
 
-  // 渐变标题文字（需显式补 -webkit- 前缀，否则部分浏览器不生效）
-  'ql-title-gradient':
-    'bg-gradient-to-r from-primary to-primary-deep bg-clip-text text-transparent [-webkit-background-clip:text]',
+  // 方角小标签（话题、状态）：学生端替代胶囊徽章，去掉圆角与装饰
+  'ql-tag': 'inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-medium',
 
-  // 顶部导航链接（依赖 vue-router 自动附加的 router-link-exact-active）
+  // 顶部导航链接（依赖 vue-router 自动附加的 router-link-exact-active）：
+  // 激活态只做「主色 + 字重」，不再用胶囊底，减少装饰密度
   'ql-nav-link':
-    'rounded-lg px-2.5 py-1.5 text-sm text-muted transition hover:bg-primary-tint hover:text-ink [&.router-link-exact-active]:bg-primary-soft [&.router-link-exact-active]:font-medium [&.router-link-exact-active]:text-primary-deep',
+    'px-2.5 py-1.5 text-sm text-muted transition hover:text-ink [&.router-link-exact-active]:font-medium [&.router-link-exact-active]:text-primary-deep',
 
   // 表单
   'ql-label': 'mb-1.5 block text-xs text-muted',
@@ -100,9 +103,6 @@ export const preflights = [
       }
       body {
         background-color: var(--ql-canvas);
-        /* 顶部极淡的主色光晕，给纯色画布一点纵深 */
-        background-image: radial-gradient(circle at 50% -10%, var(--ql-primary-tint), transparent 55%);
-        background-repeat: no-repeat;
         color: var(--ql-ink);
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
       }

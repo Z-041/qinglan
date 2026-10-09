@@ -1,6 +1,7 @@
 package com.qinglan.user.controller;
 
 import com.qinglan.auth.security.JwtService;
+import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.user.dto.AdminUserQuery;
@@ -27,12 +28,16 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -209,6 +214,33 @@ class AdminUserControllerTest {
                         .content("{\"role\":\"REVIEWER\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(ErrorCode.INVALID_REQUEST.code()));
+    }
+
+    // ------------------------------------------------------------------ 导出（阶段 B）
+
+    @Test
+    @DisplayName("用户导出：Content-Type 为 CSV 且带时间戳文件名")
+    void shouldExposeCsvHeaders() throws Exception {
+        authenticateAsAdmin();
+
+        mockMvc.perform(get("/api/admin/users/export"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", containsString("text/csv")))
+                .andExpect(header().string("Content-Disposition", containsString("attachment; filename=\"users-")));
+
+        verify(userService).exportCsv(any(), eq(OPERATOR_ID), any());
+    }
+
+    @Test
+    @DisplayName("用户导出超限：返回专用错误码 400（不静默截断）")
+    void shouldReturnErrorWhenUserExportOverLimit() throws Exception {
+        authenticateAsAdmin();
+        doThrow(new BizException(ErrorCode.EXPORT_ROW_LIMIT_EXCEEDED))
+                .when(userService).requireExportable(any());
+
+        mockMvc.perform(get("/api/admin/users/export"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("QL-400-014"));
     }
 
     @Test

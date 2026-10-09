@@ -1,14 +1,26 @@
 <script setup lang="ts">
 import { isReportOverdue } from '@/composables/useReviewQueue'
 import { proposalActionLabel, proposalStatusLabel } from '@/types/proposal'
+import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminQueueItem, AdminQueueProposalProgress } from '@/types/review'
 
-const props = defineProps<{ items: AdminQueueItem[]; loading?: boolean; failed?: boolean }>()
+const props = defineProps<{
+  items: AdminQueueItem[]
+  loading?: boolean
+  failed?: boolean
+  /** 键盘行焦点所在行的键（`${targetType}-${targetId}`）；用于高亮当前处置目标 */
+  activeKey?: string | null
+}>()
 
 const emit = defineEmits<{ handle: [item: AdminQueueItem] }>()
 
 const { targetTypeLabel, targetStatusLabel, reportReasonLabel } = useUserLabels()
+
+/** 行键：与 `:key` 同一口径，焦点态与 DOM 复用都据它 */
+function rowKey(row: AdminQueueItem): string {
+  return `${row.targetType}-${row.targetId}`
+}
 
 /** 提案进度文案：同意票进度 + 是否已投票 + 僵局提示（只展示汇总，不展示谁投了什么） */
 function progressText(proposal: AdminQueueProposalProgress): string {
@@ -27,7 +39,9 @@ function hasOpenProposal(item: AdminQueueItem): boolean {
 
 <template>
   <table class="w-full border-collapse text-sm">
-    <thead>
+    <!-- 表头固定在页面滚动容器顶端（阶段 B「表格体验」）。
+         依赖外层容器不用 overflow-hidden（会另建滚动容器、令 sticky 失效），见各视图的 overflow-clip -->
+    <thead class="sticky top-0 z-10 bg-surface">
       <tr class="border-b border-line text-left text-xs text-muted">
         <th class="px-3 py-2.5 font-medium">目标类型</th>
         <th class="px-3 py-2.5 font-medium">内容摘要</th>
@@ -43,8 +57,9 @@ function hasOpenProposal(item: AdminQueueItem): boolean {
     <tbody>
       <tr
         v-for="row in props.items"
-        :key="`${row.targetType}-${row.targetId}`"
+        :key="rowKey(row)"
         class="border-b border-line last:border-0"
+        :class="props.activeKey === rowKey(row) ? 'bg-primary-soft' : ''"
       >
         <td class="px-3 py-3">{{ targetTypeLabel(row.targetType) }}</td>
         <td class="max-w-[320px] truncate px-3 py-3" :title="row.preview">{{ row.preview }}</td>
@@ -71,8 +86,9 @@ function hasOpenProposal(item: AdminQueueItem): boolean {
         <td
           class="px-3 py-3"
           :class="isReportOverdue(row.firstReportedAt) ? 'font-medium text-danger-deep' : ''"
+          :title="formatAbsoluteTime(row.firstReportedAt)"
         >
-          {{ new Date(row.firstReportedAt).toLocaleString() }}
+          {{ formatRelativeTime(row.firstReportedAt) }}
         </td>
         <td class="px-3 py-3">
           <span

@@ -173,7 +173,7 @@ async function handleRevoke(row: AdminAnnouncementItem): Promise<void> {
       </div>
     </div>
 
-    <section class="ql-card overflow-hidden">
+    <section class="ql-card overflow-clip">
       <AnnouncementTable
         :items="items"
         :loading="loading"

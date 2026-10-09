@@ -49,5 +49,13 @@ public enum AuditAction {
     /** 发布公告（仅 SUPER_ADMIN），发布后进入强制阅读 */
     ANNOUNCEMENT_PUBLISH,
     /** 撤回公告（仅 SUPER_ADMIN），不删已读记录，更正走 supersedes_id 发新公告 */
-    ANNOUNCEMENT_REVOKE
+    ANNOUNCEMENT_REVOKE,
+    /**
+     * 批量导出（审计日志 / 用户列表）。
+     *
+     * <p>导出是「一次性把大量数据带离系统」的敏感动作，属不变量 #7 的意图范围：留痕才能回答
+     * 「谁在什么时候把哪批数据导走了」。{@code reason} 记录导出资源与筛选条件摘要，
+     * 不含任何身份明文（不变量 #3）。</p>
+     */
+    DATA_EXPORT
 }

@@ -95,6 +95,51 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             """)
     int adjustReportCount(@Param("postId") Long postId, @Param("delta") int delta);
 
+    /**
+     * 「我的帖子」/ 「作者最近动态」：某作者所发帖子的键集分页，按发布时间倒序（新帖在前）。
+     *
+     * <p>排序键 {@code (created_at desc, id desc)}，两个比较条件必须与 {@code order by} 严格同序。
+     * 首页传 {@code cursorCreatedAt = null}（第一个分支恒真），与后续页共用同一条 JPQL。</p>
+     *
+     * <p>{@code status} 为空表示不筛选状态——「我的帖子」要覆盖待审 / 已驳回 / 已下架 / 已通过全部
+     * 状态（作者能看到自己的全部帖子），而上下文面板的「作者最近动态」也不筛选。</p>
+     */
+    @Query("""
+            select p from Post p
+            where p.authorId = :authorId
+              and (:status is null or p.status = :status)
+              and (:cursorCreatedAt is null
+                   or p.createdAt < :cursorCreatedAt
+                   or (p.createdAt = :cursorCreatedAt and p.id < :cursorId))
+            order by p.createdAt desc, p.id desc
+            """)
+    List<Post> findMinePage(
+            @Param("authorId") Long authorId,
+            @Param("status") PostStatus status,
+            @Param("cursorCreatedAt") Instant cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable limit);
+
+    /**
+     * 热门排序候选集：窗口内（默认近 7 天）审核通过的帖子，按发布时间倒序取有界的前若干条。
+     *
+     * <p>为什么先取候选再在内存算分：热度分含时间衰减 {@code e^(-年龄/72h)}，无法用稳定 SQL 游标
+     * 表达（见 {@code PostService#listHot}）。用时间窗口 + 有界条数把候选压住，避免全表算分；
+     * 排序交给内存中的复合游标。之所以自定义条数上限而非无界，是为了遵守安全红线「禁止无限制扫描」。</p>
+     */
+    @Query("""
+            select p from Post p
+            where p.status = :status
+              and p.createdAt >= :windowStart
+              and (:topicId is null or p.topicId = :topicId)
+            order by p.createdAt desc, p.id desc
+            """)
+    List<Post> findHotCandidates(
+            @Param("status") PostStatus status,
+            @Param("topicId") Long topicId,
+            @Param("windowStart") Instant windowStart,
+            Pageable limit);
+
     long countByStatus(PostStatus status);
 
     long countByStatusIn(Collection<PostStatus> statuses);

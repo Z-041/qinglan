@@ -1,8 +1,15 @@
 <script setup lang="ts">
+import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminAppealItem } from '@/types/review'
 
-const props = defineProps<{ items: AdminAppealItem[]; loading?: boolean; failed?: boolean }>()
+const props = defineProps<{
+  items: AdminAppealItem[]
+  loading?: boolean
+  failed?: boolean
+  /** 键盘行焦点所在行的键（appealId 字符串）；用于高亮当前处置目标 */
+  activeKey?: string | null
+}>()
 
 const emit = defineEmits<{ review: [item: AdminAppealItem] }>()
 
@@ -15,7 +22,7 @@ function takenDownText(reason: string | null): string {
 
 <template>
   <table class="w-full border-collapse text-sm">
-    <thead>
+    <thead class="sticky top-0 z-10 bg-surface">
       <tr class="border-b border-line text-left text-xs text-muted">
         <th class="px-3 py-2.5 font-medium">内容摘要</th>
         <th class="px-3 py-2.5 font-medium">目标状态</th>
@@ -27,7 +34,12 @@ function takenDownText(reason: string | null): string {
     </thead>
     <tbody>
       <!-- key 用 appealId 只为稳定复用 DOM；该数字不渲染到界面上（决策 6） -->
-      <tr v-for="row in props.items" :key="row.appealId" class="border-b border-line last:border-0">
+      <tr
+        v-for="row in props.items"
+        :key="row.appealId"
+        class="border-b border-line last:border-0"
+        :class="props.activeKey === String(row.appealId) ? 'bg-primary-soft' : ''"
+      >
         <td class="max-w-[320px] truncate px-3 py-3" :title="row.preview ?? ''">
           {{ row.preview ?? '内容已不存在' }}
         </td>
@@ -36,7 +48,9 @@ function takenDownText(reason: string | null): string {
           {{ takenDownText(row.takenDownReason) }}
         </td>
         <td class="max-w-[320px] truncate px-3 py-3" :title="row.appealReason">{{ row.appealReason }}</td>
-        <td class="px-3 py-3">{{ new Date(row.appealedAt).toLocaleString() }}</td>
+        <td class="px-3 py-3" :title="formatAbsoluteTime(row.appealedAt)">
+          {{ formatRelativeTime(row.appealedAt) }}
+        </td>
         <td class="px-3 py-3">
           <button
             type="button"

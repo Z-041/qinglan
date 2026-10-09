@@ -1,5 +1,6 @@
-import { httpGet, httpPost } from '@shared/api/http'
+import { httpGet, httpGetBlob, httpPost } from '@shared/api/http'
 
+import type { BlobDownload } from '@shared/api/http'
 import type {
   AdminAnnouncementItem,
   AdminAuditLogItem,
@@ -108,4 +109,21 @@ export function fetchAuditLogs(query: AuditLogQuery = {}): Promise<CursorPage<Ad
     from: query.from,
     to: query.to,
   })
+}
+
+/** 审计日志导出（阶段 B）：按当前筛选条件流式下载 CSV；导出本身写审计（不变量 #7） */
+export function exportAuditLogs(query: AuditLogQuery = {}): Promise<BlobDownload> {
+  return httpGetBlob('/admin/audit-logs/export', {
+    action: query.action,
+    from: query.from,
+    to: query.to,
+  })
+}
+
+/**
+ * 用户列表导出（阶段 B）：按当前查询条件下载 CSV。
+ * 导出的是**当前筛选的完整结果集**（无游标），故直接复用列表的规范化后的查询参数。
+ */
+export function exportAdminUsers(query: AdminUserQuery): Promise<BlobDownload> {
+  return httpGetBlob('/admin/users/export', queryParams(query))
 }

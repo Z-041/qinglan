@@ -1,47 +1,19 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 
-import { fetchAuditLogs } from '@/api/admin'
+import { exportAuditLogs, fetchAuditLogs } from '@/api/admin'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import { formatAbsoluteTime, formatShortDateTime } from '@shared/composables/useRelativeTime'
 import { useUserLabels } from '@shared/composables/useUserLabels'
-import type { AdminAuditLogItem, AuditTargetType } from '@/types/admin'
-
-/**
- * 审计动作码 → 中文。与后端 common/audit/AuditAction 一一对应。
- * 未知码退化为原码展示（版本不同步时宁可显示码，也不要渲染出空）。
- */
-const ACTION_LABELS: Record<string, string> = {
-  BAN: '封禁用户',
-  UNBAN: '解封用户',
-  CREDIT_ADJUST: '调整信用分',
-  POST_APPROVE: '放行帖子',
-  POST_REJECT: '驳回帖子',
-  POST_TAKEDOWN: '下架帖子',
-  POST_AUTO_TAKEDOWN: '自动下架（举报达阈值）',
-  POST_RESTORE: '恢复帖子可见',
-  POST_HIDE_CONTACT: '隐藏联系方式',
-  POST_SHOW_CONTACT: '恢复联系方式',
-  COMMENT_REMOVE: '移除评论',
-  REPORT_DISMISS: '驳回举报',
-  REPORT_UPHOLD: '维持下架',
-  APPEAL_REVIEW: '复审申诉',
-  ROLE_GRANT: '下放管理权限',
-  ROLE_REVOKE: '收回管理权限',
-  ANNOUNCEMENT_CREATE: '创建公告草稿',
-  ANNOUNCEMENT_PUBLISH: '发布公告',
-  ANNOUNCEMENT_REVOKE: '撤回公告',
-  /** 查看联系方式：由普通用户浏览触发，量级最大，排在最后 */
-  CONTACT_VIEW: '查看联系方式',
-}
-
-const TARGET_TYPE_LABELS: Record<AuditTargetType, string> = {
-  USER: '用户',
-  POST: '帖子',
-  COMMENT: '评论',
-  ANNOUNCEMENT: '公告',
-}
+import { useCsvExport } from '@/composables/useCsvExport'
+import {
+  AUDIT_ACTION_LABELS as ACTION_LABELS,
+  AUDIT_TARGET_TYPE_LABELS as TARGET_TYPE_LABELS,
+} from '@/types/admin'
+import type { AdminAuditLogItem } from '@/types/admin'
 
 const { reviewReasonText } = useUserLabels()
+const { exporting, download } = useCsvExport()
 
 const items = ref<AdminAuditLogItem[]>([])
 const loading = ref(false)
@@ -64,6 +36,19 @@ function actionLabel(action: string): string {
 function toInstant(value: string): string | null {
   // datetime-local 是本地时间，转成 UTC 的 ISO 串交给后端（与公告表单同口径）
   return value ? new Date(value).toISOString() : null
+}
+
+/** 按**当前筛选条件**导出（与列表同口径）；超限等错误由拦截器提示，这里不重复 */
+function exportCsv(): void {
+  void download(
+    () =>
+      exportAuditLogs({
+        action: actionFilter.value || null,
+        from: toInstant(fromFilter.value),
+        to: toInstant(toFilter.value),
+      }),
+    'audit-logs',
+  )
 }
 
 function applyPage(page: { items: AdminAuditLogItem[]; nextCursor: string | null }, append: boolean): void {
@@ -134,14 +119,17 @@ onMounted(() => {
   <div class="flex flex-col gap-5">
     <div class="flex items-center justify-between">
       <h1 class="text-lg font-semibold text-ink">审计日志</h1>
-      <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">刷新</BaseButton>
+      <div class="flex items-center gap-2">
+        <BaseButton variant="ghost" size="sm" :loading="exporting" @click="exportCsv">导出 CSV</BaseButton>
+        <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">刷新</BaseButton>
+      </div>
     </div>
 
     <p class="text-sm text-muted">
       记录全部治理动作，只增不改删；操作人只以 ID 出现，不含学号与邮箱明文。
     </p>
 
-    <section class="ql-card overflow-hidden">
+    <section class="ql-card overflow-clip">
       <div class="flex flex-wrap items-center gap-2 border-b border-line px-3 py-3">
         <el-select v-model="actionFilter" class="w-[200px]" placeholder="全部动作" clearable>
           <el-option
@@ -158,7 +146,8 @@ onMounted(() => {
       </div>
 
       <table class="w-full border-collapse text-sm">
-        <thead>
+        <!-- 审计时间保留绝对时间（合规语义），压成短格式；完整时刻悬停可见 -->
+        <thead class="sticky top-0 z-10 bg-surface">
           <tr class="border-b border-line text-left text-xs text-muted">
             <th class="px-3 py-2.5 font-medium">时间</th>
             <th class="px-3 py-2.5 font-medium">动作</th>
@@ -169,7 +158,9 @@ onMounted(() => {
         </thead>
         <tbody>
           <tr v-for="row in items" :key="row.id" class="border-b border-line last:border-0">
-            <td class="px-3 py-3 whitespace-nowrap">{{ new Date(row.createdAt).toLocaleString() }}</td>
+            <td class="px-3 py-3 whitespace-nowrap" :title="formatAbsoluteTime(row.createdAt)">
+              {{ formatShortDateTime(row.createdAt) }}
+            </td>
             <td class="px-3 py-3">{{ actionLabel(row.action) }}</td>
             <td class="px-3 py-3">{{ TARGET_TYPE_LABELS[row.targetType] }} #{{ row.targetId }}</td>
             <td class="px-3 py-3">

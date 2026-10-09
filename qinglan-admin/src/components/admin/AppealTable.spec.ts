@@ -33,6 +33,24 @@ describe('AppealTable', () => {
     expect(wrapper.text()).toContain('暂无待复审申诉')
   })
 
+  it('申诉时间渲染相对时间，绝对时间落在 title 上', () => {
+    const appealedAt = new Date().toISOString()
+    const wrapper = mount(AppealTable, { props: { items: [appeal({ appealedAt })] } })
+
+    const cell = wrapper
+      .findAll('td')
+      .find((element) => element.attributes('title') === new Date(appealedAt).toLocaleString())
+
+    expect(cell?.text()).toBe('刚刚')
+  })
+
+  it('表头固定：thead 带 sticky + 不透明底色', () => {
+    const thead = mount(AppealTable, { props: { items: [appeal()] } }).find('thead')
+
+    expect(thead.classes()).toContain('sticky')
+    expect(thead.classes()).toContain('bg-surface')
+  })
+
   it('渲染摘要、状态、原下架理由文案与申诉理由', () => {
     const wrapper = mount(AppealTable, { props: { items: [appeal()] } })
     const text = wrapper.text()

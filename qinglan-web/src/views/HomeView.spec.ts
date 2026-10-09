@@ -6,7 +6,7 @@ import { fetchPosts } from '@/api/post'
 import { fetchTopics } from '@/api/topic'
 import PostCard from '@/components/PostCard.vue'
 import HomeView from '@/views/HomeView.vue'
-import type { PostSummary } from '@/types/post'
+import type { PostSummary, Topic } from '@/types/post'
 
 vi.mock('@/api/post', () => ({
   fetchPosts: vi.fn(),
@@ -21,7 +21,7 @@ vi.mock('@/api/topic', () => ({
 const mockedFetchPosts = vi.mocked(fetchPosts)
 const mockedFetchTopics = vi.mocked(fetchTopics)
 
-/** 首页外层是 RouterLink（Hero 按钮、游客卡），单测用桩替换以免引入路由实例 */
+/** 首页外层是 RouterLink（游客卡、空态按钮），单测用桩替换以免引入路由实例 */
 const RouterLinkStub = { template: '<a><slot /></a>' }
 
 function post(id: number): PostSummary {
@@ -40,6 +40,10 @@ function post(id: number): PostSummary {
   }
 }
 
+function topic(id: number): Topic {
+  return { id, name: `话题${id}`, rules: `话题${id}的规则`, requiresContact: false }
+}
+
 function mountHome() {
   return mount(HomeView, { global: { stubs: { RouterLink: RouterLinkStub } } })
 }
@@ -51,14 +55,52 @@ describe('HomeView', () => {
     mockedFetchTopics.mockResolvedValue([])
   })
 
-  it('首条渲染为 feature 大卡，其余渲染为 compact 紧凑行', async () => {
+  it('所有帖子统一渲染为分割线列表行（不再分头条大卡与紧凑行）', async () => {
     mockedFetchPosts.mockResolvedValue({ items: [post(1), post(2), post(3)], nextCursor: null })
 
     const wrapper = mountHome()
     await flushPromises()
 
-    const variants = wrapper.findAllComponents(PostCard).map((card) => card.props('variant'))
-    expect(variants).toEqual(['feature', 'compact', 'compact'])
+    expect(wrapper.findAllComponents(PostCard)).toHaveLength(3)
+    // 行级样式来自 ql-row；不再有卡片浮起的 ql-card-interactive
+    expect(wrapper.findAll('article.ql-row')).toHaveLength(3)
+    expect(wrapper.find('.ql-card-interactive').exists()).toBe(false)
+    // 原 hero 横幅与口号已删除
+    expect(wrapper.text()).not.toContain('校园里的事，匿名说出来')
+    expect(wrapper.text()).toContain('第 2 条')
+    expect(wrapper.text()).toContain('第 3 条')
+  })
+
+  it('渲染「最新 / 热门」两个排序 Tab，默认选中最新', async () => {
+    mockedFetchPosts.mockResolvedValue({ items: [post(1)], nextCursor: null })
+
+    const wrapper = mountHome()
+    await flushPromises()
+
+    const tabs = wrapper.findAll('button').filter((b) => ['最新', '热门'].includes(b.text()))
+    expect(tabs.map((b) => b.text())).toEqual(['最新', '热门'])
+    expect(tabs[0].attributes('aria-pressed')).toBe('true')
+    expect(tabs[1].attributes('aria-pressed')).toBe('false')
+  })
+
+  it('点击「热门」按 sort=hot 重置到第一页；再点「最新」切回 latest', async () => {
+    mockedFetchPosts.mockResolvedValue({ items: [post(1)], nextCursor: null })
+
+    const wrapper = mountHome()
+    await flushPromises()
+    mockedFetchPosts.mockClear()
+
+    mockedFetchPosts.mockResolvedValue({ items: [post(9)], nextCursor: null })
+    await wrapper.findAll('button').find((b) => b.text() === '热门')?.trigger('click')
+    await flushPromises()
+
+    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: null, sort: 'hot' })
+    expect(wrapper.text()).toContain('第 9 条')
+
+    await wrapper.findAll('button').find((b) => b.text() === '最新')?.trigger('click')
+    await flushPromises()
+
+    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: null, sort: 'latest' })
   })
 
   it('空列表不渲染任何卡片，只渲染空态', async () => {
@@ -89,5 +131,23 @@ describe('HomeView', () => {
 
     expect(wrapper.text()).toContain('话题没能加载出来')
     expect(wrapper.findAll('button').some((button) => button.text() === '重试')).toBe(true)
+  })
+
+  it('切换话题后按该话题重新拉取第一页', async () => {
+    mockedFetchTopics.mockResolvedValue([topic(3)])
+    mockedFetchPosts.mockResolvedValue({ items: [post(1)], nextCursor: null })
+
+    const wrapper = mountHome()
+    await flushPromises()
+    mockedFetchPosts.mockClear()
+    mockedFetchPosts.mockResolvedValue({ items: [post(9)], nextCursor: null })
+
+    const chip = wrapper.findAll('button').find((button) => button.text() === '话题3')
+    await chip?.trigger('click')
+    await flushPromises()
+
+    expect(mockedFetchPosts).toHaveBeenCalledWith({ topic: 3, sort: 'latest' })
+    expect(wrapper.text()).toContain('第 9 条')
+    expect(wrapper.text()).not.toContain('第 1 条')
   })
 })

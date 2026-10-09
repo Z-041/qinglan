@@ -16,6 +16,7 @@ import com.qinglan.post.entity.ReviewState;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.review.config.ReviewProperties;
 import com.qinglan.review.dto.CreateReportRequest;
+import com.qinglan.review.dto.MyReportStatusResponse;
 import com.qinglan.review.entity.Report;
 import com.qinglan.review.entity.ReviewTargetType;
 import com.qinglan.review.repository.ReportRepository;
@@ -54,6 +55,22 @@ public class ReportService {
     private final AuditLogService auditLogService;
     private final NotificationPort notificationPort;
     private final ReviewProperties reviewProperties;
+
+    /**
+     * 当前用户在某目标上的举报状态（学生端详情页展示处理进度、并据此提前禁用重复举报）。
+     *
+     * <p><b>只查调用者自己</b>：按 {@code (targetType, targetId, reporterId)} 定位，{@code reporterId}
+     * 一律取自登录态，故绝不会带出他人举报（不变量 #1）。未举报时返回 {@code reported=false}
+     * 与全 null，而不是 404——「没举报过」是正常状态，不是错误。</p>
+     */
+    @Transactional(readOnly = true)
+    public MyReportStatusResponse myReportStatus(
+            Long reporterId, ReviewTargetType targetType, Long targetId) {
+        return reportRepository.findByTargetTypeAndTargetIdAndReporterId(targetType, targetId, reporterId)
+                .map(report -> new MyReportStatusResponse(
+                        true, report.getStatus(), report.getCreatedAt(), report.getHandledAt()))
+                .orElseGet(() -> new MyReportStatusResponse(false, null, null, null));
+    }
 
     /**
      * 提交举报。

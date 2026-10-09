@@ -4,6 +4,7 @@ import { onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import { useNotifications } from '@/composables/useNotifications'
 import { useNotificationStore } from '@/stores/notification'
 
@@ -16,10 +17,6 @@ onMounted(() => {
   void load()
   void refreshUnread()
 })
-
-function timeText(value: string): string {
-  return new Date(value).toLocaleString()
-}
 </script>
 
 <template>
@@ -72,7 +69,9 @@ function timeText(value: string): string {
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium text-ink">{{ item.title }}</p>
             <p v-if="item.body" class="mt-1 text-xs leading-relaxed text-muted">{{ item.body }}</p>
-            <p class="mt-1 text-xs text-muted">{{ timeText(item.createdAt) }}</p>
+            <p class="mt-1 text-xs text-muted" :title="formatAbsoluteTime(item.createdAt)">
+              {{ formatRelativeTime(item.createdAt) }}
+            </p>
           </div>
         </component>
       </li>

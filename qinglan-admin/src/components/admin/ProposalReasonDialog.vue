@@ -57,6 +57,15 @@ function handleSubmit(): void {
     detail: detail.value.trim() || null,
   })
 }
+
+/** Enter 确认（Esc 由 el-dialog 默认关闭）；多行说明里的 Enter 是换行，不能当确认 */
+function handleEnter(event: KeyboardEvent): void {
+  if ((event.target as HTMLElement).tagName === 'TEXTAREA') {
+    return
+  }
+  event.preventDefault()
+  handleSubmit()
+}
 </script>
 
 <template>
@@ -66,7 +75,7 @@ function handleSubmit(): void {
     width="480px"
     @update:model-value="emit('close')"
   >
-    <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-4" @keydown.enter="handleEnter">
       <FormField label="违规类型">
         <select v-model="reasonCode" class="ql-field">
           <option v-for="reason in REASONS" :key="reason" :value="reason">

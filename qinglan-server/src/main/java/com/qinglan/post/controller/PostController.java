@@ -5,8 +5,11 @@ import com.qinglan.common.security.CurrentUser;
 import com.qinglan.common.web.ApiResponse;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.dto.CreatePostRequest;
+import com.qinglan.post.dto.MyPostItemResponse;
 import com.qinglan.post.dto.PostDetailResponse;
+import com.qinglan.post.dto.PostSort;
 import com.qinglan.post.dto.PostSummaryResponse;
+import com.qinglan.post.entity.PostStatus;
 import com.qinglan.post.service.PostService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -38,12 +41,27 @@ public class PostController {
         return ApiResponse.ok(postService.create(CurrentUser.requireUserId(), request));
     }
 
-    /** 信息流，游标分页（页大小由服务端固定）；topic 为空表示全部话题 */
+    /** 信息流，游标分页（页大小由服务端固定）；topic 为空表示全部话题，sort 为空默认最新 */
     @GetMapping
     public ApiResponse<CursorPage<PostSummaryResponse>> list(
             @RequestParam(required = false) Long topic,
+            @RequestParam(required = false) String sort,
             @RequestParam(required = false) String cursor) {
-        return ApiResponse.ok(postService.listFeed(topic, cursor, CurrentUser.viewer()));
+        return ApiResponse.ok(postService.listFeed(
+                topic, PostSort.fromRequest(sort), cursor, CurrentUser.viewer()));
+    }
+
+    /**
+     * 我的帖子：仅本人可见，覆盖待审 / 已驳回 / 已下架 / 已通过全部状态，游标分页。
+     *
+     * <p>需登录（安全配置对 {@code /api/posts/mine} 单独要求认证，不随只读信息流一起放行）。
+     * 出参含 {@code reviewReason} 与本人的 {@code anonymousCode}，但不含他人身份。</p>
+     */
+    @GetMapping("/mine")
+    public ApiResponse<CursorPage<MyPostItemResponse>> mine(
+            @RequestParam(required = false) PostStatus status,
+            @RequestParam(required = false) String cursor) {
+        return ApiResponse.ok(postService.listMine(CurrentUser.requireUserId(), status, cursor));
     }
 
     /** 详情，含作者匿名代号；联系方式按 viewer 身份在服务端脱敏（不变量 #2） */

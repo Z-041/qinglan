@@ -2,7 +2,10 @@ package com.qinglan.review.controller;
 
 import com.qinglan.auth.security.JwtService;
 import com.qinglan.review.dto.CreateReportRequest;
+import com.qinglan.review.dto.MyReportStatusResponse;
 import com.qinglan.review.entity.ReportReason;
+import com.qinglan.review.entity.ReportStatus;
+import com.qinglan.review.entity.ReviewTargetType;
 import com.qinglan.review.service.ReportService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -17,11 +20,15 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -95,5 +102,37 @@ class ReportControllerTest {
         verify(reportService).report(eq(REPORTER_ID), captor.capture());
         assertThat(captor.getValue().targetId()).isEqualTo(1L);
         assertThat(captor.getValue().reasonCode()).isEqualTo(ReportReason.ABUSE);
+    }
+
+    @Test
+    @DisplayName("未登录查询我的举报状态返回 401")
+    void shouldRejectAnonymousMineQuery() throws Exception {
+        mockMvc.perform(get("/api/reports/mine")
+                        .param("targetType", "POST")
+                        .param("targetId", "1"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("QL-401-001"));
+    }
+
+    @Test
+    @DisplayName("已登录查询我的举报状态：举报人取自登录态，回填状态与时刻")
+    void shouldReturnOwnReportStatus() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(REPORTER_ID, null, List.of()));
+        when(reportService.myReportStatus(REPORTER_ID, ReviewTargetType.POST, 1L))
+                .thenReturn(new MyReportStatusResponse(true, ReportStatus.PENDING,
+                        Instant.parse("2026-10-01T08:00:00Z"), null));
+
+        mockMvc.perform(get("/api/reports/mine")
+                        .param("targetType", "POST")
+                        .param("targetId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("QL-000-000"))
+                .andExpect(jsonPath("$.data.reported").value(true))
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.createdAt").value("2026-10-01T08:00:00Z"))
+                .andExpect(jsonPath("$.data.handledAt").value(nullValue()));
+
+        verify(reportService).myReportStatus(REPORTER_ID, ReviewTargetType.POST, 1L);
     }
 }

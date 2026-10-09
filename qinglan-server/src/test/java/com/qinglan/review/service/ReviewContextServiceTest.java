@@ -1,17 +1,23 @@
 package com.qinglan.review.service;
 
 import com.qinglan.comment.repository.CommentRepository;
+import com.qinglan.common.audit.AuditAction;
+import com.qinglan.common.audit.AuditLog;
+import com.qinglan.common.audit.AuditLogRepository;
+import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.review.dto.AdminReviewContextResponse;
+import com.qinglan.review.dto.AdminReviewHistoryResponse;
 import com.qinglan.review.entity.Report;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReportStatus;
 import com.qinglan.review.entity.ReviewTargetType;
 import com.qinglan.review.repository.ReportRepository;
 import com.qinglan.review.repository.ReviewContextRepository;
+import com.qinglan.support.TestFixtures;
 import com.qinglan.user.entity.User;
 import com.qinglan.user.service.UserService;
 import org.junit.jupiter.api.DisplayName;
@@ -20,15 +26,22 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.lang.reflect.RecordComponent;
+import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -51,6 +64,9 @@ class ReviewContextServiceTest {
 
     @Mock
     private ReviewContextRepository reviewContextRepository;
+
+    @Mock
+    private AuditLogRepository auditLogRepository;
 
     @InjectMocks
     private ReviewContextService reviewContextService;
@@ -106,6 +122,40 @@ class ReviewContextServiceTest {
 
         assertThat(response.repeatedReporterCount()).isZero();
         assertThat(response.reasons()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("上下文历史：作者最近动态（帖子 id/状态）+ 处置流水（动作/操作人/理由/时间），且不含身份")
+    void shouldBuildHistoryWithoutIdentity() {
+        Post target = post(PostStatusForTest.APPROVED);
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(target));
+        Post recent = TestFixtures.approvedPost(9L, AUTHOR_ID, 1L, null);
+        TestFixtures.setCreatedAt(recent, Instant.parse("2026-10-01T00:00:00Z"));
+        when(postRepository.findMinePage(eq(AUTHOR_ID), isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(List.of(recent));
+        AuditLog disposition = new AuditLog(
+                AuditTargetType.POST, POST_ID, AuditAction.POST_TAKEDOWN, 99L, "ABUSE: 人身攻击");
+        when(auditLogRepository.findDispositionHistory(eq(AuditTargetType.POST), eq(POST_ID), any(Pageable.class)))
+                .thenReturn(List.of(disposition));
+
+        AdminReviewHistoryResponse history = reviewContextService.history(ReviewTargetType.POST, POST_ID);
+
+        assertThat(history.authorRecentPosts()).hasSize(1);
+        assertThat(history.authorRecentPosts().get(0).id()).isEqualTo(9L);
+        assertThat(history.authorRecentPosts().get(0).status()).isEqualTo("APPROVED");
+        assertThat(history.targetDispositions()).hasSize(1);
+        assertThat(history.targetDispositions().get(0).action()).isEqualTo(AuditAction.POST_TAKEDOWN);
+        assertThat(history.targetDispositions().get(0).operatorId()).isEqualTo(99L);
+        assertThat(history.targetDispositions().get(0).reason()).isEqualTo("ABUSE: 人身攻击");
+
+        // 不变量 #1 / #3：出参不含任何可关联到具体人的字段
+        Set<String> postFields = Arrays.stream(AdminReviewHistoryResponse.AuthorPostItem.class.getRecordComponents())
+                .map(RecordComponent::getName).collect(Collectors.toSet());
+        assertThat(postFields).doesNotContain("authorId", "anonymousCode", "studentId", "email");
+        Set<String> dispositionFields = Arrays.stream(
+                        AdminReviewHistoryResponse.DispositionItem.class.getRecordComponents())
+                .map(RecordComponent::getName).collect(Collectors.toSet());
+        assertThat(dispositionFields).doesNotContain("studentId", "email");
     }
 
     private Post post(PostStatusForTest status) {

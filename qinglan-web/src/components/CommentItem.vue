@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import type { Comment } from '@/types/comment'
 
 const props = withDefaults(
@@ -27,9 +28,13 @@ const emit = defineEmits<{
   <li class="py-3">
     <div class="flex items-center gap-2">
       <span class="truncate text-xs font-medium text-primary-deep">{{ props.comment.anonymousCode }}</span>
-      <span v-if="props.comment.mine" class="ql-badge shrink-0 bg-primary-tint text-primary-deep">我</span>
-      <time class="ml-auto shrink-0 text-xs text-muted" :datetime="props.comment.createdAt">
-        {{ new Date(props.comment.createdAt).toLocaleString() }}
+      <span v-if="props.comment.mine" class="ql-tag shrink-0 bg-primary-tint text-primary-deep">我</span>
+      <time
+        class="ml-auto shrink-0 text-xs text-muted"
+        :datetime="props.comment.createdAt"
+        :title="formatAbsoluteTime(props.comment.createdAt)"
+      >
+        {{ formatRelativeTime(props.comment.createdAt) }}
       </time>
     </div>
 

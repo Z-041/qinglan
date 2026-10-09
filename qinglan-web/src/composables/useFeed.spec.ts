@@ -51,7 +51,7 @@ describe('useFeed', () => {
     const feed = useFeed()
     await feed.load(null)
 
-    expect(mockedFetchPosts).toHaveBeenCalledWith({ topic: null })
+    expect(mockedFetchPosts).toHaveBeenCalledWith({ topic: null, sort: 'latest' })
     expect(feed.posts.value.map((item) => item.id)).toEqual([9, 8])
     expect(feed.hasMore.value).toBe(true)
     expect(feed.loading.value).toBe(false)
@@ -77,7 +77,7 @@ describe('useFeed', () => {
     await feed.load(null)
     await feed.loadMore()
 
-    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: null, cursor: '8' })
+    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: null, sort: 'latest', cursor: '8' })
     expect(feed.posts.value.map((item) => item.id)).toEqual([9, 8, 7])
     expect(feed.hasMore.value).toBe(false)
   })
@@ -91,9 +91,55 @@ describe('useFeed', () => {
     await feed.load(null)
     await feed.load(3)
 
-    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: 3 })
+    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: 3, sort: 'latest' })
     expect(feed.topicId.value).toBe(3)
     expect(feed.posts.value.map((item) => item.id)).toEqual([1])
+  })
+
+  it('切换排序重置到第一页并保留当前话题（排序与话题正交）', async () => {
+    mockedFetchPosts
+      .mockResolvedValueOnce({ items: [post(9)], nextCursor: null })
+      .mockResolvedValueOnce({ items: [post(5)], nextCursor: null })
+
+    const feed = useFeed()
+    await feed.load(3)
+
+    await feed.setSort('hot')
+
+    expect(mockedFetchPosts).toHaveBeenLastCalledWith({ topic: 3, sort: 'hot' })
+    expect(feed.sort.value).toBe('hot')
+    expect(feed.posts.value.map((item) => item.id)).toEqual([5])
+  })
+
+  it('点击当前排序 Tab 不重复发请求', async () => {
+    mockedFetchPosts.mockResolvedValue({ items: [post(9)], nextCursor: null })
+
+    const feed = useFeed()
+    await feed.load(null)
+    mockedFetchPosts.mockClear()
+
+    await feed.setSort('latest')
+
+    expect(mockedFetchPosts).not.toHaveBeenCalled()
+  })
+
+  it('切换到热门后翻页带上当前 sort（游标格式随排序变化，必须一并回传）', async () => {
+    mockedFetchPosts
+      .mockResolvedValueOnce({ items: [post(9)], nextCursor: null })
+      .mockResolvedValueOnce({ items: [post(9)], nextCursor: 'hot-cursor' })
+      .mockResolvedValueOnce({ items: [post(8)], nextCursor: null })
+
+    const feed = useFeed()
+    await feed.load(null)
+    await feed.setSort('hot')
+    await feed.loadMore()
+
+    expect(mockedFetchPosts).toHaveBeenLastCalledWith({
+      topic: null,
+      sort: 'hot',
+      cursor: 'hot-cursor',
+    })
+    expect(feed.posts.value.map((item) => item.id)).toEqual([9, 8])
   })
 
   it('点赞用后端返回值覆盖本地计数，取消点赞走 DELETE 接口', async () => {

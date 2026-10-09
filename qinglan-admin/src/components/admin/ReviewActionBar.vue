@@ -3,13 +3,8 @@ import { computed, ref, watch } from 'vue'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import type { ReviewTargetType } from '@shared/types/review-common'
+import { availableReviewActions, blockedByOpenProposal } from '@/composables/reviewActionSet'
 import type { ReviewAction } from '@/types/review'
-
-interface ActionMeta {
-  key: ReviewAction
-  label: string
-  variant: 'primary' | 'ghost' | 'danger'
-}
 
 const props = defineProps<{
   targetType: ReviewTargetType
@@ -32,31 +27,6 @@ const props = defineProps<{
 const emit = defineEmits<{ action: [action: ReviewAction] }>()
 
 /**
- * 二期起走表决的动作（P5 决策 D5）。其余动作（通过 / 驳回 / 驳回举报）仍是单人即时生效，
- * 不受进行中提案影响。
- */
-const PROPOSAL_ACTIONS = new Set<ReviewAction>([
-  'take-down',
-  'hide-contact',
-  'uphold',
-  'remove-comment',
-])
-
-/**
- * 撤销已作出处置的动作：下架与隐藏联系方式都经委员会表决才成立，撤销权归超管
- * （{@code DISPOSITION_REVOKE}）。若任一委员可撤销，多数决就不构成约束。
- */
-const REVOKE_ACTIONS = new Set<ReviewAction>(['restore', 'show-contact'])
-
-function blockedByProposal(action: ReviewAction): boolean {
-  return props.hasOpenProposal === true && PROPOSAL_ACTIONS.has(action)
-}
-
-function visible(action: ReviewAction): boolean {
-  return props.canRevoke === true || !REVOKE_ACTIONS.has(action)
-}
-
-/**
  * 本次点击触发的动作。
  * 提交中所有按钮都要禁用（防重复处置），但 loading 只该落在被点的那个上——
  * 否则点「通过」会让一整排按钮同时转圈，看不出在提交哪个。
@@ -77,42 +47,17 @@ watch(
   },
 )
 
-const ACTION_META: Record<ReviewAction, ActionMeta> = {
-  approve: { key: 'approve', label: '通过', variant: 'primary' },
-  reject: { key: 'reject', label: '驳回', variant: 'ghost' },
-  'take-down': { key: 'take-down', label: '下架', variant: 'danger' },
-  restore: { key: 'restore', label: '恢复可见', variant: 'primary' },
-  uphold: { key: 'uphold', label: '维持下架', variant: 'ghost' },
-  'hide-contact': { key: 'hide-contact', label: '隐藏联系方式', variant: 'ghost' },
-  'show-contact': { key: 'show-contact', label: '恢复联系方式', variant: 'ghost' },
-  'remove-comment': { key: 'remove-comment', label: '移除评论', variant: 'danger' },
-  dismiss: { key: 'dismiss', label: '举报不成立', variant: 'ghost' },
-}
-
 /**
- * 可执行动作集合。
- * 评论只有「移除评论 / 举报不成立」；帖子按状态给动作：审核中可 通过 / 驳回，
- * 非下架态可 下架，下架态可 恢复可见 / 维持下架。
- * 联系方式的隐藏是发起提案，恢复（撤销隐藏）归超管，故两者不再「两态常驻」——
- * 是否有「恢复可见 / 恢复联系方式」取决于 canRevoke（{@code DISPOSITION_REVOKE}）。
+ * 可执行动作集合。判定逻辑下沉到 `reviewActionSet`，与队列页的快捷键绑定共用同一份——
+ * 否则「按钮不给的动作，快捷键却能按」这类不一致迟早出现。
  */
-const actions = computed<ActionMeta[]>(() => {
-  if (props.targetType === 'COMMENT') {
-    return [ACTION_META['remove-comment'], ACTION_META.dismiss].filter((action) => visible(action.key))
-  }
-
-  const list: ActionMeta[] = []
-  if (props.targetStatus === 'PENDING' || props.targetStatus === 'REVIEWING') {
-    list.push(ACTION_META.approve, ACTION_META.reject)
-  }
-  if (props.targetStatus === 'TAKEN_DOWN') {
-    list.push(ACTION_META.restore, ACTION_META.uphold)
-  } else {
-    list.push(ACTION_META['take-down'])
-  }
-  list.push(ACTION_META['hide-contact'], ACTION_META['show-contact'], ACTION_META.dismiss)
-  return list.filter((action) => visible(action.key))
-})
+const actions = computed(() =>
+  availableReviewActions({
+    targetType: props.targetType,
+    targetStatus: props.targetStatus,
+    canRevoke: props.canRevoke === true,
+  }),
+)
 </script>
 
 <template>
@@ -130,7 +75,7 @@ const actions = computed<ActionMeta[]>(() => {
         :key="action.key"
         :variant="action.variant"
         size="sm"
-        :disabled="props.submitting || blockedByProposal(action.key)"
+        :disabled="props.submitting || blockedByOpenProposal(action.key, props.hasOpenProposal === true)"
         :loading="props.submitting && pendingKey === action.key"
         @click="handleClick(action.key)"
       >

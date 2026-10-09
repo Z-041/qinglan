@@ -30,14 +30,14 @@ const emit = defineEmits<{ 'sign-out': [] }>()
 </script>
 
 <template>
-  <header class="sticky top-0 z-header border-b border-line bg-surface-glass backdrop-blur">
+  <header class="sticky top-0 z-header border-b border-line bg-surface">
     <div
       class="flex h-16 items-center gap-3 max-sm:h-14"
       :class="props.wide ? 'ql-shell' : 'ql-container'"
     >
       <RouterLink class="flex shrink-0 items-center gap-2.5" to="/">
         <span
-          class="inline-flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-deep text-lg font-bold text-white max-sm:size-9 max-sm:text-base"
+          class="inline-flex size-10 items-center justify-center rounded-md bg-primary-deep text-lg font-bold text-white max-sm:size-9 max-sm:text-base"
         >
           青
         </span>
@@ -55,7 +55,7 @@ const emit = defineEmits<{ 'sign-out': [] }>()
 
       <div class="ml-auto flex items-center gap-3">
         <template v-if="authenticated">
-          <span class="ql-badge inline-flex bg-primary-soft text-primary-deep max-sm:hidden">{{ roleText }}</span>
+          <span class="ql-tag bg-primary-soft text-primary-deep max-sm:hidden">{{ roleText }}</span>
           <NotificationBell :unread-count="props.unreadCount" />
           <BaseButton variant="ghost" size="sm" @click="emit('sign-out')">退出</BaseButton>
         </template>

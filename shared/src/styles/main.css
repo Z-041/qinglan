@@ -18,7 +18,6 @@
 
   --ql-canvas: #f5f6f8;
   --ql-surface: #ffffff;
-  --ql-surface-glass: rgb(255 255 255 / 0.85); /* 吸顶栏半透明底，配合 backdrop-blur */
   --ql-line: #e3e6ec;
   --ql-line-strong: #d7dce6;
 

@@ -95,4 +95,12 @@ describe('ProposalReasonDialog', () => {
 
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
+
+  it('弹窗内 Enter 确认（多行说明之外的区域直接提交）', async () => {
+    const wrapper = mountDialog()
+
+    await wrapper.get('.gap-4').trigger('keydown', { key: 'Enter' })
+
+    expect(wrapper.emitted('submit')).toEqual([[{ reasonCode: 'ABUSE', detail: null }]])
+  })
 })

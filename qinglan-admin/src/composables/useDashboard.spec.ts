@@ -21,6 +21,14 @@ function stats(): AdminStats {
       })),
     },
     users: { totalUsers: 100, bannedUsers: 6, todayNewUsers: 7 },
+    trends: {
+      last7Days: Array.from({ length: 7 }, (_, index) => ({ date: `2026-10-0${index + 1}`, count: index })),
+      last30Days: Array.from({ length: 30 }, (_, index) => ({ date: `2026-09-${index + 1}`, count: index })),
+    },
+    reportReasons: [{ reason: 'ABUSE', count: 2 }],
+    dispositionLatency: { p50Seconds: 60, p90Seconds: 600, sampleSize: 12 },
+    proposals: { approved: 3, rejected: 1, escalated: 1, approvalRate: 0.75 },
+    moderatorRanking: [{ operatorId: 7, count: 9 }],
   }
 }
 

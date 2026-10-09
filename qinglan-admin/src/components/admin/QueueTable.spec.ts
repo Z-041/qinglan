@@ -86,11 +86,11 @@ describe('QueueTable', () => {
     const firstReportedAt = '2000-01-01T00:00:00Z'
     const wrapper = mount(QueueTable, { props: { items: [item({ firstReportedAt })] } })
 
-    // 按「渲染出来的首报时间」定位单元格，而不是写死 td[4]：
+    // 时间列改为相对时间后，按绝对时间（title）定位单元格，而不是写死 td[4]：
     // 列序一旦增删，写死的下标会指向别的列，断言就失去意义了
     const cell = wrapper
       .findAll('td')
-      .find((element) => element.text() === new Date(firstReportedAt).toLocaleString())
+      .find((element) => element.attributes('title') === new Date(firstReportedAt).toLocaleString())
 
     expect(cell).toBeDefined()
     expect(cell?.classes()).toContain('text-danger-deep')
@@ -102,10 +102,29 @@ describe('QueueTable', () => {
 
     const cell = wrapper
       .findAll('td')
-      .find((element) => element.text() === new Date(firstReportedAt).toLocaleString())
+      .find((element) => element.attributes('title') === new Date(firstReportedAt).toLocaleString())
 
     expect(cell).toBeDefined()
     expect(cell?.classes()).not.toContain('text-danger-deep')
+  })
+
+  it('时间列渲染相对时间，绝对时间放在 title 悬停可见', () => {
+    const firstReportedAt = new Date().toISOString()
+    const wrapper = mount(QueueTable, { props: { items: [item({ firstReportedAt })] } })
+
+    const cell = wrapper
+      .findAll('td')
+      .find((element) => element.attributes('title') === new Date(firstReportedAt).toLocaleString())
+
+    expect(cell?.text()).toBe('刚刚')
+  })
+
+  it('表头固定：thead 带 sticky + 不透明底色', () => {
+    const wrapper = mount(QueueTable, { props: { items: [item()] } })
+    const thead = wrapper.find('thead')
+
+    expect(thead.classes()).toContain('sticky')
+    expect(thead.classes()).toContain('bg-surface')
   })
 
   it('点击「处置」抛出该行数据', async () => {
@@ -191,5 +210,18 @@ describe('QueueTable', () => {
 
     expect(wrapper.text()).toContain('—')
     expect(wrapper.text()).not.toContain('表决中')
+  })
+
+  it('按 activeKey 高亮键盘焦点行，其余行不高亮', () => {
+    const wrapper = mount(QueueTable, {
+      props: {
+        items: [item({ targetId: 5 }), item({ targetId: 6 })],
+        activeKey: 'POST-6',
+      },
+    })
+
+    const rows = wrapper.findAll('tbody tr')
+    expect(rows[0].classes()).not.toContain('bg-primary-soft')
+    expect(rows[1].classes()).toContain('bg-primary-soft')
   })
 })

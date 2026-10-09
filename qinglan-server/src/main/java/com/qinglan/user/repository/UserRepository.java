@@ -59,6 +59,27 @@ public interface UserRepository extends JpaRepository<User, Long> {
             @Param("cursorId") Long cursorId,
             Pageable limit);
 
+    /**
+     * 指定筛选条件下的用户条数，供导出前做「行数上限」判断（超限明确报错，不静默截断）。
+     * 筛选条件与 {@link #findAdminPage} 一致，保证「导出条数」与「列表口径」不会漂移。
+     */
+    @Query("""
+            select count(u) from User u
+            where (:status is null or u.status = :status)
+              and (:role is null or u.role = :role)
+              and (:minCredit is null or u.creditScore >= :minCredit)
+              and (:maxCredit is null or u.creditScore <= :maxCredit)
+              and (:createdFrom is null or u.createdAt >= :createdFrom)
+              and (:createdTo is null or u.createdAt <= :createdTo)
+            """)
+    long countAdminFiltered(
+            @Param("status") UserStatus status,
+            @Param("role") UserRole role,
+            @Param("minCredit") Integer minCredit,
+            @Param("maxCredit") Integer maxCredit,
+            @Param("createdFrom") Instant createdFrom,
+            @Param("createdTo") Instant createdTo);
+
     long countByStatusIn(Collection<UserStatus> statuses);
 
     long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(Instant from, Instant to);

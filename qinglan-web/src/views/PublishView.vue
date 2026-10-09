@@ -8,8 +8,8 @@ import BaseInput from '@shared/components/base/BaseInput.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
-import TopicFilter from '@/components/TopicFilter.vue'
 import { MAX_IMAGES_PER_POST, useImageUpload } from '@/composables/useImageUpload'
+import { usePostDraft } from '@/composables/usePostDraft'
 import { usePublish } from '@/composables/usePublish'
 import { pushToast } from '@shared/composables/useToast'
 
@@ -32,6 +32,14 @@ const {
   loadTopics,
   submit,
 } = usePublish()
+
+// 草稿与表单字段绑定：变更即写入 localStorage，意外退出可恢复
+const {
+  pending: pendingDraft,
+  restore: restoreDraft,
+  discard: discardDraft,
+  clear: clearDraft,
+} = usePostDraft({ topicId, content, contact, images })
 
 const contactLabel = computed(() =>
   contactRequired.value ? '联系方式（该话题必填）' : '联系方式（选填）',
@@ -69,6 +77,8 @@ async function handleSubmit(): Promise<void> {
   if (!created) {
     return
   }
+  // 发布成功即清空草稿：否则下次进入会提示「恢复」一条已经发出去的帖子
+  clearDraft()
   pushToast('已提交，审核通过后会出现在首页', 'info')
   await router.push('/')
 }
@@ -79,22 +89,62 @@ async function handleSubmit(): Promise<void> {
     <h1 class="text-lg font-semibold text-ink">发布</h1>
     <p class="mt-1 text-xs text-muted">主帖先审后发，通过后才会出现在首页</p>
 
+    <!-- 草稿恢复：显式「恢复 / 丢弃」，不静默覆盖用户新输入 -->
+    <div
+      v-if="pendingDraft"
+      class="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-warning bg-warning-soft px-4 py-3"
+    >
+      <p class="min-w-0 flex-1 text-xs leading-relaxed text-warning">
+        发现上次未提交的草稿（含正文 / 图片），是否恢复？恢复会覆盖当前输入。
+      </p>
+      <BaseButton size="sm" @click="restoreDraft">恢复草稿</BaseButton>
+      <BaseButton variant="ghost" size="sm" @click="discardDraft">丢弃</BaseButton>
+    </div>
+
     <div class="mt-4 grid grid-cols-[minmax(0,1fr)_320px] gap-10 max-lg:(grid-cols-1 gap-6)">
       <div class="min-w-0 self-start">
         <BaseCard>
           <div>
             <span class="ql-label">选择话题</span>
-            <TopicFilter v-model="topicId" :topics="topics" :allow-all="false" />
+            <!-- 卡片式单选：每张卡展示话题规则与是否需要联系方式 -->
+            <div v-if="topics.length" class="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
+              <button
+                v-for="topic in topics"
+                :key="topic.id"
+                type="button"
+                class="cursor-pointer rounded-lg border p-3 text-left transition"
+                :class="
+                  topicId === topic.id
+                    ? 'border-primary-deep bg-primary-tint'
+                    : 'border-line hover:border-primary-soft'
+                "
+                :aria-pressed="topicId === topic.id"
+                @click="topicId = topic.id"
+              >
+                <span class="flex items-center justify-between gap-2">
+                  <span
+                    class="text-sm font-medium"
+                    :class="topicId === topic.id ? 'text-primary-deep' : 'text-ink'"
+                  >
+                    {{ topic.name }}
+                  </span>
+                  <span
+                    v-if="topic.requiresContact"
+                    class="ql-tag shrink-0 bg-warning-soft text-warning"
+                  >
+                    需联系方式
+                  </span>
+                </span>
+                <span class="mt-1 block text-xs leading-relaxed text-muted">{{ topic.rules }}</span>
+              </button>
+            </div>
+            <p v-else class="text-xs text-muted">暂无可用话题</p>
             <!-- 话题是发帖的前置：拉取失败时给出「重试」，否则话题区永远空白、
                  发布按钮永远灰着却不说为什么（具体错误信息仍由拦截器 toast 给出） -->
             <p v-if="topicsFailed" class="mt-2 text-xs text-muted">
               话题没能加载出来
               <BaseButton class="ml-1" variant="ghost" size="sm" @click="loadTopics">重试</BaseButton>
             </p>
-            <!-- 窄屏右栏隐藏，话题规则在表单内回显；PC 由右栏「话题规则」卡承担，避免同一屏重复 -->
-            <div v-if="selectedTopic" class="hidden max-lg:block">
-              <p class="ql-hint">话题规则：{{ selectedTopic.rules }}</p>
-            </div>
           </div>
 
           <div class="mt-5">
@@ -105,18 +155,9 @@ async function handleSubmit(): Promise<void> {
               {{ PUBLISH_NOTICE }}
             </p>
             <FormField label="正文" :hint="`${content.length}/2000`">
-              <BaseTextarea v-model="content" :rows="6" :maxlength="2000" placeholder="说点什么…" />
+              <BaseTextarea v-model="content" :rows="8" :maxlength="2000" placeholder="说点什么…" />
             </FormField>
             <p v-if="blockedReason" class="ql-error" role="alert">{{ blockedReason }}</p>
-          </div>
-
-          <div class="mt-5">
-            <FormField
-              :label="contactLabel"
-              hint="不会展示给游客，仅认证学生可见；被人查看会留下审计记录"
-            >
-              <BaseInput v-model="contact" :maxlength="200" placeholder="微信号 / QQ / 手机号" />
-            </FormField>
           </div>
 
           <div class="mt-5">
@@ -128,6 +169,18 @@ async function handleSubmit(): Promise<void> {
               :uploading="uploadingImages"
               @select="handleSelectImages"
             />
+          </div>
+
+          <!-- 联系方式按话题要求显隐：未选话题时不展示字段，选定后按是否必填给出对应标签 -->
+          <div class="mt-5">
+            <FormField
+              v-if="topicId !== null"
+              :label="contactLabel"
+              hint="不会展示给游客，仅认证学生可见；被人查看会留下审计记录"
+            >
+              <BaseInput v-model="contact" :maxlength="200" placeholder="微信号 / QQ / 手机号" />
+            </FormField>
+            <p v-else class="ql-hint">选择话题后可填写联系方式，部分话题要求必填。</p>
           </div>
 
           <BaseButton

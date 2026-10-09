@@ -21,12 +21,12 @@ function post(overrides: Partial<PostSummary> = {}): PostSummary {
   }
 }
 
-/** 卡片外层是 RouterLink，单测只关心内容，用桩替换以免引入路由实例 */
+/** 行外层是 RouterLink，单测只关心内容，用桩替换以免引入路由实例 */
 const RouterLinkStub = { template: '<a><slot /></a>' }
 
-function mountCard(postData: PostSummary, variant?: 'feature' | 'compact') {
+function mountCard(postData: PostSummary) {
   return mount(PostCard, {
-    props: variant ? { post: postData, variant } : { post: postData },
+    props: { post: postData },
     global: { stubs: { RouterLink: RouterLinkStub } },
   })
 }
@@ -70,31 +70,30 @@ describe('PostCard', () => {
     expect(wrapper.get('button[aria-pressed]').attributes('aria-pressed')).toBe('true')
   })
 
-  it('compact 变体去掉卡片外壳，仍展示话题、代号、正文与计数', () => {
-    const wrapper = mountCard(post(), 'compact')
+  it('统一列表行使用 ql-row 分割线，不再用卡片浮起外壳', () => {
+    const wrapper = mountCard(post())
+    const article = wrapper.find('article')
 
-    expect(wrapper.find('article').classes()).not.toContain('ql-card-interactive')
+    expect(article.classes()).toContain('ql-row')
+    expect(article.classes()).not.toContain('ql-card-interactive')
     expect(wrapper.text()).toContain('问答')
     expect(wrapper.text()).toContain('银杏#abc')
     expect(wrapper.text()).toContain('有人在东门捡到校园卡吗')
-    expect(wrapper.text()).toContain('3')
-    expect(wrapper.text()).toContain('2')
   })
 
-  it('compact 变体点击点赞仍抛出 toggle-like', async () => {
-    const wrapper = mountCard(post(), 'compact')
+  it('时间用相对时间展示，并把绝对时间挂在 title 上', () => {
+    const wrapper = mountCard(post())
 
-    await wrapper.get('button[aria-pressed]').trigger('click')
-
-    expect(wrapper.emitted('toggle-like')).toHaveLength(1)
+    const time = wrapper.get('time')
+    expect(time.attributes('datetime')).toBe('2026-10-06T00:00:00Z')
+    expect(time.attributes('title')).toBeTruthy()
   })
 
-  it('compact 变体的点赞按钮在链接之外，点「赞」不会触发链接', async () => {
-    const wrapper = mountCard(post(), 'compact')
+  it('点赞按钮在链接之外，点「赞」不会触发链接', async () => {
+    const wrapper = mountCard(post())
     const button = wrapper.get('button[aria-pressed]')
 
     // 结构不变量：<a> 的内容模型不允许出现 <button> 这类交互元素，按钮必须不在链接内部。
-    // 这是纯结构约束，jsdom 能直接验证（同 AppealReviewDialog 用结构断言钉住非法嵌套的思路）。
     expect(button.element.closest('a')).toBeNull()
 
     const outerClicks: Event[] = []

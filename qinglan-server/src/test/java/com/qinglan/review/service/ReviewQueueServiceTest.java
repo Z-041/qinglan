@@ -10,6 +10,8 @@ import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
 import com.qinglan.review.dto.ReviewQueueProposalResponse;
+import com.qinglan.review.dto.ReviewQueueQuery;
+import com.qinglan.review.dto.ReviewQueueSort;
 import com.qinglan.review.entity.ProposalAction;
 import com.qinglan.review.entity.ProposalStatus;
 import com.qinglan.review.entity.Report;
@@ -27,12 +29,14 @@ import com.qinglan.support.TestFixtures;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
 
 import java.lang.reflect.RecordComponent;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -47,6 +51,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -57,6 +62,8 @@ import static org.mockito.Mockito.when;
  *
  * <p>盯三件事：排序与分页键完全交给数据库（内存只装配）、队列里不出现举报人身份
  * （不变量 #1 的引申）、游标对客户端不透明且非法输入必须拒绝而不是静默从头开始。</p>
+ *
+ * <p>阶段 A 追加：筛选参数透传、只看超时的 24h 阈值、首报升序游标格式与仓储方法选择。</p>
  */
 @ExtendWith(MockitoExtension.class)
 class ReviewQueueServiceTest {
@@ -64,6 +71,8 @@ class ReviewQueueServiceTest {
     private static final Instant BASE = Instant.parse("2026-10-06T00:00:00Z");
     /** 队列请求的操作者：用于回填「我是否已投这一票」 */
     private static final long VIEWER_ID = 42L;
+    /** 无筛选、默认排序的条件（等价于改造前的行为） */
+    private static final ReviewQueueQuery DEFAULT_QUERY = new ReviewQueueQuery(null, null, false, null);
 
     @Mock
     private ReportRepository reportRepository;
@@ -91,7 +100,7 @@ class ReviewQueueServiceTest {
     void shouldReturnEmptyPageWhenQueueEmpty() {
         stubFirstPageRows(List.of());
 
-        CursorPage<ReviewQueueItemResponse> page = reviewQueueService.queue(null, VIEWER_ID);
+        CursorPage<ReviewQueueItemResponse> page = reviewQueueService.queue(null, DEFAULT_QUERY, VIEWER_ID);
 
         assertThat(page.items()).isEmpty();
         assertThat(page.nextCursor()).isNull();
@@ -121,7 +130,7 @@ class ReviewQueueServiceTest {
                 ReviewTargetType.COMMENT, List.of(55L), ReportStatus.PENDING))
                 .thenReturn(List.of(report(ReviewTargetType.COMMENT, 55L, ReportReason.PRIVACY)));
 
-        CursorPage<ReviewQueueItemResponse> page = reviewQueueService.queue(null, VIEWER_ID);
+        CursorPage<ReviewQueueItemResponse> page = reviewQueueService.queue(null, DEFAULT_QUERY, VIEWER_ID);
 
         assertThat(page.items()).hasSize(2);
         ReviewQueueItemResponse postItem = page.items().get(0);
@@ -165,7 +174,7 @@ class ReviewQueueServiceTest {
                 image(1L, "/uploads/b.jpg", 1),
                 image(2L, "/uploads/c.jpg", 0)));
 
-        List<ReviewQueueItemResponse> items = reviewQueueService.queue(null, VIEWER_ID).items();
+        List<ReviewQueueItemResponse> items = reviewQueueService.queue(null, DEFAULT_QUERY, VIEWER_ID).items();
 
         assertThat(items.get(0).images()).containsExactly("/uploads/a.jpg", "/uploads/b.jpg");
         assertThat(items.get(1).images()).containsExactly("/uploads/c.jpg");
@@ -182,7 +191,7 @@ class ReviewQueueServiceTest {
         when(reportRepository.findByTargetTypeAndTargetIdInAndStatus(
                 ReviewTargetType.COMMENT, List.of(55L), ReportStatus.PENDING)).thenReturn(List.of());
 
-        ReviewQueueItemResponse item = reviewQueueService.queue(null, VIEWER_ID).items().get(0);
+        ReviewQueueItemResponse item = reviewQueueService.queue(null, DEFAULT_QUERY, VIEWER_ID).items().get(0);
 
         assertThat(item.images()).isEmpty();
         // 评论无图，不该为此去查图片表
@@ -199,7 +208,7 @@ class ReviewQueueServiceTest {
                 ReviewTargetType.POST, List.of(1L), ReportStatus.PENDING)).thenReturn(List.of());
         // 图片仓储默认返回空集合：该帖无图
 
-        assertThat(reviewQueueService.queue(null, VIEWER_ID).items().get(0).images()).isEmpty();
+        assertThat(reviewQueueService.queue(null, DEFAULT_QUERY, VIEWER_ID).items().get(0).images()).isEmpty();
     }
 
     @Test
@@ -212,7 +221,7 @@ class ReviewQueueServiceTest {
         when(reportRepository.findByTargetTypeAndTargetIdInAndStatus(
                 ReviewTargetType.COMMENT, List.of(55L), ReportStatus.PENDING)).thenReturn(List.of());
 
-        String preview = reviewQueueService.queue(null, VIEWER_ID).items().get(0).preview();
+        String preview = reviewQueueService.queue(null, DEFAULT_QUERY, VIEWER_ID).items().get(0).preview();
 
         assertThat(preview).hasSize(83).endsWith("...");
     }
@@ -223,7 +232,7 @@ class ReviewQueueServiceTest {
         stubFirstPageRows(List.of(new ReviewQueueRow(ReviewTargetType.POST, 404L, 1L, BASE)));
         // 仓储默认返回空集合：目标已不存在
 
-        ReviewQueueItemResponse item = reviewQueueService.queue(null, VIEWER_ID).items().get(0);
+        ReviewQueueItemResponse item = reviewQueueService.queue(null, DEFAULT_QUERY, VIEWER_ID).items().get(0);
 
         assertThat(item.targetId()).isEqualTo(404L);
         assertThat(item.preview()).isNull();
@@ -231,7 +240,7 @@ class ReviewQueueServiceTest {
     }
 
     @Test
-    @DisplayName("多取一条判断还有下一页，游标取本页最后一行且为透明字符串")
+    @DisplayName("多取一条判断还有下一页，默认排序游标是本页最后一行的四元组")
     void shouldEmitOpaqueCursorForNextPage() {
         Instant lastAt = BASE.plusSeconds(19);
         List<ReviewQueueRow> rows = IntStream.range(0, 21)
@@ -239,10 +248,10 @@ class ReviewQueueServiceTest {
                 .toList();
         stubFirstPageRows(rows);
 
-        CursorPage<ReviewQueueItemResponse> page = reviewQueueService.queue(null, VIEWER_ID);
+        CursorPage<ReviewQueueItemResponse> page = reviewQueueService.queue(null, DEFAULT_QUERY, VIEWER_ID);
 
         assertThat(page.items()).hasSize(20);
-        // 第 20 行（下标 19）的复合键：举报数:首报毫秒:目标 id:目标类型序（POST 为 0）
+        // 第 20 行（下标 19）的复合键：举报数:首报微秒:目标 id:目标类型序（POST 为 0）
         assertThat(page.nextCursor()).isEqualTo("1:" + lastAt.getEpochSecond() * 1_000_000L + ":81:0");
     }
 
@@ -250,37 +259,37 @@ class ReviewQueueServiceTest {
     @DisplayName("合法游标原样解析后交给仓储，首页与后续页共用同一条查询")
     void shouldPassParsedCursorToRepository() {
         long micros = BASE.plusSeconds(5).getEpochSecond() * 1_000_000L;
-        when(reportRepository.findQueueAggregates(eq(ReportStatus.PENDING), eq(2L),
-                eq(BASE.plusSeconds(5)), eq(7L), eq(1), any(Pageable.class)))
+        when(reportRepository.findQueueAggregates(eq(ReportStatus.PENDING), anyList(), isNull(), isNull(),
+                eq(2L), eq(BASE.plusSeconds(5)), eq(7L), eq(1), any(Pageable.class)))
                 .thenReturn(List.of());
 
-        reviewQueueService.queue("2:" + micros + ":7:1", VIEWER_ID);
+        reviewQueueService.queue("2:" + micros + ":7:1", DEFAULT_QUERY, VIEWER_ID);
 
-        verify(reportRepository).findQueueAggregates(eq(ReportStatus.PENDING), eq(2L),
-                eq(BASE.plusSeconds(5)), eq(7L), eq(1), any(Pageable.class));
+        verify(reportRepository).findQueueAggregates(eq(ReportStatus.PENDING), anyList(), isNull(), isNull(),
+                eq(2L), eq(BASE.plusSeconds(5)), eq(7L), eq(1), any(Pageable.class));
     }
 
     @Test
     @DisplayName("缺段、非数字、非正数的游标一律按非法游标拒绝，且不触碰仓储")
     void shouldRejectMalformedCursor() {
-        assertThatThrownBy(() -> reviewQueueService.queue("not-a-cursor", VIEWER_ID))
+        assertThatThrownBy(() -> reviewQueueService.queue("not-a-cursor", DEFAULT_QUERY, VIEWER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.CURSOR_INVALID);
-        assertThatThrownBy(() -> reviewQueueService.queue("1:2", VIEWER_ID))
+        assertThatThrownBy(() -> reviewQueueService.queue("1:2", DEFAULT_QUERY, VIEWER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.CURSOR_INVALID);
         // 段数不足（少一段类型序）同样拒绝，避免把旧格式游标当成合法输入静默按首页重来
-        assertThatThrownBy(() -> reviewQueueService.queue("1:" + BASE.toEpochMilli() + ":7", VIEWER_ID))
+        assertThatThrownBy(() -> reviewQueueService.queue("1:" + BASE.toEpochMilli() + ":7", DEFAULT_QUERY, VIEWER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.CURSOR_INVALID);
-        assertThatThrownBy(() -> reviewQueueService.queue("1:" + BASE.toEpochMilli() + ":0:0", VIEWER_ID))
+        assertThatThrownBy(() -> reviewQueueService.queue("1:" + BASE.toEpochMilli() + ":0:0", DEFAULT_QUERY, VIEWER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.CURSOR_INVALID);
-        assertThatThrownBy(() -> reviewQueueService.queue("1:" + BASE.toEpochMilli() + ":7:-1", VIEWER_ID))
+        assertThatThrownBy(() -> reviewQueueService.queue("1:" + BASE.toEpochMilli() + ":7:-1", DEFAULT_QUERY, VIEWER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(ex -> ((BizException) ex).errorCode())
                 .isEqualTo(ErrorCode.CURSOR_INVALID);
@@ -311,17 +320,17 @@ class ReviewQueueServiceTest {
                 .toList();
         stubFirstPageRows(rows);
 
-        CursorPage<ReviewQueueItemResponse> page = reviewQueueService.queue(null, VIEWER_ID);
+        CursorPage<ReviewQueueItemResponse> page = reviewQueueService.queue(null, DEFAULT_QUERY, VIEWER_ID);
 
         assertThat(rows.get(19).firstReportedAt().toEpochMilli())
                 .isEqualTo(rows.get(20).firstReportedAt().toEpochMilli());
         assertThat(page.nextCursor())
                 .isEqualTo("1:" + (boundary.getEpochSecond() * 1_000_000L + 234L) + ":81:0");
 
-        reviewQueueService.queue(page.nextCursor(), VIEWER_ID);
+        reviewQueueService.queue(page.nextCursor(), DEFAULT_QUERY, VIEWER_ID);
 
-        verify(reportRepository).findQueueAggregates(eq(ReportStatus.PENDING), eq(1L),
-                eq(boundary), eq(81L), eq(0), any(Pageable.class));
+        verify(reportRepository).findQueueAggregates(eq(ReportStatus.PENDING), anyList(), isNull(), isNull(),
+                eq(1L), eq(boundary), eq(81L), eq(0), any(Pageable.class));
     }
 
     @Test
@@ -343,7 +352,7 @@ class ReviewQueueServiceTest {
                 ReviewVote.of(12L, 900L, VoteDecision.DISAGREE)));
 
         ReviewQueueProposalResponse progress =
-                reviewQueueService.queue(null, VIEWER_ID).items().get(0).proposal();
+                reviewQueueService.queue(null, DEFAULT_QUERY, VIEWER_ID).items().get(0).proposal();
 
         assertThat(progress).isNotNull();
         assertThat(progress.proposalId()).isEqualTo(12L);
@@ -357,11 +366,109 @@ class ReviewQueueServiceTest {
         assertThat(progress.myDecision()).isEqualTo(VoteDecision.AGREE);
     }
 
+    // ------------------------------------------------------------------ 阶段 A：筛选与排序
+
+    @Test
+    @DisplayName("筛选条件原样透传：理由集合 / 目标类型进仓储，未勾选「只看超时」时不传阈值")
+    void shouldPassFiltersToRepository() {
+        stubFirstPageRows(List.of());
+        ReviewQueueQuery query = new ReviewQueueQuery(
+                List.of(ReportReason.ABUSE, ReportReason.PRIVACY), ReviewTargetType.POST, false,
+                ReviewQueueSort.REPORT_COUNT_DESC);
+
+        reviewQueueService.queue(null, query, VIEWER_ID);
+
+        verify(reportRepository).findQueueAggregates(eq(ReportStatus.PENDING),
+                eq(List.of(ReportReason.ABUSE, ReportReason.PRIVACY)), eq(ReviewTargetType.POST), isNull(),
+                anyLong(), any(Instant.class), anyLong(), anyInt(), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("不选理由时用全部理由填充（等价于不过滤），避免空集合 IN")
+    void shouldFillAllReasonsWhenNoFilter() {
+        stubFirstPageRows(List.of());
+
+        reviewQueueService.queue(null, DEFAULT_QUERY, VIEWER_ID);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ReportReason>> reasons = ArgumentCaptor.forClass(List.class);
+        verify(reportRepository).findQueueAggregates(eq(ReportStatus.PENDING), reasons.capture(), isNull(),
+                isNull(), anyLong(), any(Instant.class), anyLong(), anyInt(), any(Pageable.class));
+        assertThat(reasons.getValue()).containsExactlyInAnyOrder(ReportReason.values());
+    }
+
+    @Test
+    @DisplayName("只看超时：阈值是 now-24h（边界由仓储的 < 判定）")
+    void shouldPassOverdueThresholdWhenOverdueOnly() {
+        stubFirstPageRows(List.of());
+        Instant before = Instant.now().minus(Duration.ofHours(24)).minusSeconds(5);
+        ReviewQueueQuery query = new ReviewQueueQuery(null, null, true, null);
+
+        reviewQueueService.queue(null, query, VIEWER_ID);
+
+        ArgumentCaptor<Instant> overdueBefore = ArgumentCaptor.forClass(Instant.class);
+        verify(reportRepository).findQueueAggregates(eq(ReportStatus.PENDING), anyList(), isNull(),
+                overdueBefore.capture(), anyLong(), any(Instant.class), anyLong(), anyInt(), any(Pageable.class));
+        assertThat(overdueBefore.getValue())
+                .isAfter(before)
+                .isBefore(Instant.now().minus(Duration.ofHours(24)).plusSeconds(5));
+    }
+
+    @Test
+    @DisplayName("首报升序：走专用仓储方法，游标为三元组（首报微秒:目标 id:类型序）")
+    void shouldUseFirstReportedSortRepositoryAndThreeSegmentCursor() {
+        Instant lastAt = BASE.plusSeconds(19);
+        List<ReviewQueueRow> rows = IntStream.range(0, 21)
+                .mapToObj(i -> new ReviewQueueRow(ReviewTargetType.POST, 100L - i, 1L, BASE.plusSeconds(i)))
+                .toList();
+        when(reportRepository.findQueueAggregatesByFirstReportedAsc(eq(ReportStatus.PENDING), anyList(),
+                isNull(), isNull(), any(Instant.class), anyLong(), anyInt(), any(Pageable.class)))
+                .thenReturn(rows);
+        ReviewQueueQuery query = new ReviewQueueQuery(null, null, false, ReviewQueueSort.FIRST_REPORTED_ASC);
+
+        CursorPage<ReviewQueueItemResponse> page = reviewQueueService.queue(null, query, VIEWER_ID);
+
+        assertThat(page.items()).hasSize(20);
+        // 三元组：首报微秒:目标 id:类型序（不含举报数）
+        assertThat(page.nextCursor()).isEqualTo(lastAt.getEpochSecond() * 1_000_000L + ":81:0");
+        // 默认排序的方法不该被调用
+        verify(reportRepository, times(0)).findQueueAggregates(any(), anyList(), any(), any(),
+                anyLong(), any(Instant.class), anyLong(), anyInt(), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("首报升序的续页游标被正确解析并走专用仓储方法")
+    void shouldParseFirstReportedCursor() {
+        long micros = BASE.plusSeconds(5).getEpochSecond() * 1_000_000L;
+        when(reportRepository.findQueueAggregatesByFirstReportedAsc(eq(ReportStatus.PENDING), anyList(),
+                isNull(), isNull(), eq(BASE.plusSeconds(5)), eq(7L), eq(1), any(Pageable.class)))
+                .thenReturn(List.of());
+        ReviewQueueQuery query = new ReviewQueueQuery(null, null, false, ReviewQueueSort.FIRST_REPORTED_ASC);
+
+        reviewQueueService.queue(micros + ":7:1", query, VIEWER_ID);
+
+        verify(reportRepository).findQueueAggregatesByFirstReportedAsc(eq(ReportStatus.PENDING), anyList(),
+                isNull(), isNull(), eq(BASE.plusSeconds(5)), eq(7L), eq(1), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("排序与游标段数不匹配（首报升序却传四元组）按非法游标拒绝")
+    void shouldRejectCursorSegmentsMismatchingSort() {
+        ReviewQueueQuery query = new ReviewQueueQuery(null, null, false, ReviewQueueSort.FIRST_REPORTED_ASC);
+
+        assertThatThrownBy(() -> reviewQueueService.queue("1:2:3:4", query, VIEWER_ID))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.CURSOR_INVALID);
+        verifyNoInteractions(reportRepository);
+    }
+
     // ------------------------------------------------------------------ 辅助
 
+    /** 用 any() 匹配可选筛选（targetType / overdueBefore），使带筛选的调用也能命中同一桩 */
     private void stubFirstPageRows(List<ReviewQueueRow> rows) {
-        when(reportRepository.findQueueAggregates(eq(ReportStatus.PENDING), anyLong(), any(Instant.class),
-                anyLong(), anyInt(), any(Pageable.class))).thenReturn(rows);
+        when(reportRepository.findQueueAggregates(eq(ReportStatus.PENDING), anyList(), any(), any(),
+                anyLong(), any(Instant.class), anyLong(), anyInt(), any(Pageable.class))).thenReturn(rows);
     }
 
     private static Report report(ReviewTargetType targetType, long targetId, ReportReason reason) {

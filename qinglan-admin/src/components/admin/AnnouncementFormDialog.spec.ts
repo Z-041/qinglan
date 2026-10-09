@@ -127,4 +127,16 @@ describe('AnnouncementFormDialog', () => {
 
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
+
+  it('标题或正文未填时预览按钮禁用，都填好后可用（阶段 D 前置预览）', async () => {
+    const wrapper = mountDialog()
+    const preview = buttonByText(wrapper, '预览学生视角')
+
+    expect(preview.attributes('disabled')).toBeDefined()
+
+    await wrapper.get('input[type="text"]').setValue('停水通知')
+    await wrapper.get('textarea').setValue('今晚 22:00 起停水')
+
+    expect(preview.attributes('disabled')).toBeUndefined()
+  })
 })

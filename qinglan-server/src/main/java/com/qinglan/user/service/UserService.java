@@ -7,6 +7,7 @@ import com.qinglan.common.crypto.CryptoService;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.security.AdminPermission;
+import com.qinglan.common.web.CsvWriter;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.user.dto.AdminMeResponse;
@@ -25,6 +26,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
@@ -50,6 +56,8 @@ public class UserService {
     private static final int CURSOR_SEGMENTS = 2;
     /** 委员会成员的角色集合（参与表决的人）：上限与名单查询都用它 */
     private static final List<UserRole> COMMITTEE_ROLES = List.of(UserRole.ADMIN, UserRole.REVIEWER);
+    /** 导出动作写入审计时 target_id 的哨兵值（导出没有单一目标实体） */
+    private static final long EXPORT_TARGET_ID = 0L;
 
     private final UserRepository userRepository;
     private final CryptoService cryptoService;
@@ -290,6 +298,62 @@ public class UserService {
         List<UserProfileResponse> items = page.stream().map(this::toProfile).toList();
         String nextCursor = hasMore ? formatCursor(page.get(page.size() - 1)) : null;
         return CursorPage.of(items, nextCursor);
+    }
+
+    /**
+     * 导出前置校验：超过 {@link CsvWriter#DEFAULT_ROW_LIMIT} 直接抛
+     * {@link ErrorCode#EXPORT_ROW_LIMIT_EXCEEDED}，明确报错而非静默截断。
+     *
+     * <p><b>必须在触碰响应之前调用</b>：导出控制器会先把 {@code Content-Type} 设为 {@code text/csv}，
+     * 若此时才抛错，全局异常处理无法把 JSON 错误体写进一个已预设为 CSV 的响应（会以
+     * {@code HttpMessageNotWritableException} 收场，客户端拿到 500 而不是 400）。</p>
+     */
+    @Transactional(readOnly = true)
+    public void requireExportable(AdminUserQuery query) {
+        long total = userRepository.countAdminFiltered(
+                query.status(), query.role(), query.minCredit(), query.maxCredit(),
+                query.createdFrom(), query.createdTo());
+        if (total > CsvWriter.DEFAULT_ROW_LIMIT) {
+            throw new BizException(ErrorCode.EXPORT_ROW_LIMIT_EXCEEDED);
+        }
+    }
+
+    /**
+     * 按当前筛选条件流式导出用户列表 CSV（阶段 B）。调用方应先经 {@link #requireExportable} 校验。
+     *
+     * <p>字段集沿用 {@link UserProfileResponse}——<b>不含学号 / 邮箱</b>（不变量 #3 在导出上同样不破例）。
+     * 导出写一条 {@code DATA_EXPORT} 审计（不变量 #7 的意图范围），reason 只记筛选条件摘要与行数，
+     * 不含身份明文。抓取条数已被前置校验约束在上限内。</p>
+     */
+    @Transactional
+    public void exportCsv(AdminUserQuery query, Long operatorId, OutputStream out) throws IOException {
+        List<User> rows = userRepository.findAdminPage(
+                query.status(), query.role(), query.minCredit(), query.maxCredit(),
+                query.createdFrom(), query.createdTo(), null, null,
+                PageRequest.of(0, CsvWriter.DEFAULT_ROW_LIMIT));
+        auditLogService.record(AuditTargetType.EXPORT, EXPORT_TARGET_ID, AuditAction.DATA_EXPORT, operatorId,
+                "用户列表导出：status=%s role=%s minCredit=%s maxCredit=%s createdFrom=%s createdTo=%s rows=%d"
+                        .formatted(query.status(), query.role(), query.minCredit(), query.maxCredit(),
+                                query.createdFrom(), query.createdTo(), rows.size()));
+        writeCsv(rows, out);
+    }
+
+    private void writeCsv(List<User> rows, OutputStream out) throws IOException {
+        Writer writer = new OutputStreamWriter(out, StandardCharsets.UTF_8);
+        writer.write(CsvWriter.UTF8_BOM);
+        writer.write(CsvWriter.line("id", "role", "status", "creditScore", "bannedUntil", "createdAt"));
+        writer.write("\n");
+        for (User user : rows) {
+            writer.write(CsvWriter.line(
+                    user.getId(),
+                    user.getRole().name(),
+                    user.getStatus(),
+                    user.getCreditScore(),
+                    user.getBannedUntil(),
+                    user.getCreatedAt()));
+            writer.write("\n");
+        }
+        writer.flush();
     }
 
     private AdminUserCursor parseCursor(String raw) {

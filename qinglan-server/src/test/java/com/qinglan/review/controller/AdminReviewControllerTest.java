@@ -1,18 +1,24 @@
 package com.qinglan.review.controller;
 
 import com.qinglan.auth.security.JwtService;
+import com.qinglan.common.audit.AuditAction;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.review.dto.AdminAppealItemResponse;
 import com.qinglan.review.dto.AdminReviewContextResponse;
+import com.qinglan.review.dto.AdminReviewHistoryResponse;
+import com.qinglan.review.dto.AdminTodoCountsResponse;
 import com.qinglan.review.dto.CreateProposalRequest;
 import com.qinglan.review.dto.PendingPostItemResponse;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
 import com.qinglan.review.dto.ReviewQueueProposalResponse;
+import com.qinglan.review.dto.ReviewQueueQuery;
+import com.qinglan.review.dto.ReviewQueueSort;
 import com.qinglan.review.entity.ProposalAction;
 import com.qinglan.review.entity.ProposalStatus;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReviewTargetType;
 import com.qinglan.review.entity.VoteDecision;
+import com.qinglan.review.service.AdminTodoCountService;
 import com.qinglan.review.service.AppealQueueService;
 import com.qinglan.review.service.AppealService;
 import com.qinglan.review.service.PendingPostQueueService;
@@ -64,6 +70,8 @@ class AdminReviewControllerTest {
 
     private static final long OPERATOR_ID = 99L;
     private static final long POST_ID = 1L;
+    /** 无筛选时的队列条件（与控制器默认构造的一致） */
+    private static final ReviewQueueQuery DEFAULT_QUERY = new ReviewQueueQuery(null, null, false, null);
 
     @Autowired
     private MockMvc mockMvc;
@@ -90,6 +98,9 @@ class AdminReviewControllerTest {
     private ProposalService proposalService;
 
     @MockitoBean
+    private AdminTodoCountService adminTodoCountService;
+
+    @MockitoBean
     private JwtService jwtService;
 
     @AfterEach
@@ -113,7 +124,7 @@ class AdminReviewControllerTest {
     @DisplayName("队列返回游标分页，且 nextCursor 是字符串（前端原样回传）")
     void shouldReturnQueueWithStringCursor() throws Exception {
         authenticateAsAdmin();
-        when(reviewQueueService.queue("2:1000:1", OPERATOR_ID)).thenReturn(CursorPage.of(
+        when(reviewQueueService.queue("2:1000:1", DEFAULT_QUERY, OPERATOR_ID)).thenReturn(CursorPage.of(
                 List.of(new ReviewQueueItemResponse(ReviewTargetType.POST, POST_ID, "摘要",
                         List.of("/uploads/a.jpg", "/uploads/b.jpg"), "APPROVED",
                         2, Instant.parse("2026-10-06T00:00:00Z"), List.of(ReportReason.OTHER),
@@ -139,7 +150,7 @@ class AdminReviewControllerTest {
     @DisplayName("队列行带进行中提案的进度，且只回我自己那一票（决策 D8）")
     void shouldReturnQueueItemWithProposalProgress() throws Exception {
         authenticateAsAdmin();
-        when(reviewQueueService.queue(null, OPERATOR_ID)).thenReturn(CursorPage.of(
+        when(reviewQueueService.queue(null, DEFAULT_QUERY, OPERATOR_ID)).thenReturn(CursorPage.of(
                 List.of(new ReviewQueueItemResponse(ReviewTargetType.POST, POST_ID, "摘要", List.of(),
                         "APPROVED",
                         1, Instant.parse("2026-10-06T00:00:00Z"), List.of(ReportReason.ABUSE),
@@ -163,13 +174,88 @@ class AdminReviewControllerTest {
     @DisplayName("不带游标即取首页，游标参数对服务层为空")
     void shouldRequestFirstPageWhenCursorAbsent() throws Exception {
         authenticateAsAdmin();
-        when(reviewQueueService.queue(null, OPERATOR_ID)).thenReturn(CursorPage.empty());
+        when(reviewQueueService.queue(null, DEFAULT_QUERY, OPERATOR_ID)).thenReturn(CursorPage.empty());
 
         mockMvc.perform(get("/api/admin/review-queue"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isEmpty());
 
-        verify(reviewQueueService).queue(null, OPERATOR_ID);
+        verify(reviewQueueService).queue(null, DEFAULT_QUERY, OPERATOR_ID);
+    }
+
+    @Test
+    @DisplayName("队列筛选与排序参数被解析进查询条件（理由多选 / 目标类型 / 只看超时 / 排序）")
+    void shouldParseQueueFilterParams() throws Exception {
+        authenticateAsAdmin();
+        ReviewQueueQuery expected = new ReviewQueueQuery(
+                List.of(ReportReason.ABUSE, ReportReason.PRIVACY), ReviewTargetType.POST, true,
+                ReviewQueueSort.FIRST_REPORTED_ASC);
+        when(reviewQueueService.queue(null, expected, OPERATOR_ID)).thenReturn(CursorPage.empty());
+
+        mockMvc.perform(get("/api/admin/review-queue")
+                        .param("reasons", "ABUSE", "PRIVACY")
+                        .param("targetType", "POST")
+                        .param("overdueOnly", "true")
+                        .param("sort", "FIRST_REPORTED_ASC"))
+                .andExpect(status().isOk());
+
+        verify(reviewQueueService).queue(null, expected, OPERATOR_ID);
+    }
+
+    @Test
+    @DisplayName("非法排序口径返回 400 而不是 500")
+    void shouldRejectUnknownSort() throws Exception {
+        mockMvc.perform(get("/api/admin/review-queue").param("sort", "NOT_A_SORT"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("QL-400-001"));
+    }
+
+    // ------------------------------------------------------------------ 待办计数 / 历史
+
+    @Test
+    @DisplayName("待办计数：无权限的分组不返回（不是返回 0）")
+    void shouldOmitTodoGroupWithoutPermission() throws Exception {
+        authenticateAsAdmin();
+        when(adminTodoCountService.counts(OPERATOR_ID))
+                .thenReturn(new AdminTodoCountsResponse(3L, 2L, 1L, null));
+
+        mockMvc.perform(get("/api/admin/todo-counts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pendingPosts").value(3))
+                .andExpect(jsonPath("$.data.pendingReports").value(2))
+                .andExpect(jsonPath("$.data.proposable").value(1))
+                // 无 PROPOSAL_ARBITRATE 时该组整个缺席，而不是 0
+                .andExpect(jsonPath("$.data.escalated").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("上下文历史：返回作者最近动态与处置流水，且不含作者/举报人身份")
+    void shouldReturnReviewHistory() throws Exception {
+        when(reviewContextService.history(ReviewTargetType.POST, 5L)).thenReturn(
+                new AdminReviewHistoryResponse(
+                        List.of(new AdminReviewHistoryResponse.AuthorPostItem(
+                                9L, "APPROVED", Instant.parse("2026-10-01T00:00:00Z"))),
+                        List.of(new AdminReviewHistoryResponse.DispositionItem(
+                                AuditAction.POST_TAKEDOWN, 99L, "ABUSE", Instant.parse("2026-10-02T00:00:00Z")))));
+
+        mockMvc.perform(get("/api/admin/review-context/history")
+                        .param("targetType", "POST")
+                        .param("targetId", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.authorRecentPosts[0].id").value(9))
+                .andExpect(jsonPath("$.data.authorRecentPosts[0].status").value("APPROVED"))
+                .andExpect(jsonPath("$.data.targetDispositions[0].action").value("POST_TAKEDOWN"))
+                .andExpect(jsonPath("$.data.targetDispositions[0].operatorId").value(99))
+                .andExpect(jsonPath("$.data.authorRecentPosts[0].authorId").doesNotExist())
+                .andExpect(jsonPath("$.data.authorRecentPosts[0].anonymousCode").doesNotExist())
+                .andExpect(jsonPath("$.data.targetDispositions[0].studentId").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("上下文历史缺少 targetId 返回 400")
+    void shouldRejectHistoryWithoutTargetId() throws Exception {
+        mockMvc.perform(get("/api/admin/review-context/history").param("targetType", "POST"))
+                .andExpect(status().isBadRequest());
     }
 
     // ------------------------------------------------------------------ 待审帖子

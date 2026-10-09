@@ -1,16 +1,28 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 import PendingPostTable from '@/components/admin/PendingPostTable.vue'
+import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
 import ReviewContextPanel from '@/components/admin/ReviewContextPanel.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import { pushToast } from '@shared/composables/useToast'
 import { usePendingPostQueue } from '@/composables/usePendingPostQueue'
+import { useQueuePolling } from '@/composables/useQueuePolling'
+import { useQueueShortcuts, type QueueShortcut } from '@/composables/useQueueShortcuts'
 import { useReviewActions } from '@/composables/useReviewActions'
 import { useReviewContext } from '@/composables/useReviewContext'
+import { useRowKeyboardNav } from '@/composables/useRowKeyboardNav'
 import type { AdminPendingPostItem } from '@/types/review'
 
-const { items, loading, loadingMore, hasMore, failed, refresh, loadMore } = usePendingPostQueue()
+/** 本页只有「通过 / 驳回」两个动作，按键映射据此固定（方案：按各页实际动作集适配） */
+type PendingAction = 'approve' | 'reject'
+
+const SHORTCUTS: readonly QueueShortcut<PendingAction>[] = [
+  { key: '1', action: 'approve', label: '通过', permission: 'POST_REVIEW' },
+  { key: '2', action: 'reject', label: '驳回', permission: 'POST_REVIEW' },
+]
+
+const { items, loading, loadingMore, hasMore, failed, refresh, loadMore, headKeys } = usePendingPostQueue()
 const {
   target,
   context,
@@ -22,6 +34,34 @@ const {
 const { submitting, approvePost, rejectPost } = useReviewActions()
 
 const panelOpen = ref(false)
+/** 驳回理由弹窗（ElMessageBox）打开期间计入「处置进行中」，轮询不得替换列表 */
+const reasonPromptOpen = ref(false)
+
+/** 键盘行焦点：↑/↓ 移动，面板随焦点行自动加载 */
+const {
+  activeItem,
+  activeKey,
+  focused,
+  focus: focusList,
+  handleFocusOut,
+  handleArrowKeys,
+  setActive,
+  clamp,
+} = useRowKeyboardNav<AdminPendingPostItem>(
+  () => items.value,
+  (row) => String(row.postId),
+)
+
+const shortcuts = useQueueShortcuts<PendingAction>(SHORTCUTS)
+
+const busy = computed(() => submitting.value || reasonPromptOpen.value)
+
+const { hasNewContent, applyNow } = useQueuePolling({
+  fetchHeadKeys: headKeys,
+  getDisplayedKeys: () => items.value.map((row) => String(row.postId)),
+  isBusy: () => busy.value,
+  onRefresh: refresh,
+})
 
 onMounted(() => {
   void refresh()
@@ -34,21 +74,52 @@ watch(panelOpen, (open) => {
   }
 })
 
-function handleSelect(row: AdminPendingPostItem): void {
+/** 把焦点行选中并加载其上下文面板 */
+function selectActive(): void {
+  const row = activeItem.value
+  if (!row) {
+    panelOpen.value = false
+    return
+  }
   panelOpen.value = true
   void open({ targetType: 'POST', targetId: row.postId })
 }
 
+function handleSelect(row: AdminPendingPostItem): void {
+  setActive(items.value.indexOf(row))
+  selectActive()
+}
+
+/** ↑/↓ 移焦点（未聚焦不响应），数字键触发通过 / 驳回 */
+function onKeydown(event: KeyboardEvent): void {
+  if (handleArrowKeys(event)) {
+    event.preventDefault()
+    selectActive()
+    return
+  }
+  if (!focused.value) {
+    return
+  }
+  const action = shortcuts.actionOf(event.key)
+  if (action === 'approve') {
+    event.preventDefault()
+    void handleApprove()
+  } else if (action === 'reject') {
+    event.preventDefault()
+    void handleReject()
+  }
+}
+
 /**
- * 处置成功后的收尾：关面板、提示、刷新队列。
+ * 处置成功后的收尾：提示、刷新队列，并把焦点推进到下一条（连续处置）。
  *
- * 不刷新上下文：面板一关，`panelOpen` 的 watch 就会 close() 并作废在飞的请求，
- * 此时 reload() 的响应必被丢弃，只会白发一次请求。
+ * 不刷新上下文：面板随焦点行切换会自动 `open()`，旧的上下文已被新目标覆盖。
  */
-async function afterHandled(message: string): Promise<void> {
-  panelOpen.value = false
+async function advanceAfterHandled(message: string): Promise<void> {
   pushToast(message, 'info')
   await refresh()
+  clamp()
+  selectActive()
 }
 
 async function handleApprove(): Promise<void> {
@@ -56,7 +127,7 @@ async function handleApprove(): Promise<void> {
     return
   }
   if (await approvePost(target.value.targetId)) {
-    await afterHandled('已通过，帖子对外可见')
+    await advanceAfterHandled('已通过，帖子对外可见')
   }
 }
 
@@ -66,6 +137,7 @@ async function handleReject(): Promise<void> {
     return
   }
   let reason: string
+  reasonPromptOpen.value = true
   try {
     const result = await ElMessageBox.prompt('驳回理由会发给作者，并写入审计日志', '驳回帖子', {
       confirmButtonText: '确认',
@@ -77,9 +149,11 @@ async function handleReject(): Promise<void> {
   } catch {
     // 用户取消不是错误，静默返回
     return
+  } finally {
+    reasonPromptOpen.value = false
   }
   if (await rejectPost(target.value.targetId, { reason })) {
-    await afterHandled('已驳回，仅作者可见')
+    await advanceAfterHandled('已驳回，仅作者可见')
   }
 }
 </script>
@@ -93,8 +167,32 @@ async function handleReject(): Promise<void> {
 
     <p class="text-sm text-muted">主帖先审后发：这里的帖子尚未对外可见，放行后才会出现在信息流。</p>
 
-    <section class="ql-card overflow-hidden">
-      <PendingPostTable :items="items" :loading="loading" :failed="failed" @handle="handleSelect" />
+    <!-- 轮询到列表有变化时提示；处置进行中只挂角标，点击后再合并刷新 -->
+    <button
+      v-if="hasNewContent"
+      type="button"
+      class="cursor-pointer rounded-lg border border-warning bg-warning-soft px-3 py-2 text-left text-sm text-warning"
+      @click="applyNow"
+    >
+      列表有新内容，点击刷新
+    </button>
+
+    <QueueShortcutHints :bindings="shortcuts.bindings.value" />
+
+    <section
+      class="ql-card overflow-clip outline-none focus-visible:ring-2 focus-visible:ring-primary-soft"
+      tabindex="0"
+      @focusin="focusList"
+      @focusout="handleFocusOut"
+      @keydown="onKeydown"
+    >
+      <PendingPostTable
+        :items="items"
+        :loading="loading"
+        :failed="failed"
+        :active-key="activeKey"
+        @handle="handleSelect"
+      />
 
       <div v-if="hasMore" class="border-t border-line px-3 py-3 text-center">
         <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">加载更多</BaseButton>

@@ -1,9 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
+import EChart from '@/components/admin/EChart.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
+import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useDashboard } from '@/composables/useDashboard'
+import {
+  handledTrendOption,
+  latencyOption,
+  moderatorRankingOption,
+  proposalOption,
+  readChartPalette,
+  reportReasonOption,
+  trendPoints,
+  type TrendRange,
+} from '@/composables/dashboardCharts'
 
 interface MetricItem {
   label: string
@@ -16,6 +28,10 @@ interface MetricSection {
 }
 
 const { stats, loading, failed, load } = useDashboard()
+const { reportReasonLabel } = useUserLabels()
+
+/** 语义色在运行时读成实际色值（canvas 不认 CSS 变量），全站唯一色值来源仍是 main.css */
+const palette = readChartPalette()
 
 const sections = computed<MetricSection[]>(() => {
   const data = stats.value
@@ -48,14 +64,29 @@ const sections = computed<MetricSection[]>(() => {
   ]
 })
 
-const last7Days = computed(() => stats.value?.moderation.last7DaysHandled ?? [])
+/** 趋势图范围切换；默认近 7 日 */
+const trendRange = ref<TrendRange>('7d')
 
-/** 条形基准取 7 日最大值；全 0 时退化为 1，避免除零 */
-const maxDaily = computed(() => Math.max(1, ...last7Days.value.map((item) => item.count)))
+const trendData = computed(() => (stats.value ? trendPoints(stats.value.trends, trendRange.value) : []))
+const trendOption = computed(() => handledTrendOption(trendData.value, palette))
 
-function barWidth(count: number): string {
-  return `${Math.round((count / maxDaily.value) * 100)}%`
-}
+const reasonItems = computed(() => stats.value?.reportReasons ?? [])
+const reasonChartOption = computed(() => reportReasonOption(reasonItems.value, palette, reportReasonLabel))
+
+const latency = computed(() => stats.value?.dispositionLatency ?? { p50Seconds: 0, p90Seconds: 0, sampleSize: 0 })
+const latencyChartOption = computed(() => latencyOption(latency.value, palette))
+
+const proposals = computed(
+  () => stats.value?.proposals ?? { approved: 0, rejected: 0, escalated: 0, approvalRate: 0 },
+)
+const proposalChartOption = computed(() => proposalOption(proposals.value, palette))
+const approvalRateText = computed(() => `${Math.round(proposals.value.approvalRate * 100)}%`)
+const proposalTotal = computed(
+  () => proposals.value.approved + proposals.value.rejected + proposals.value.escalated,
+)
+
+const ranking = computed(() => stats.value?.moderatorRanking ?? [])
+const rankingChartOption = computed(() => moderatorRankingOption(ranking.value, palette))
 
 onMounted(() => {
   void load()
@@ -96,19 +127,47 @@ onMounted(() => {
         </BaseCard>
       </div>
 
-      <BaseCard>
-        <h2 class="text-sm font-medium text-muted">近 7 日处置数</h2>
-        <ul v-if="last7Days.length" class="mt-4 flex flex-col gap-2.5">
-          <li v-for="day in last7Days" :key="day.date" class="flex items-center gap-3">
-            <span class="w-24 text-xs text-muted">{{ day.date }}</span>
-            <span class="h-2 flex-1 overflow-hidden rounded-full bg-primary-tint">
-              <span class="block h-full rounded-full bg-primary" :style="{ width: barWidth(day.count) }" />
-            </span>
-            <span class="w-8 text-right text-xs text-ink">{{ day.count }}</span>
-          </li>
-        </ul>
-        <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
-      </BaseCard>
+      <div class="grid grid-cols-2 gap-5">
+        <BaseCard>
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-medium text-muted">处置趋势</h2>
+            <el-radio-group v-model="trendRange" size="small">
+              <el-radio-button value="7d">近 7 日</el-radio-button>
+              <el-radio-button value="30d">近 30 日</el-radio-button>
+            </el-radio-group>
+          </div>
+          <!-- 图表容器固定高度（EChart 默认 280px），避免布局跳动 -->
+          <EChart v-if="trendData.length" class="mt-3" :option="trendOption" />
+          <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
+        </BaseCard>
+
+        <BaseCard>
+          <h2 class="text-sm font-medium text-muted">举报按理由分布</h2>
+          <EChart v-if="reasonItems.length" class="mt-3" :option="reasonChartOption" />
+          <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
+        </BaseCard>
+
+        <BaseCard>
+          <h2 class="text-sm font-medium text-muted">处置时效（近 30 天）</h2>
+          <EChart v-if="latency.sampleSize > 0" class="mt-3" :option="latencyChartOption" />
+          <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
+        </BaseCard>
+
+        <BaseCard>
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-medium text-muted">提案表决概况</h2>
+            <span class="text-sm text-muted">通过率 <span class="font-medium text-ink">{{ approvalRateText }}</span></span>
+          </div>
+          <EChart v-if="proposalTotal > 0" class="mt-3" :option="proposalChartOption" />
+          <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
+        </BaseCard>
+
+        <BaseCard class="col-span-2">
+          <h2 class="text-sm font-medium text-muted">审核员处置量排行</h2>
+          <EChart v-if="ranking.length" class="mt-3" :option="rankingChartOption" height="320px" />
+          <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
+        </BaseCard>
+      </div>
     </template>
   </div>
 </template>

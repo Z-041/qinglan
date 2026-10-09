@@ -291,6 +291,79 @@ class SecuritySkeletonTest {
                 .andExpect(jsonPath("$.code").value("QL-404-002"));
     }
 
+    // ---------------------------------------------------------------- P6 新增能力
+
+    @Test
+    @DisplayName("导出端点按权限点放行：审计导出仅超管、用户导出要 USER_MANAGE，且返回 CSV")
+    void shouldScopeExportEndpoints() throws Exception {
+        User admin = createAdmin("exp-admin@qinglan.edu.cn", "2023010051");
+        User superAdmin = createUser("exp-root@qinglan.edu.cn", "2023010052", UserRole.SUPER_ADMIN);
+        User student = createStudent("exp-student@qinglan.edu.cn", "2023010053");
+        String adminToken = jwtService.issueAccessToken(admin.getId(), UserRole.ADMIN);
+        String superAdminToken = jwtService.issueAccessToken(superAdmin.getId(), UserRole.SUPER_ADMIN);
+        String studentToken = jwtService.issueAccessToken(student.getId(), UserRole.STUDENT);
+
+        // 审计导出：管理员无 AUDIT_READ → 403；超管 → 200 且是 CSV
+        mockMvc.perform(get("/api/admin/audit-logs/export").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-001"));
+        mockMvc.perform(get("/api/admin/audit-logs/export").header("Authorization", "Bearer " + superAdminToken))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", containsString("text/csv")));
+
+        // 用户导出：学生无 USER_MANAGE → 403；管理员 → 200 且是 CSV
+        mockMvc.perform(get("/api/admin/users/export").header("Authorization", "Bearer " + studentToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("QL-403-001"));
+        mockMvc.perform(get("/api/admin/users/export").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", containsString("text/csv")));
+    }
+
+    @Test
+    @DisplayName("待办计数与上下文历史按 MODERATION_VIEW 放行：学生被拒、管理员可读")
+    void shouldScopeTodoCountsAndHistory() throws Exception {
+        User admin = createAdmin("todo-admin@qinglan.edu.cn", "2023010054");
+        User student = createStudent("todo-student@qinglan.edu.cn", "2023010055");
+        String adminToken = jwtService.issueAccessToken(admin.getId(), UserRole.ADMIN);
+        String studentToken = jwtService.issueAccessToken(student.getId(), UserRole.STUDENT);
+
+        mockMvc.perform(get("/api/admin/todo-counts").header("Authorization", "Bearer " + studentToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/admin/todo-counts").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pendingPosts").exists())
+                .andExpect(jsonPath("$.data.pendingReports").exists());
+
+        mockMvc.perform(get("/api/admin/review-context/history")
+                        .param("targetType", "POST").param("targetId", "999999")
+                        .header("Authorization", "Bearer " + studentToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("我的帖子需登录：游客 401，本人 200")
+    void shouldRequireAuthForMyPosts() throws Exception {
+        User student = createStudent("mine@qinglan.edu.cn", "2023010056");
+        String token = jwtService.issueAccessToken(student.getId(), UserRole.STUDENT);
+
+        mockMvc.perform(get("/api/posts/mine"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("QL-401-001"));
+
+        mockMvc.perform(get("/api/posts/mine").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isArray());
+    }
+
+    @Test
+    @DisplayName("信息流 sort=hot：游客可用，返回游标分页且不含作者身份")
+    void shouldServeHotFeed() throws Exception {
+        mockMvc.perform(get("/api/posts").param("sort", "hot"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isArray());
+    }
+
     private String banBody() throws Exception {
         return objectMapper.writeValueAsString(new BanRequestBody(7, "人身攻击"));
     }

@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 
 import ArbitrationDialog from '@/components/admin/ArbitrationDialog.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import { pushToast } from '@shared/composables/useToast'
 import { useArbitration } from '@/composables/useArbitration'
 import {
@@ -71,7 +72,7 @@ async function handleArbitrate(payload: ArbitratePayload): Promise<void> {
               <ul v-if="row.votes.length" class="flex flex-col gap-1">
                 <li v-for="vote in row.votes" :key="vote.voterId" class="text-xs text-muted">
                   投票人 #{{ vote.voterId }} · {{ decisionLabel(vote.decision) }} ·
-                  {{ new Date(vote.createdAt).toLocaleString() }}
+                  <span :title="formatAbsoluteTime(vote.createdAt)">{{ formatRelativeTime(vote.createdAt) }}</span>
                 </li>
               </ul>
               <span v-else class="text-xs text-muted">暂无投票</span>

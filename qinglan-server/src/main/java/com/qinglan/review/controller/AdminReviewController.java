@@ -5,14 +5,20 @@ import com.qinglan.common.web.ApiResponse;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.review.dto.AdminAppealItemResponse;
 import com.qinglan.review.dto.AdminReviewContextResponse;
+import com.qinglan.review.dto.AdminReviewHistoryResponse;
+import com.qinglan.review.dto.AdminTodoCountsResponse;
 import com.qinglan.review.dto.CreateProposalRequest;
 import com.qinglan.review.dto.CreateProposalResponse;
 import com.qinglan.review.dto.DismissReportsRequest;
 import com.qinglan.review.dto.PendingPostItemResponse;
 import com.qinglan.review.dto.ProposalDispositionRequest;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
+import com.qinglan.review.dto.ReviewQueueQuery;
+import com.qinglan.review.dto.ReviewQueueSort;
 import com.qinglan.review.entity.ProposalAction;
+import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReviewTargetType;
+import com.qinglan.review.service.AdminTodoCountService;
 import com.qinglan.review.service.AppealQueueService;
 import com.qinglan.review.service.AppealService;
 import com.qinglan.review.service.PendingPostQueueService;
@@ -31,6 +37,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 审核工作台接口。所有动作写审计日志，不可删除（不变量 #7）。
@@ -56,13 +64,25 @@ public class AdminReviewController {
     private final AppealQueueService appealQueueService;
     private final PendingPostQueueService pendingPostQueueService;
     private final ProposalService proposalService;
+    private final AdminTodoCountService adminTodoCountService;
 
-    /** 举报队列：按举报数降序 + 等待时长升序，游标分页；行内带该目标进行中的提案进度 */
+    /**
+     * 举报队列：默认按举报数降序 + 等待时长升序，游标分页；行内带该目标进行中的提案进度。
+     *
+     * <p>阶段 A 起支持筛选（理由多选 / 目标类型 / 只看超时）与排序（举报数降序 / 首报升序）。
+     * 筛选进 SQL、分页仍是键集；**切换 sort 时游标格式随之变化**，前端需一并回传 sort。</p>
+     */
     @GetMapping("/review-queue")
     @PreAuthorize("hasAuthority('MODERATION_VIEW')")
     public ApiResponse<CursorPage<ReviewQueueItemResponse>> queue(
+            @RequestParam(required = false) List<ReportReason> reasons,
+            @RequestParam(required = false) ReviewTargetType targetType,
+            @RequestParam(required = false) Boolean overdueOnly,
+            @RequestParam(required = false) ReviewQueueSort sort,
             @RequestParam(required = false) String cursor) {
-        return ApiResponse.ok(reviewQueueService.queue(cursor, CurrentUser.requireUserId()));
+        ReviewQueueQuery query = new ReviewQueueQuery(
+                reasons, targetType, Boolean.TRUE.equals(overdueOnly), sort);
+        return ApiResponse.ok(reviewQueueService.queue(cursor, query, CurrentUser.requireUserId()));
     }
 
     /** 待复审申诉队列：先到先审，游标分页 */
@@ -92,6 +112,32 @@ public class AdminReviewController {
             @RequestParam ReviewTargetType targetType,
             @RequestParam Long targetId) {
         return ApiResponse.ok(reviewContextService.context(targetType, targetId));
+    }
+
+    /**
+     * 待办计数（阶段 B）：顶栏铃铛轮询的轻量接口，按权限点裁剪——无权限的分组不返回（不是返回 0）。
+     *
+     * <p>权限点用 {@code MODERATION_VIEW}（三档都有），组内再按权限点裁剪：
+     * 待审帖子 / 待处理举报要 {@code MODERATION_VIEW}、可投票提案要 {@code PROPOSAL_VOTE}、
+     * 僵局待裁决要 {@code PROPOSAL_ARBITRATE}。</p>
+     */
+    @GetMapping("/todo-counts")
+    @PreAuthorize("hasAuthority('MODERATION_VIEW')")
+    public ApiResponse<AdminTodoCountsResponse> todoCounts() {
+        return ApiResponse.ok(adminTodoCountService.counts(CurrentUser.requireUserId()));
+    }
+
+    /**
+     * 作者历史 / 目标处置历史（阶段 A 面板增强）。
+     *
+     * <p>只回 ID 与状态 / 动作，不含学号、邮箱、匿名代号（不变量 #1 / #3）。</p>
+     */
+    @GetMapping("/review-context/history")
+    @PreAuthorize("hasAuthority('MODERATION_VIEW')")
+    public ApiResponse<AdminReviewHistoryResponse> reviewHistory(
+            @RequestParam ReviewTargetType targetType,
+            @RequestParam Long targetId) {
+        return ApiResponse.ok(reviewContextService.history(targetType, targetId));
     }
 
     @PostMapping("/posts/{postId}/approve")

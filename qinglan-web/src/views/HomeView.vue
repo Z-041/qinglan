@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 
 import { fetchTopics } from '@/api/topic'
 import BaseButton from '@shared/components/base/BaseButton.vue'
@@ -8,12 +8,18 @@ import PostCard from '@/components/PostCard.vue'
 import TopicFilter from '@/components/TopicFilter.vue'
 import { useFeed } from '@/composables/useFeed'
 import { useUserStore } from '@shared/stores/user'
-import type { Topic } from '@/types/post'
+import type { PostSort, Topic } from '@/types/post'
 
 const userStore = useUserStore()
 
-const { posts, topicId, loading, loadingMore, hasMore, failed, load, refresh, loadMore, toggleLike } =
+const { posts, topicId, sort, loading, loadingMore, hasMore, failed, load, setSort, refresh, loadMore, toggleLike } =
   useFeed()
+
+/** 排序 Tab。热门口径由后端 `sort=hot` 计算，前端只负责下发参数 */
+const SORT_TABS: { value: PostSort; label: string }[] = [
+  { value: 'latest', label: '最新' },
+  { value: 'hot', label: '热门' },
+]
 
 const topics = ref<Topic[]>([])
 /**
@@ -21,10 +27,6 @@ const topics = ref<Topic[]>([])
  * 与发布页（同样以话题为前置）用同一套「提示 + 重试」口径。
  */
 const topicsFailed = ref(false)
-
-/** 首条作头条大卡，其余进紧凑行列表；切换话题与加载更多后自动重算（追加不影响头条） */
-const featurePost = computed(() => posts.value[0])
-const compactPosts = computed(() => posts.value.slice(1))
 
 async function loadTopics(): Promise<void> {
   topicsFailed.value = false
@@ -48,52 +50,55 @@ watch(topicId, () => {
 </script>
 
 <template>
-  <section class="ql-shell py-8 max-lg:py-5">
-    <div
-      class="flex items-center justify-between gap-8 rounded-2xl bg-gradient-to-br from-primary to-primary-deep px-8 py-8 text-white max-lg:(flex-col items-start gap-5 px-5 py-6)"
-    >
-      <div class="min-w-0">
-        <h1 class="text-2xl font-semibold tracking-tight max-sm:text-lg">校园里的事，匿名说出来</h1>
-        <p class="mt-2 max-w-[560px] text-sm text-primary-soft">
-          本校学生认证 · 匿名代号跨帖不可关联
-        </p>
-      </div>
-      <RouterLink
-        class="ql-btn ql-btn-md shrink-0 bg-surface text-primary-deep hover:bg-primary-tint"
-        :to="userStore.isAuthenticated ? '/publish' : '/login'"
-      >
-        {{ userStore.isAuthenticated ? '发布新帖' : '去认证' }}
-      </RouterLink>
+  <section class="ql-shell py-6 max-lg:py-4">
+    <!-- 话题横导航（取代原 hero 横幅）：话题是信息流的一级筛选，置于内容最上方 -->
+    <div class="border-b border-line pb-3">
+      <TopicFilter v-model="topicId" :topics="topics" />
     </div>
 
-    <div class="mt-8 grid grid-cols-[minmax(0,1fr)_320px] gap-10 max-lg:(mt-6 grid-cols-1 gap-6)">
+    <!-- 放在主列而非侧栏：侧栏在窄屏整块隐藏，提示放这里各宽度都看得见、只渲染一份 -->
+    <p v-if="topicsFailed" class="mt-3 text-xs text-muted">
+      话题没能加载出来
+      <BaseButton class="ml-1" variant="ghost" size="sm" @click="loadTopics">重试</BaseButton>
+    </p>
+
+    <div class="mt-5 grid grid-cols-[minmax(0,1fr)_320px] gap-10 max-lg:(mt-4 grid-cols-1 gap-6)">
       <div class="min-w-0 self-start">
         <div
           v-if="!userStore.isAuthenticated"
-          class="ql-card mb-4 flex flex-wrap items-center gap-3 p-4"
+          class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3"
         >
           <div class="min-w-0 flex-1">
             <p class="text-sm font-semibold text-ink">认证后即可匿名发帖与互动</p>
             <p class="mt-0.5 text-xs text-muted">游客可以浏览，发帖、评论与点赞需校园邮箱认证。</p>
           </div>
           <RouterLink
-            class="ql-btn ql-btn-sm bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
+            class="ql-btn ql-btn-sm bg-primary-deep text-white hover:bg-primary-strong"
             to="/login"
           >
             去认证
           </RouterLink>
         </div>
 
-        <!-- 窄屏才落下话题 chips；PC 由右栏话题导航承担同一职责 -->
-        <div class="mb-4 hidden max-lg:block">
-          <TopicFilter v-model="topicId" :topics="topics" />
+        <!-- 排序 Tab：最新 / 热门。切 Tab 保留当前话题、重置到第一页（sort 由 useFeed 下发）。
+             热门为后端现算分，翻页期间分数漂移可能漏/重某条——这是后端已知局限，前端不做去重 hack。 -->
+        <div class="flex items-center gap-5 border-b border-line">
+          <button
+            v-for="tab in SORT_TABS"
+            :key="tab.value"
+            type="button"
+            class="cursor-pointer border-b-2 pb-2 text-sm transition"
+            :class="
+              sort === tab.value
+                ? 'border-primary-deep font-medium text-primary-deep'
+                : 'border-transparent text-muted hover:text-primary-deep'
+            "
+            :aria-pressed="sort === tab.value"
+            @click="setSort(tab.value)"
+          >
+            {{ tab.label }}
+          </button>
         </div>
-
-        <!-- 放在主列而非侧栏：侧栏在窄屏整块隐藏，提示放这里各宽度都看得见、只渲染一份 -->
-        <p v-if="topicsFailed" class="mb-4 text-xs text-muted">
-          话题没能加载出来
-          <BaseButton class="ml-1" variant="ghost" size="sm" @click="loadTopics">重试</BaseButton>
-        </p>
 
         <p v-if="loading" class="py-8 text-center text-sm text-muted">加载中…</p>
 
@@ -102,7 +107,7 @@ watch(topicId, () => {
              具体的请求错误信息仍只由 http 拦截器的 toast 给出（AGENTS.md 第七章），不重复渲染。 -->
         <div
           v-else-if="failed"
-          class="rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+          class="mt-4 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
         >
           <p class="text-sm font-medium text-ink">内容没能加载出来</p>
           <BaseButton class="mt-4" variant="ghost" size="sm" @click="refresh()">重试</BaseButton>
@@ -110,31 +115,27 @@ watch(topicId, () => {
 
         <div
           v-else-if="!posts.length"
-          class="rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+          class="mt-4 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
         >
           <p class="text-sm font-medium text-ink">这里还没有内容</p>
           <p class="mt-1 text-xs text-muted">成为第一个发帖的人</p>
           <RouterLink
             v-if="userStore.isAuthenticated"
-            class="ql-btn ql-btn-sm mt-4 bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
+            class="ql-btn ql-btn-sm mt-4 bg-primary-deep text-white hover:bg-primary-strong"
             to="/publish"
           >
             去发布
           </RouterLink>
         </div>
 
+        <!-- 分割线列表：每条一行（话题 + 摘要 + 配图 + 互动数据），不再分头条大卡与紧凑行 -->
         <template v-else>
-          <PostCard :post="featurePost" variant="feature" @toggle-like="toggleLike(featurePost)" />
-
-          <div v-if="compactPosts.length" class="ql-card mt-4 divide-y divide-line overflow-hidden">
-            <PostCard
-              v-for="post in compactPosts"
-              :key="post.id"
-              :post="post"
-              variant="compact"
-              @toggle-like="toggleLike(post)"
-            />
-          </div>
+          <PostCard
+            v-for="post in posts"
+            :key="post.id"
+            :post="post"
+            @toggle-like="toggleLike(post)"
+          />
         </template>
 
         <div v-if="!loading && posts.length && hasMore" class="mt-4 flex justify-center">

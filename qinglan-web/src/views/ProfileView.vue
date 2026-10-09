@@ -70,25 +70,20 @@ onMounted(() => {
     >
       <div class="min-w-0 self-start">
         <BaseCard :padded="false">
-          <div
-            class="relative h-24 overflow-hidden rounded-t-xl bg-gradient-to-br from-primary to-primary-deep"
-          >
-            <span class="absolute -right-6 -top-8 size-24 rounded-full bg-white/10" aria-hidden="true" />
-            <span class="absolute right-12 -bottom-10 size-20 rounded-full bg-white/10" aria-hidden="true" />
-          </div>
+          <!-- 去装饰：原来是渐变横幅 + 白色圆形光斑，属「AI 味」视觉；改为纯色块 -->
+          <div class="h-20 rounded-t-xl bg-primary-soft" />
 
           <div class="px-5 pb-5">
-            <!-- 必须 relative z-10：横幅是定位元素，不抬层的话会把负边距上提的头像上半截盖住 -->
-            <div class="relative z-10 -mt-8 flex items-end gap-3">
+            <div class="-mt-8 flex items-end gap-3">
               <span
                 class="flex size-16 shrink-0 items-center justify-center rounded-2xl border-4 border-surface bg-primary-soft text-xl font-bold text-primary"
               >
                 匿
               </span>
-              <!-- 名称与角色标签同行：竖排时文字块会高出头像下半截、顶到横幅上去 -->
+              <!-- 名称与角色标签同行：竖排时文字块会高出头像下半截、顶到上方色块上去 -->
               <div class="flex min-w-0 items-center gap-2 pb-1">
                 <p class="truncate text-sm font-semibold text-ink">匿名用户</p>
-                <span class="ql-badge shrink-0 bg-primary-soft text-primary-deep">
+                <span class="ql-tag shrink-0 bg-primary-soft text-primary-deep">
                   {{ roleLabel(userStore.profile.role) }}
                 </span>
               </div>
@@ -107,15 +102,25 @@ onMounted(() => {
           </div>
         </BaseCard>
 
-        <div class="mt-4 rounded-xl border border-dashed border-line-strong px-5 py-6 text-center">
-          <p class="text-sm font-medium text-ink">还没有「我的帖子」列表</p>
-          <p class="mt-1 text-xs text-muted">当前版本仅提供发布入口，个人帖子聚合在后续版本上线</p>
-          <RouterLink
-            class="ql-btn ql-btn-sm mt-4 bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
-            to="/publish"
-          >
-            去发布
-          </RouterLink>
+        <div class="ql-card mt-4 p-4">
+          <p class="text-sm font-semibold text-ink">我的帖子</p>
+          <p class="mt-1 text-xs leading-relaxed text-muted">
+            查看自己发布的帖子，覆盖待审、已通过、已驳回与已下架全部状态；驳回与下架会展示原因。
+          </p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <RouterLink
+              class="ql-btn ql-btn-sm bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
+              to="/my-posts"
+            >
+              查看我的帖子
+            </RouterLink>
+            <RouterLink
+              class="ql-btn ql-btn-sm border border-line bg-surface text-muted hover:border-primary-soft hover:text-primary-deep"
+              to="/publish"
+            >
+              去发布
+            </RouterLink>
+          </div>
         </div>
       </div>
 

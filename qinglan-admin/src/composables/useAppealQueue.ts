@@ -79,5 +79,14 @@ export function useAppealQueue() {
     }
   }
 
-  return { items, loading, loadingMore, hasMore, failed, refresh, loadMore }
+  /**
+   * 轮询探针：只取首屏的行键用于「是否有新内容」比对。
+   * 不写列表、不动游标，故与 `refresh` 并行发请求也不会打架。
+   */
+  async function headKeys(): Promise<string[]> {
+    const page = await fetchAdminAppeals(null)
+    return page.items.map((row) => String(row.appealId))
+  }
+
+  return { items, loading, loadingMore, hasMore, failed, refresh, loadMore, headKeys }
 }

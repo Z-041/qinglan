@@ -17,6 +17,7 @@ import com.qinglan.post.entity.RiskLevel;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.review.config.ReviewProperties;
 import com.qinglan.review.dto.CreateReportRequest;
+import com.qinglan.review.dto.MyReportStatusResponse;
 import com.qinglan.review.entity.Report;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReportStatus;
@@ -263,6 +264,62 @@ class ReportServiceTest {
         verify(reportRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getTargetType()).isEqualTo(ReviewTargetType.COMMENT);
         verify(postRepository, never()).adjustReportCount(anyLong(), anyInt());
+    }
+
+    // -------------------------------------------------------- 我的举报状态（GET /api/reports/mine）
+
+    @Test
+    @DisplayName("未举报时返回 reported=false 且状态与时刻全为空，而不是 404")
+    void shouldReturnNotReportedWhenCallerHasNoReport() {
+        when(reportRepository.findByTargetTypeAndTargetIdAndReporterId(
+                ReviewTargetType.POST, POST_ID, REPORTER_ID)).thenReturn(Optional.empty());
+
+        MyReportStatusResponse response =
+                reportService.myReportStatus(REPORTER_ID, ReviewTargetType.POST, POST_ID);
+
+        assertThat(response.reported()).isFalse();
+        assertThat(response.status()).isNull();
+        assertThat(response.createdAt()).isNull();
+        assertThat(response.handledAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("已举报时回我自己那条的状态与提交 / 处置时刻")
+    void shouldReturnOwnReportStatus() {
+        Instant createdAt = Instant.parse("2026-10-01T08:00:00Z");
+        Report mine = Report.submit(ReviewTargetType.POST, POST_ID, REPORTER_ID, ReportReason.ABUSE, null);
+        TestFixtures.setId(mine, 123L);
+        TestFixtures.setCreatedAt(mine, createdAt);
+        mine.uphold(9L);
+        when(reportRepository.findByTargetTypeAndTargetIdAndReporterId(
+                ReviewTargetType.POST, POST_ID, REPORTER_ID)).thenReturn(Optional.of(mine));
+
+        MyReportStatusResponse response =
+                reportService.myReportStatus(REPORTER_ID, ReviewTargetType.POST, POST_ID);
+
+        assertThat(response.reported()).isTrue();
+        assertThat(response.status()).isEqualTo(ReportStatus.UPHELD);
+        assertThat(response.createdAt()).isEqualTo(createdAt);
+        assertThat(response.handledAt()).isEqualTo(mine.getHandledAt());
+    }
+
+    @Test
+    @DisplayName("只按调用者 id 查询：他人已举报过也不会被当成「我举报过」（不变量 #1）")
+    void shouldQueryOnlyCallerOwnReports() {
+        long otherReporter = 777L;
+        // 调用者自己在该目标上没有举报（他人是否有举报与本次查询无关，不应被查）
+        when(reportRepository.findByTargetTypeAndTargetIdAndReporterId(
+                ReviewTargetType.POST, POST_ID, REPORTER_ID)).thenReturn(Optional.empty());
+
+        MyReportStatusResponse response =
+                reportService.myReportStatus(REPORTER_ID, ReviewTargetType.POST, POST_ID);
+
+        assertThat(response.reported()).isFalse();
+        // 唯一一次查询必须带调用者自己的 id；他人 id 从未被用于查询
+        verify(reportRepository).findByTargetTypeAndTargetIdAndReporterId(
+                ReviewTargetType.POST, POST_ID, REPORTER_ID);
+        verify(reportRepository, never()).findByTargetTypeAndTargetIdAndReporterId(
+                ReviewTargetType.POST, POST_ID, otherReporter);
     }
 
     private Post approvedPost(int reportCount) {

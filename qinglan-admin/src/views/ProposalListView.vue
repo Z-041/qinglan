@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import { pushToast } from '@shared/composables/useToast'
 import { useProposalList } from '@/composables/useProposalList'
 import {
@@ -84,7 +85,9 @@ async function handleVote(row: ProposalSummary, decision: VoteDecision): Promise
             <td class="px-3 py-3">
               {{ row.agreeCount }}/{{ row.needed }} 同意（已投 {{ row.votedCount }} 票）
             </td>
-            <td class="px-3 py-3">{{ new Date(row.createdAt).toLocaleString() }}</td>
+            <td class="px-3 py-3" :title="formatAbsoluteTime(row.createdAt)">
+              {{ formatRelativeTime(row.createdAt) }}
+            </td>
             <td class="px-3 py-3">
               <span v-if="row.myDecision" class="text-xs text-muted">{{ decisionLabel(row.myDecision) }}</span>
               <div v-else-if="canVote(row)" class="flex gap-2">

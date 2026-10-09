@@ -19,10 +19,13 @@ import com.qinglan.common.notify.NotificationPort;
 import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.common.store.EphemeralStore;
+import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.config.PostProperties;
 import com.qinglan.post.dto.CreatePostRequest;
+import com.qinglan.post.dto.MyPostItemResponse;
 import com.qinglan.post.dto.PostDetailResponse;
+import com.qinglan.post.dto.PostSort;
 import com.qinglan.post.dto.PostSummaryResponse;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostImage;
@@ -43,8 +46,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -74,6 +79,10 @@ public class PostService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_CONTACT_LENGTH = 200;
+    /** 热门分数的时间衰减尺度（小时）：e^(-年龄/72h)，方案给定 */
+    private static final double HOT_DECAY_HOURS = 72.0;
+    /** 热门分数放大倍数：把浮点分数取整成可稳定比较的长整型游标键 */
+    private static final long HOT_SCORE_SCALE = 1_000_000L;
 
     /**
      * 帖子配图只接受本站上传产生的地址，格式与 {@code LocalStorageService} 的返回值一一对应：
@@ -153,34 +162,149 @@ public class PostService {
     }
 
     /**
-     * 信息流。只出审核通过的帖子，游标按 id 倒序翻页。
+     * 信息流。只出审核通过的帖子。
+     *
+     * <p>{@code sort=LATEST}（默认）按 id 倒序、游标为单个 id，语义与游标格式均与既有行为**完全一致**；
+     * {@code sort=HOT} 按热度排序，见 {@link #hotFeed}。</p>
      *
      * <p>页大小固定，不对外暴露 size 参数——AGENTS.md 第三章要求列表接口只用游标分页。</p>
      */
     @Transactional(readOnly = true)
-    public CursorPage<PostSummaryResponse> listFeed(Long topicId, String cursorRaw, Viewer viewer) {
-        int limit = DEFAULT_PAGE_SIZE;
+    public CursorPage<PostSummaryResponse> listFeed(Long topicId, PostSort sort, String cursorRaw, Viewer viewer) {
+        return sort == PostSort.HOT
+                ? hotFeed(topicId, cursorRaw, viewer)
+                : latestFeed(topicId, cursorRaw, viewer);
+    }
+
+    /** 最新排序：游标是帖子 id，与历史实现逐字一致（回归基线，不得改动语义与游标格式） */
+    private CursorPage<PostSummaryResponse> latestFeed(Long topicId, String cursorRaw, Viewer viewer) {
         long cursor = parseCursor(cursorRaw);
         // 多取一条用于判断是否还有下一页，避免额外 count 查询
-        Pageable pageable = PageRequest.of(0, limit + 1);
+        Pageable pageable = PageRequest.of(0, DEFAULT_PAGE_SIZE + 1);
         List<Post> found = topicId == null
                 ? postRepository.findFeed(PostStatus.APPROVED, cursor, pageable)
                 : postRepository.findFeedByTopic(PostStatus.APPROVED, topicId, cursor, pageable);
 
-        boolean hasMore = found.size() > limit;
-        List<Post> page = hasMore ? List.copyOf(found.subList(0, limit)) : found;
+        boolean hasMore = found.size() > DEFAULT_PAGE_SIZE;
+        List<Post> page = hasMore ? List.copyOf(found.subList(0, DEFAULT_PAGE_SIZE)) : found;
         if (page.isEmpty()) {
             return CursorPage.empty();
         }
+        List<Long> postIds = page.stream().map(Post::getId).toList();
+        Map<Long, Long> likeCounts = loadLikeCounts(LikeTargetType.POST, postIds);
+        String nextCursor = hasMore ? page.get(page.size() - 1).getId().toString() : null;
+        return CursorPage.of(assembleSummaries(page, likeCounts, viewer), nextCursor);
+    }
 
-        // 四个批量查询装配完一页，杜绝逐帖查询造成的 N+1
+    /**
+     * 热门排序（学生端阶段 3）。权重 {@code score = (点赞数 × 1 + 评论数 × 2) × e^(-年龄/72h)}。
+     *
+     * <p><b>游标方案（取舍 ①，已选定）：请求时刻统一算分 + 「(scale 后的分数, id)」复合游标，
+     * 接受翻页期间的轻微漂移。</b>理由：热度分随点赞/评论实时变化，无法用稳定游标；物化热度列虽能
+     * 让游标稳定，但引入定时重算、写放大与延迟（取舍 ②），对当前规模是过度设计。故选择无 schema 变更、
+     * 无需后台任务的一条。</p>
+     *
+     * <p><b>已知局限（翻页时分数变了会怎样）</b>：因分数是每次请求现算的，两次请求之间若有新点赞，
+     * 某条帖子可能位移到游标另一侧——表现为翻页时**偶尔漏掉或重复某条**。这是取舍 ① 的固有代价，
+     * 在前端以「热门是探索式浏览」为前提可接受；要消除它需改用物化分数列（取舍 ②）。</p>
+     *
+     * <p>候选集由「时间窗口」与「条数上限」双重界定（{@code qinglan.post.hot-window} /
+     * {@code hot-max-candidates}），避免全表算分；窗口外或超出上限的帖子不参与排名。</p>
+     */
+    private CursorPage<PostSummaryResponse> hotFeed(Long topicId, String cursorRaw, Viewer viewer) {
+        HotCursor cursor = parseHotCursor(cursorRaw);
+        Instant now = Instant.now();
+        List<Post> candidates = postRepository.findHotCandidates(
+                PostStatus.APPROVED, topicId, now.minus(postProperties.hotWindow()),
+                PageRequest.of(0, postProperties.hotMaxCandidates()));
+        if (candidates.isEmpty()) {
+            return CursorPage.empty();
+        }
+        List<Long> candidateIds = candidates.stream().map(Post::getId).toList();
+        Map<Long, Long> likeCounts = loadLikeCounts(LikeTargetType.POST, candidateIds);
+
+        List<ScoredPost> ranked = candidates.stream()
+                .map(post -> new ScoredPost(post, hotScoreMicros(post, likeCounts, now)))
+                .sorted(Comparator.comparingLong(ScoredPost::scoreMicros).reversed()
+                        .thenComparing(Comparator.comparingLong(
+                                (ScoredPost scored) -> scored.post().getId()).reversed()))
+                .toList();
+        List<ScoredPost> afterCursor = cursor.first()
+                ? ranked
+                : ranked.stream().filter(scored -> scored.isAfter(cursor)).toList();
+        if (afterCursor.isEmpty()) {
+            return CursorPage.empty();
+        }
+        boolean hasMore = afterCursor.size() > DEFAULT_PAGE_SIZE;
+        List<ScoredPost> page = hasMore
+                ? List.copyOf(afterCursor.subList(0, DEFAULT_PAGE_SIZE)) : afterCursor;
+        List<Post> posts = page.stream().map(ScoredPost::post).toList();
+        String nextCursor = hasMore ? formatHotCursor(page.get(page.size() - 1)) : null;
+        return CursorPage.of(assembleSummaries(posts, likeCounts, viewer), nextCursor);
+    }
+
+    /**
+     * 热门分数（放大为微单位的长整型，作为游标比较的稳定键）。
+     *
+     * <p>用 {@code Math.round(score × 1e6)} 而非裸 {@code double} 比较：浮点相等判断在游标里不可靠，
+     * 放大取整后同一时刻的分数是确定值，翻页比较可复现。时间衰减 {@code e^(-年龄/72h)}——72 小时是
+     * 方案给定的半衰尺度。</p>
+     */
+    private long hotScoreMicros(Post post, Map<Long, Long> likeCounts, Instant now) {
+        long likes = likeCounts.getOrDefault(post.getId(), 0L);
+        long comments = post.getCommentCount();
+        double weight = likes + comments * 2.0;
+        double ageHours = Math.max(0.0,
+                Duration.between(post.getCreatedAt(), now).toSeconds() / 3600.0);
+        double score = weight * Math.exp(-ageHours / HOT_DECAY_HOURS);
+        return Math.round(score * HOT_SCORE_SCALE);
+    }
+
+    /**
+     * 「我的帖子」：仅本人可见，覆盖待审 / 已驳回 / 已下架 / 已通过全部状态，游标分页。
+     *
+     * <p>{@code reviewReason} 只在本人列表里返回，与详情接口语义一致；出参不含他人身份。</p>
+     */
+    @Transactional(readOnly = true)
+    public CursorPage<MyPostItemResponse> listMine(Long userId, PostStatus status, String cursorRaw) {
+        MineCursor cursor = parseMineCursor(cursorRaw);
+        List<Post> found = postRepository.findMinePage(
+                userId, status, cursor.createdAt(), cursor.id(), PageRequest.of(0, DEFAULT_PAGE_SIZE + 1));
+
+        boolean hasMore = found.size() > DEFAULT_PAGE_SIZE;
+        List<Post> page = hasMore ? List.copyOf(found.subList(0, DEFAULT_PAGE_SIZE)) : found;
+        if (page.isEmpty()) {
+            return CursorPage.empty();
+        }
         List<Long> postIds = page.stream().map(Post::getId).toList();
         Map<Long, List<String>> imagesByPost = loadImageUrls(postIds);
         Map<Long, Long> likeCounts = loadLikeCounts(LikeTargetType.POST, postIds);
+        Map<Long, String> topicNames = loadTopicNames(page);
+        List<MyPostItemResponse> items = page.stream()
+                .map(post -> new MyPostItemResponse(
+                        post.getId(),
+                        post.getTopicId(),
+                        topicNames.get(post.getTopicId()),
+                        post.getContent(),
+                        imagesByPost.getOrDefault(post.getId(), List.of()),
+                        post.getAnonymousCode(),
+                        post.getStatus(),
+                        post.getReviewReason(),
+                        likeCounts.getOrDefault(post.getId(), 0L),
+                        post.getCommentCount(),
+                        post.getCreatedAt()))
+                .toList();
+        String nextCursor = hasMore ? formatMineCursor(page.get(page.size() - 1)) : null;
+        return CursorPage.of(items, nextCursor);
+    }
+
+    /** 一页信息流摘要的批量装配：三个批量查询覆盖整页（图片 / 是否已赞 / 话题名），杜绝 N+1 */
+    private List<PostSummaryResponse> assembleSummaries(List<Post> page, Map<Long, Long> likeCounts, Viewer viewer) {
+        List<Long> postIds = page.stream().map(Post::getId).toList();
+        Map<Long, List<String>> imagesByPost = loadImageUrls(postIds);
         Set<Long> likedIds = loadLikedIds(LikeTargetType.POST, postIds, viewer.userId());
         Map<Long, String> topicNames = loadTopicNames(page);
-
-        List<PostSummaryResponse> items = page.stream()
+        return page.stream()
                 .map(post -> new PostSummaryResponse(
                         post.getId(),
                         post.getTopicId(),
@@ -194,8 +318,6 @@ public class PostService {
                         viewer.is(post.getAuthorId()),
                         post.getCreatedAt()))
                 .toList();
-        String nextCursor = hasMore ? page.get(page.size() - 1).getId().toString() : null;
-        return CursorPage.of(items, nextCursor);
     }
 
     /**
@@ -428,5 +550,88 @@ public class PostService {
         } catch (NumberFormatException ex) {
             throw new BizException(ErrorCode.CURSOR_INVALID);
         }
+    }
+
+    /**
+     * 解析热门游标「分数(微单位):帖子 id」。缺段 / 非数字 / id 非正一律按非法游标拒绝。
+     * 分数段允许为 0（冷启动帖子分数可接近 0）。
+     */
+    private HotCursor parseHotCursor(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return HotCursor.firstPage();
+        }
+        String[] parts = raw.split(KEY_SEPARATOR);
+        if (parts.length != CURSOR_SEGMENTS) {
+            throw new BizException(ErrorCode.CURSOR_INVALID);
+        }
+        try {
+            long scoreMicros = Long.parseLong(parts[0]);
+            long id = Long.parseLong(parts[1]);
+            if (scoreMicros < 0 || id <= 0) {
+                throw new NumberFormatException("游标各段不合法");
+            }
+            return new HotCursor(scoreMicros, id);
+        } catch (NumberFormatException ex) {
+            throw new BizException(ErrorCode.CURSOR_INVALID);
+        }
+    }
+
+    private String formatHotCursor(ScoredPost last) {
+        return last.scoreMicros() + KEY_SEPARATOR + last.post().getId();
+    }
+
+    /** 解析「我的帖子」游标「发布时间(微秒):帖子 id」 */
+    private MineCursor parseMineCursor(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return new MineCursor(null, null);
+        }
+        String[] parts = raw.split(KEY_SEPARATOR);
+        if (parts.length != CURSOR_SEGMENTS) {
+            throw new BizException(ErrorCode.CURSOR_INVALID);
+        }
+        try {
+            long micros = Long.parseLong(parts[0]);
+            long id = Long.parseLong(parts[1]);
+            if (micros <= 0 || id <= 0) {
+                throw new NumberFormatException("游标各段不合法");
+            }
+            return new MineCursor(CursorCodec.decode(micros), id);
+        } catch (NumberFormatException ex) {
+            throw new BizException(ErrorCode.CURSOR_INVALID);
+        }
+    }
+
+    private String formatMineCursor(Post last) {
+        return CursorCodec.encode(last.getCreatedAt()) + KEY_SEPARATOR + last.getId();
+    }
+
+    /** 复合游标段分隔符（信息流系）/ 段数（均为两段） */
+    private static final String KEY_SEPARATOR = ":";
+    private static final int CURSOR_SEGMENTS = 2;
+
+    /** 一条带热度分的候选帖子 */
+    private record ScoredPost(Post post, long scoreMicros) {
+
+        /** 排序为「分数降序、id 降序」，故「在本游标之后」= 分数更小，或分数相同且 id 更小 */
+        boolean isAfter(HotCursor cursor) {
+            return scoreMicros < cursor.scoreMicros()
+                    || (scoreMicros == cursor.scoreMicros() && post.getId() < cursor.id());
+        }
+    }
+
+    /** 热门游标：{@code (分数, id)} 复合键；首页用 {@code first=true} 标识 */
+    private record HotCursor(long scoreMicros, long id, boolean first) {
+
+        static HotCursor firstPage() {
+            return new HotCursor(0L, 0L, true);
+        }
+
+        HotCursor(long scoreMicros, long id) {
+            this(scoreMicros, id, false);
+        }
+    }
+
+    /** 「我的帖子」游标：与仓储排序键 {@code (created_at desc, id desc)} 逐一对应 */
+    private record MineCursor(Instant createdAt, Long id) {
     }
 }

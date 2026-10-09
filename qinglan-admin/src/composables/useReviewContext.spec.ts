@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { fetchAdminReviewContext } from '@/api/review'
+import { fetchAdminReviewContext, fetchAdminReviewHistory } from '@/api/review'
 import { useReviewContext } from '@/composables/useReviewContext'
-import type { AdminReviewContext } from '@/types/review'
+import type { AdminReviewContext, AdminReviewHistory } from '@/types/review'
 
-vi.mock('@/api/review', () => ({ fetchAdminReviewContext: vi.fn() }))
+vi.mock('@/api/review', () => ({
+  fetchAdminReviewContext: vi.fn(),
+  fetchAdminReviewHistory: vi.fn(),
+}))
 
 const mockedFetchAdminReviewContext = vi.mocked(fetchAdminReviewContext)
+const mockedFetchAdminReviewHistory = vi.mocked(fetchAdminReviewHistory)
 
 function context(): AdminReviewContext {
   return {
@@ -22,6 +26,13 @@ function context(): AdminReviewContext {
   }
 }
 
+function history(): AdminReviewHistory {
+  return {
+    authorRecentPosts: [{ id: 11, status: 'TAKEN_DOWN', createdAt: '2026-10-01T00:00:00Z' }],
+    targetDispositions: [{ action: 'POST_TAKEDOWN', operatorId: 7, reason: 'ABUSE', createdAt: '2026-10-02T00:00:00Z' }],
+  }
+}
+
 /** 手动控制何时 resolve，用来构造「响应乱序」的场景 */
 function deferredContext() {
   let resolve: (value: AdminReviewContext) => void = () => {}
@@ -34,6 +45,7 @@ function deferredContext() {
 describe('useReviewContext', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedFetchAdminReviewHistory.mockResolvedValue(history())
   })
 
   it('按 target 拉取上下文并结束 loading', async () => {
@@ -45,6 +57,30 @@ describe('useReviewContext', () => {
     expect(mockedFetchAdminReviewContext).toHaveBeenCalledWith('POST', 5)
     expect(panel.context.value?.authorCreditScore).toBe(88)
     expect(panel.loading.value).toBe(false)
+  })
+
+  it('同一 target 同时拉取作者动态与处置历史（各一份，互不牵连）', async () => {
+    mockedFetchAdminReviewContext.mockResolvedValue(context())
+
+    const panel = useReviewContext()
+    await panel.open({ targetType: 'POST', targetId: 5 })
+
+    expect(mockedFetchAdminReviewHistory).toHaveBeenCalledWith('POST', 5)
+    expect(panel.history.value?.authorRecentPosts).toHaveLength(1)
+    expect(panel.history.value?.targetDispositions[0].action).toBe('POST_TAKEDOWN')
+    expect(panel.historyLoading.value).toBe(false)
+  })
+
+  it('历史请求失败只置 historyFailed，概况仍可用', async () => {
+    mockedFetchAdminReviewContext.mockResolvedValue(context())
+    mockedFetchAdminReviewHistory.mockRejectedValue(new Error('网络异常'))
+
+    const panel = useReviewContext()
+    await panel.open({ targetType: 'POST', targetId: 5 })
+
+    expect(panel.context.value?.authorCreditScore).toBe(88)
+    expect(panel.historyFailed.value).toBe(true)
+    expect(panel.failed.value).toBe(false)
   })
 
   it('拉取失败时结束 loading 且 context 保持 null', async () => {

@@ -1,4 +1,14 @@
 /**
+ * 与后端 post/dto/PostSort 一一对应。信息流排序口径：
+ * `latest`（默认）按时间倒序，`hot` 按热度（点赞 + 评论 + 时间衰减）。
+ * 两种排序的游标格式不同，切换排序必须把该值一并下发给后端。
+ */
+export type PostSort = 'latest' | 'hot'
+
+/** 与后端 post/entity/PostStatus 一一对应（状态迁移合法性由后端状态机裁决，前端只负责展示） */
+export type PostStatus = 'DRAFT' | 'PENDING' | 'REVIEWING' | 'APPROVED' | 'REJECTED' | 'TAKEN_DOWN'
+
+/**
  * 与后端 post/dto/TopicResponse 一一对应。
  * `requiresContact` 为真时发布页必须填联系方式。
  */
@@ -54,6 +64,27 @@ export interface PostDetail {
   mine: boolean
   reviewReason: string | null
   takenDown: boolean
+  createdAt: string
+}
+
+/**
+ * 与后端 post/dto/MyPostItemResponse 一一对应（本人视角）。
+ *
+ * 比 {@link PostSummary} 多 `status` 与 `reviewReason`：覆盖待审 / 已驳回 / 已下架 / 已通过
+ * 全部状态。`reviewReason` **仅本人可见**（该列表本身只对本人开放），驳回与下架时才有值。
+ * 不含他人身份（没有 authorId、邮箱、学号）。
+ */
+export interface MyPostItem {
+  id: number
+  topicId: number
+  topicName: string
+  content: string
+  images: string[]
+  anonymousCode: string
+  status: PostStatus
+  reviewReason: string | null
+  likeCount: number
+  commentCount: number
   createdAt: string
 }
 

@@ -8,19 +8,51 @@ import type {
   AdminPendingPostItem,
   AdminQueueItem,
   AdminReviewContext,
+  AdminReviewHistory,
   DismissReportsPayload,
   ProposalDispositionPayload,
   ReasonPayload,
+  ReviewQueueParams,
 } from '@/types/review'
+import type { AdminTodoCounts } from '@/types/admin'
 
 // createReport / submitAppeal 由学生端发起，已切到 `@shared/api/report`；
 // 本文件只保留管理端的队列与处置接口。
 
 // ------------------------------------------------------------------ 管理端
 
-/** 举报队列：按举报数降序 + 等待时长升序，游标分页 */
-export function fetchAdminReviewQueue(cursor: string | null): Promise<CursorPage<AdminQueueItem>> {
-  return httpGet<CursorPage<AdminQueueItem>>('/admin/review-queue', { cursor })
+/**
+ * 举报队列：游标分页 + 筛选（理由多选 / 目标类型 / 只看超时）+ 排序。
+ *
+ * <p>筛选与排序全部进后端查询参数（不前端本地过滤），否则游标分页口径会被打破。
+ * **不同 sort 对应不同的游标格式**，故 sort 始终随请求下发，cursor 原样回传、前端不解析。</p>
+ *
+ * <p>理由用逗号连接下发：Spring 会把逗号分隔的字符串绑成 `List<ReportReason>`，
+ * 避免依赖 axios 的数组序列化格式（`reasons[]=` 与后端的 `reasons` 参数名对不上）。</p>
+ */
+export function fetchAdminReviewQueue(
+  params: ReviewQueueParams,
+): Promise<CursorPage<AdminQueueItem>> {
+  return httpGet<CursorPage<AdminQueueItem>>('/admin/review-queue', {
+    cursor: params.cursor,
+    reasons: params.reasons.length > 0 ? params.reasons.join(',') : null,
+    targetType: params.targetType,
+    overdueOnly: params.overdueOnly ? true : null,
+    sort: params.sort,
+  })
+}
+
+/** 待办计数：顶栏铃铛轮询的轻量接口，按权限点裁剪（无权限的分组字段直接缺失） */
+export function fetchAdminTodoCounts(): Promise<AdminTodoCounts> {
+  return httpGet<AdminTodoCounts>('/admin/todo-counts')
+}
+
+/** 上下文面板增强：作者最近动态 + 目标处置历史（只含 ID / 状态 / 动作，不含身份） */
+export function fetchAdminReviewHistory(
+  targetType: ReviewTargetType,
+  targetId: number,
+): Promise<AdminReviewHistory> {
+  return httpGet<AdminReviewHistory>('/admin/review-context/history', { targetType, targetId })
 }
 
 /** 审核上下文：按 target 反查，队列不暴露作者与举报人身份（spec 7.3） */

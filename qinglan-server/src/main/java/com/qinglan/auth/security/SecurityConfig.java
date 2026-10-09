@@ -63,6 +63,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/error").permitAll()
+                        // 「我的帖子」需登录：它匹配 /api/posts/* 这一通配（单段），必须先在放行之前拦截，
+                        // 否则会被当成游客可读的信息流详情放行
+                        .requestMatchers(HttpMethod.GET, "/api/posts/mine").authenticated()
                         // 游客是只读角色（设计方案第二章），首页信息流与帖子详情需对未登录开放。
                         // 只放行这几个具体的 GET 路径，不用 /api/posts/** 通配，避免误放行写操作或管理接口
                         .requestMatchers(HttpMethod.GET,

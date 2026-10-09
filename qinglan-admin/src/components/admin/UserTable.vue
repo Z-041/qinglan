@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminUserItem } from '@/types/admin'
 
@@ -21,7 +22,7 @@ function dateText(value: string | null): string {
   <!-- 不渲染 id 列（决策 6 / 不变量 #3）：行定位靠注册时间 + 角色 + 状态 + 信用分，
        操作按钮隐式携带 id -->
   <table class="w-full border-collapse text-sm">
-    <thead>
+    <thead class="sticky top-0 z-10 bg-surface">
       <tr class="border-b border-line text-left text-xs text-muted">
         <th class="px-3 py-2.5 font-medium">注册时间</th>
         <th class="px-3 py-2.5 font-medium">角色</th>
@@ -34,12 +35,15 @@ function dateText(value: string | null): string {
     <tbody>
       <!-- key 用 id 只为稳定复用 DOM，该数字不渲染到界面上 -->
       <tr v-for="row in props.items" :key="row.id" class="border-b border-line last:border-0">
-        <td class="px-3 py-3">{{ dateText(row.createdAt) }}</td>
+        <td class="px-3 py-3" :title="formatAbsoluteTime(row.createdAt)">
+          {{ formatRelativeTime(row.createdAt) }}
+        </td>
         <td class="px-3 py-3">{{ roleLabel(row.role) }}</td>
         <td class="px-3 py-3" :class="row.status === 'ACTIVE' ? '' : 'font-medium text-danger-deep'">
           {{ statusLabel(row.status) }}
         </td>
         <td class="px-3 py-3">{{ row.creditScore }}</td>
+        <!-- 封禁至指向未来时刻，用绝对时间；相对时间会把未来归为「刚刚」，反而误导 -->
         <td class="px-3 py-3">{{ dateText(row.bannedUntil) }}</td>
         <td class="px-3 py-3">
           <div class="flex gap-2">

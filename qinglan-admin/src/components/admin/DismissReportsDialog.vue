@@ -28,6 +28,15 @@ function handleSubmit(): void {
   }
   emit('submit', reason.value.trim())
 }
+
+/** Enter 确认（Esc 由 el-dialog 默认关闭）；多行说明里的 Enter 是换行，不能当确认 */
+function handleEnter(event: KeyboardEvent): void {
+  if ((event.target as HTMLElement).tagName === 'TEXTAREA') {
+    return
+  }
+  event.preventDefault()
+  handleSubmit()
+}
 </script>
 
 <template>
@@ -37,9 +46,11 @@ function handleSubmit(): void {
     width="480px"
     @update:model-value="emit('close')"
   >
-    <FormField label="处理说明" hint="会写入审计日志，供后续追溯">
-      <BaseTextarea v-model="reason" :rows="3" :maxlength="500" placeholder="说明为何认定举报不成立" />
-    </FormField>
+    <div @keydown.enter="handleEnter">
+      <FormField label="处理说明" hint="会写入审计日志，供后续追溯">
+        <BaseTextarea v-model="reason" :rows="3" :maxlength="500" placeholder="说明为何认定举报不成立" />
+      </FormField>
+    </div>
 
     <template #footer>
       <div class="flex justify-end gap-2">

@@ -20,28 +20,25 @@ const CODE_TTL_MINUTES = 5
 /** 与后端学号规则一致：4-24 位字母或数字 */
 const STUDENT_ID_PATTERN = /^[A-Za-z0-9]{4,24}$/
 
-const STEP_LABELS = ['校园邮箱', '验证码', '绑定学号'] as const
-const STEP_INDEX: Record<Step, number> = { email: 0, code: 1, student: 2 }
-
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const { sending, verifying, binding, devCode, requestCode, verify, bind } = useAuth()
 const { remaining: resendRemaining, start: startResendCooldown } = useCodeCooldown()
 
+/** 单卡内联的三态：填邮箱 → 填验证码 → （新用户）补学号。不再有步骤条 */
 const step = ref<Step>('email')
 const email = ref('')
 const code = ref('')
 const studentId = ref('')
 
 const submitting = computed(() => sending.value || verifying.value || binding.value)
-const stepIndex = computed(() => STEP_INDEX[step.value])
 /** 学号只在客户端做与后端一致的格式预校验（真正拦截在服务端） */
 const studentIdValid = computed(() => STUDENT_ID_PATTERN.test(studentId.value.trim()))
 
 /**
  * 执行认证动作，失败返回 null。
- * 错误提示已由 http 拦截器统一弹窗（AGENTS.md 第七章），这里只关心是否成功以决定是否推进步骤。
+ * 错误提示已由 http 拦截器统一弹窗（AGENTS.md 第七章），这里只关心是否成功以决定是否推进。
  */
 async function attempt<T>(action: () => Promise<T>): Promise<T | null> {
   try {
@@ -100,12 +97,31 @@ async function handleBind(): Promise<void> {
   }
   afterAuthenticated()
 }
+
+/** 单表单：按当前步决定提交动作，避免多表单并存带来的歧义 */
+function handleSubmit(): void {
+  if (step.value === 'email') {
+    void handleSendCode()
+    return
+  }
+  if (step.value === 'code') {
+    void handleVerify()
+    return
+  }
+  void handleBind()
+}
+
+/** 回到邮箱步改邮箱：保留已填邮箱，清掉上一轮的验证码 */
+function changeEmail(): void {
+  step.value = 'email'
+  code.value = ''
+}
 </script>
 
 <template>
   <BaseCard class="mx-auto mt-10 w-full max-w-[440px] max-sm:mt-4">
     <div class="flex items-center gap-3">
-      <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
+      <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary">
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -124,25 +140,12 @@ async function handleBind(): Promise<void> {
       </div>
     </div>
 
-    <ol class="mt-6 flex items-center gap-2">
-      <li v-for="(label, index) in STEP_LABELS" :key="label" class="flex items-center gap-2">
-        <!-- 圆圈是「已完成 / 当前」步骤的专属样式：未激活态不画圆，只留灰色数字。
-             浅色圆对白底只有 1.08:1，低于非文本组件 3:1 的门槛，画了也等于没画（T-06） -->
-        <span
-          class="flex size-5 items-center justify-center rounded-full text-xs font-semibold transition"
-          :class="index <= stepIndex ? 'bg-primary-deep text-white' : 'text-muted'"
-        >
-          {{ index + 1 }}
-        </span>
-        <span class="text-xs transition" :class="index <= stepIndex ? 'text-ink' : 'text-muted'">
-          {{ label }}
-        </span>
-        <span v-if="index < STEP_LABELS.length - 1" class="h-px w-4 bg-line-strong" aria-hidden="true" />
-      </li>
-    </ol>
-
-    <form v-if="step === 'email'" class="mt-6 flex flex-col gap-4" @submit.prevent="handleSendCode">
-      <FormField label="校园邮箱" hint="我们只会向该邮箱发送一次登录验证码">
+    <form class="mt-6 flex flex-col gap-4" @submit.prevent="handleSubmit">
+      <FormField
+        v-if="step === 'email'"
+        label="校园邮箱"
+        hint="我们只会向该邮箱发送一次登录验证码"
+      >
         <BaseInput
           v-model="email"
           type="email"
@@ -151,36 +154,61 @@ async function handleBind(): Promise<void> {
           required
         />
       </FormField>
-      <BaseButton html-type="submit" block :loading="submitting" :disabled="resendRemaining > 0">
-        {{ resendRemaining > 0 ? `请 ${resendRemaining}s 后再试` : '获取验证码' }}
-      </BaseButton>
-    </form>
 
-    <form v-else-if="step === 'code'" class="mt-6 flex flex-col gap-4" @submit.prevent="handleVerify">
-      <p class="rounded-lg bg-primary-tint px-3 py-2 text-xs leading-relaxed text-muted">
-        验证码已发送至 <span class="font-medium text-ink">{{ email }}</span
-        >，有效期 {{ CODE_TTL_MINUTES }} 分钟。
-      </p>
-      <p v-if="devCode" class="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
-        本地联调验证码：<span class="font-semibold tracking-wide">{{ devCode }}</span>
-      </p>
-      <FormField label="验证码">
-        <BaseInput v-model="code" inputmode="numeric" :maxlength="6" placeholder="6 位数字" required />
-      </FormField>
-      <BaseButton html-type="submit" block :loading="submitting">验证并登录</BaseButton>
-      <BaseButton variant="ghost" size="sm" block @click="step = 'email'">更换邮箱</BaseButton>
-    </form>
-
-    <form v-else class="mt-6 flex flex-col gap-4" @submit.prevent="handleBind">
-      <FormField
-        label="学号"
-        :hint="studentId && !studentIdValid ? '' : '4-24 位字母或数字，绑定后不可更改'"
-        :error="studentId && !studentIdValid ? '学号须为 4-24 位字母或数字' : ''"
+      <!-- 验证码步起把邮箱收成一行文字 + 更换入口，表单里只剩下一步真正要填的字段 -->
+      <div
+        v-else
+        class="flex items-center justify-between gap-2 rounded-lg bg-primary-tint px-3 py-2 text-xs"
       >
-        <BaseInput v-model="studentId" placeholder="请输入学号" required />
-      </FormField>
-      <BaseButton html-type="submit" block :loading="submitting" :disabled="!studentIdValid">
-        完成认证
+        <span class="min-w-0 truncate text-muted">
+          验证码已发送至 <span class="font-medium text-ink">{{ email }}</span>
+        </span>
+        <button type="button" class="shrink-0 cursor-pointer text-primary-deep" @click="changeEmail">
+          更换邮箱
+        </button>
+      </div>
+
+      <template v-if="step === 'code'">
+        <p v-if="devCode" class="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
+          本地联调验证码：<span class="font-semibold tracking-wide">{{ devCode }}</span>
+        </p>
+        <p class="text-xs text-muted">验证码有效期 {{ CODE_TTL_MINUTES }} 分钟。</p>
+        <FormField label="验证码">
+          <BaseInput v-model="code" inputmode="numeric" :maxlength="6" placeholder="6 位数字" required />
+        </FormField>
+        <BaseButton html-type="submit" block :loading="submitting">验证并登录</BaseButton>
+        <BaseButton
+          variant="ghost"
+          size="sm"
+          block
+          :disabled="resendRemaining > 0"
+          @click="handleSendCode"
+        >
+          {{ resendRemaining > 0 ? `请 ${resendRemaining}s 后再试` : '重新获取验证码' }}
+        </BaseButton>
+      </template>
+
+      <template v-else-if="step === 'student'">
+        <FormField
+          label="学号"
+          :hint="studentId && !studentIdValid ? '' : '4-24 位字母或数字，绑定后不可更改'"
+          :error="studentId && !studentIdValid ? '学号须为 4-24 位字母或数字' : ''"
+        >
+          <BaseInput v-model="studentId" placeholder="请输入学号" required />
+        </FormField>
+        <BaseButton html-type="submit" block :loading="submitting" :disabled="!studentIdValid">
+          完成认证
+        </BaseButton>
+      </template>
+
+      <BaseButton
+        v-else
+        html-type="submit"
+        block
+        :loading="submitting"
+        :disabled="resendRemaining > 0"
+      >
+        {{ resendRemaining > 0 ? `请 ${resendRemaining}s 后再试` : '获取验证码' }}
       </BaseButton>
     </form>
   </BaseCard>

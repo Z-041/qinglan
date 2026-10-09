@@ -58,6 +58,13 @@ const router = createRouter({
       meta: { requiresAuth: true, wide: true },
     },
     {
+      // 我的帖子：仅本人，入口在「我的」页
+      path: '/my-posts',
+      name: 'my-posts',
+      component: () => import('@/views/MyPostsView.vue'),
+      meta: { requiresAuth: true, wide: true },
+    },
+    {
       // 消息中心是窄内容页（ql-container），故不设 meta.wide
       path: '/notifications',
       name: 'notifications',

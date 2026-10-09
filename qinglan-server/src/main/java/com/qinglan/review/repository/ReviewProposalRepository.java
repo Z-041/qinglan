@@ -78,4 +78,7 @@ public interface ReviewProposalRepository extends JpaRepository<ReviewProposal, 
     List<ReviewProposal> findOpenByTargets(
             @Param("targetType") ReviewTargetType targetType,
             @Param("targetIds") Collection<Long> targetIds);
+
+    /** 按状态计数：待办计数（OPEN / ESCALATED）与看板通过率（APPROVED / REJECTED）共用 */
+    long countByStatus(ProposalStatus status);
 }

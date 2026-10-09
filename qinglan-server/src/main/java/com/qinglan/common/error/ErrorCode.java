@@ -25,6 +25,8 @@ public enum ErrorCode {
     ANNOUNCEMENT_READ_UNCONFIRMED(HttpStatus.BAD_REQUEST, "QL-400-012", "尚未完成强制阅读：需滚动到底并勾选已了解"),
     // P5 二期：提案的动作与目标当前状态不匹配（如对 PENDING 帖提「下架」、对可见帖提「维持下架」）
     PROPOSAL_TARGET_INVALID(HttpStatus.BAD_REQUEST, "QL-400-013", "目标当前状态与所选处置不匹配"),
+    // 导出是敏感批量读取：超过单次行数上限时明确报错，绝不静默截断（截断的导出比不导出更危险）
+    EXPORT_ROW_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "QL-400-014", "导出数据量超过单次上限，请缩小筛选范围后重试"),
 
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "QL-401-001", "请先完成认证"),
     EMAIL_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "QL-401-002", "邮箱认证凭证无效或已过期"),

@@ -10,6 +10,22 @@ import type { ReportReason, ReviewTargetType } from '@shared/types/review-common
 import type { ProposalAction, ProposalStatus, VoteDecision } from '@/types/proposal'
 
 /**
+ * 全部举报理由，供筛选多选渲染。顺序与后端枚举一致；
+ * 文案映射统一走 `useUserLabels().reportReasonLabel`，此处不重复中文。
+ */
+export const REPORT_REASONS: readonly ReportReason[] = [
+  'ADVERTISEMENT',
+  'PORNOGRAPHY',
+  'ABUSE',
+  'PRIVACY',
+  'FRAUD',
+  'ILLEGAL',
+  'IRRELEVANT',
+  'OTHER',
+]
+
+
+/**
  * 与后端 review/dto/ReviewQueueProposalResponse 一一对应：该目标上「正在进行」的处置提案
  * （进行中或僵局待裁决）。同目标最多一条（唯一键保证），没有时为 null。
  *
@@ -144,3 +160,61 @@ export type ReviewAction =
   | 'show-contact'
   | 'remove-comment'
   | 'dismiss'
+
+/**
+ * 与后端 review/dto/ReviewQueueSort 一一对应。
+ *
+ * **不同排序对应不同的游标格式**（后端解析游标时依赖 sort），所以切换排序必须一并回传 sort；
+ * 前端只把 `nextCursor` 原样回传，绝不解析。
+ */
+export type ReviewQueueSort = 'REPORT_COUNT_DESC' | 'FIRST_REPORTED_ASC'
+
+/** 审核队列的筛选条件（阶段 A）：全部进后端查询参数，绝不在前端本地过滤 */
+export interface ReviewQueueFilters {
+  /** 多选举报理由；空数组表示不按理由过滤 */
+  reasons: ReportReason[]
+  /** 目标类型；null 表示不过滤 */
+  targetType: ReviewTargetType | null
+  /** 只看超时（首报早于 now-24h）；与行内标红口径一致 */
+  overdueOnly: boolean
+  sort: ReviewQueueSort
+}
+
+/** 筛选条件 + 游标，交给 api 层拼查询参数 */
+export interface ReviewQueueParams extends ReviewQueueFilters {
+  cursor: string | null
+}
+
+/** 筛选表单初值：全部不限、默认排序 */
+export function createQueueFilters(): ReviewQueueFilters {
+  return { reasons: [], targetType: null, overdueOnly: false, sort: 'REPORT_COUNT_DESC' }
+}
+
+/**
+ * 与后端 review/dto/AdminReviewHistoryResponse 一一对应（阶段 A 面板增强）。
+ *
+ * 只含 ID 与状态 / 动作，**不含学号、邮箱、匿名代号**（不变量 #1 / #3）；
+ * 处置流水的操作人也只以 userId 出现。
+ */
+export interface AdminReviewHistory {
+  authorRecentPosts: AdminAuthorPostItem[]
+  targetDispositions: AdminDispositionItem[]
+}
+
+/** 作者最近的一条帖子：只有 id / 状态 / 时间 */
+export interface AdminAuthorPostItem {
+  id: number
+  /** 帖子审核状态码（PostStatus 枚举名），文案映射见 useUserLabels.targetStatusLabel */
+  status: string
+  createdAt: string
+}
+
+/** 目标的一条处置流水（来自 review_log） */
+export interface AdminDispositionItem {
+  /** AuditAction 枚举名，文案映射见 AUDIT_ACTION_LABELS */
+  action: string
+  /** 处置人 userId；0 为系统自动处置的哨兵值 */
+  operatorId: number
+  reason: string | null
+  createdAt: string
+}

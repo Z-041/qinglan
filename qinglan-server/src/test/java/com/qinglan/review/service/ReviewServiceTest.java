@@ -487,6 +487,23 @@ class ReviewServiceTest {
         verify(notificationPort).notify(eq(302L), eq(OPERATOR_ID), any(NotificationMessage.class));
     }
 
+    @Test
+    @DisplayName("评论举报反馈回链到所属帖子（帖子 id 由 comment 模块解析）")
+    void shouldLinkCommentReportFeedbackToOwningPost() {
+        when(reportRepository.findByTargetTypeAndTargetIdAndStatus(
+                ReviewTargetType.COMMENT, COMMENT_ID, ReportStatus.PENDING))
+                .thenReturn(List.of(commentReport(501L)));
+        when(commentService.findPostId(COMMENT_ID)).thenReturn(Optional.of(POST_ID));
+
+        reviewService.dismissReports(
+                new DismissReportsRequest(ReviewTargetType.COMMENT, COMMENT_ID, "内容合规"), OPERATOR_ID);
+
+        ArgumentCaptor<NotificationMessage> captor = ArgumentCaptor.forClass(NotificationMessage.class);
+        verify(notificationPort).notify(eq(501L), eq(OPERATOR_ID), captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo(NotificationType.REPORT_FEEDBACK);
+        assertThat(captor.getValue().link()).isEqualTo("/posts/" + POST_ID);
+    }
+
     // ------------------------------------------------------------------ 辅助
 
     private static Post approvedPost() {

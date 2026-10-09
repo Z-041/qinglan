@@ -22,9 +22,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.lang.reflect.RecordComponent;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -42,6 +45,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -443,6 +447,42 @@ class UserServiceTest {
                 .containsExactlyInAnyOrderElementsOf(
                         UserRole.REVIEWER.permissions().stream().map(Enum::name).toList());
         assertThat(identity.permissions()).isSorted();
+    }
+
+    // ------------------------------------------------------------------ 用户导出（阶段 B）
+
+    @Test
+    @DisplayName("导出用户 CSV：UTF-8 BOM + 表头，字段集不含学号/邮箱（不变量 #3），并写 DATA_EXPORT 审计")
+    void shouldExportUsersWithoutIdentity() throws Exception {
+        User user = userWithRole(7L, UserRole.STUDENT);
+        when(userRepository.findAdminPage(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(List.of(user));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+        userService.exportCsv(new AdminUserQuery(null, null, null, null, null, null, null), 99L, out);
+
+        String csv = out.toString(StandardCharsets.UTF_8);
+        assertThat(csv).startsWith("\uFEFF");
+        assertThat(csv).contains("id,role,status,creditScore,bannedUntil,createdAt");
+        assertThat(csv).contains("7,STUDENT");
+        // 不变量 #3：导出内容不含学号 / 邮箱（明文或密文）
+        assertThat(csv).doesNotContain(STUDENT_ID, "emailHash", "student-hash-7", "email-hash-7");
+        verify(auditLogService).record(eq(AuditTargetType.EXPORT), eq(0L), eq(AuditAction.DATA_EXPORT),
+                eq(99L), any());
+    }
+
+    @Test
+    @DisplayName("导出前置校验：行数超上限时明确报错（不静默截断），且不写审计")
+    void shouldRejectUserExportOverLimit() {
+        when(userRepository.countAdminFiltered(any(), any(), any(), any(), any(), any())).thenReturn(5001L);
+        AdminUserQuery query = new AdminUserQuery(null, null, null, null, null, null, null);
+
+        assertThatThrownBy(() -> userService.requireExportable(query))
+                .isInstanceOf(BizException.class)
+                .extracting(ex -> ((BizException) ex).errorCode())
+                .isEqualTo(ErrorCode.EXPORT_ROW_LIMIT_EXCEEDED);
+
+        verifyNoInteractions(auditLogService);
     }
 
     private void stubOperatorAndTarget(User operator, User target) {

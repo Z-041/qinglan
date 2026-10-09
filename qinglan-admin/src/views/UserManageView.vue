@@ -6,7 +6,9 @@ import CreditAdjustDialog from '@/components/admin/CreditAdjustDialog.vue'
 import UserTable from '@/components/admin/UserTable.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
-import { useUserManage } from '@/composables/useUserManage'
+import { exportAdminUsers } from '@/api/admin'
+import { useCsvExport } from '@/composables/useCsvExport'
+import { toQuery, useUserManage } from '@/composables/useUserManage'
 import type { AdminUserItem } from '@/types/admin'
 import type { UserRole, UserStatus } from '@shared/types/user'
 
@@ -81,6 +83,16 @@ async function search(): Promise<void> {
   await refresh()
 }
 
+const { exporting, download } = useCsvExport()
+
+/** 按**当前查询条件**导出（无游标，导出完整结果集）；信用分越界时不发请求 */
+async function exportCsv(): Promise<void> {
+  if (creditRangeInvalid.value) {
+    return
+  }
+  await download(() => exportAdminUsers(toQuery(filters.value, null)), 'users')
+}
+
 /** 成功才关对话框；失败保持打开，错误由拦截器提示（同 Task 15） */
 async function handleBan(days: number, reason: string): Promise<void> {
   if (selected.value && (await ban(selected.value.id, { days, reason }))) {
@@ -117,7 +129,18 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
   <div class="flex flex-col gap-5">
     <div class="flex items-center justify-between">
       <h1 class="text-lg font-semibold text-ink">用户管理</h1>
-      <BaseButton variant="ghost" size="sm" :loading="loading" @click="search">刷新</BaseButton>
+      <div class="flex items-center gap-2">
+        <BaseButton
+          variant="ghost"
+          size="sm"
+          :loading="exporting"
+          :disabled="creditRangeInvalid"
+          @click="exportCsv"
+        >
+          导出 CSV
+        </BaseButton>
+        <BaseButton variant="ghost" size="sm" :loading="loading" @click="search">刷新</BaseButton>
+      </div>
     </div>
 
     <form class="ql-card flex flex-wrap items-end gap-3 p-4" @submit.prevent="search">
@@ -190,7 +213,7 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
       </div>
     </form>
 
-    <section class="ql-card overflow-hidden">
+    <section class="ql-card overflow-clip">
       <UserTable
         :items="items"
         :loading="loading"

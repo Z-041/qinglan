@@ -14,7 +14,7 @@ withDefaults(
 const model = defineModel<number | null>({ default: null })
 
 const CHIP_BASE =
-  'inline-flex shrink-0 cursor-pointer items-center rounded-full border px-3 py-1.5 text-xs font-medium transition'
+  'inline-flex shrink-0 cursor-pointer items-center rounded-md border px-3 py-1.5 text-xs font-medium transition'
 const CHIP_ON = 'border-primary-soft bg-primary-soft text-primary-deep'
 const CHIP_OFF = 'border-line bg-surface text-muted hover:border-primary-soft hover:text-primary-deep'
 </script>

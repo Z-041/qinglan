@@ -21,9 +21,12 @@ import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.common.store.EphemeralStore;
 import com.qinglan.common.store.InMemoryEphemeralStore;
+import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.config.PostProperties;
 import com.qinglan.post.dto.CreatePostRequest;
+import com.qinglan.post.dto.MyPostItemResponse;
 import com.qinglan.post.dto.PostDetailResponse;
+import com.qinglan.post.dto.PostSort;
 import com.qinglan.post.dto.PostSummaryResponse;
 import com.qinglan.post.entity.Post;
 import com.qinglan.post.entity.PostImage;
@@ -42,19 +45,25 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.RecordComponent;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -121,7 +130,119 @@ class PostServiceTest {
     private PostService newService(EphemeralStore store) {
         return new PostService(postRepository, postImageRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
-                new PostProperties(60, 9), ALLOW_ALL, announcementService, notificationPort, store);
+                new PostProperties(60, 9, Duration.ofDays(7), 500),
+                ALLOW_ALL, announcementService, notificationPort, store);
+    }
+
+    /** 已通过、可进信息流的帖子，补一个确定的时间戳（信息流排序依赖它） */
+    private Post approvedPost(long id, Instant createdAt) {
+        Post post = TestFixtures.approvedPost(id, AUTHOR_ID, TOPIC_ID, null);
+        TestFixtures.setCreatedAt(post, createdAt);
+        return post;
+    }
+
+    // ------------------------------------------------------------------ 信息流排序（学生端阶段 3）
+
+    @Test
+    @DisplayName("latest（回归）：游标仍是单个帖子 id，仓储按 id 倒序翻页，不触碰热门候选查询")
+    void shouldKeepLatestFeedUnchanged() {
+        List<Post> rows = IntStream.range(0, 21)
+                .mapToObj(i -> approvedPost(200L - i, Instant.now()))
+                .toList();
+        when(postRepository.findFeed(eq(PostStatus.APPROVED), eq(Long.MAX_VALUE), any(Pageable.class)))
+                .thenReturn(rows);
+
+        CursorPage<PostSummaryResponse> page =
+                postService.listFeed(null, PostSort.LATEST, null, Viewer.anonymous());
+
+        assertThat(page.items()).hasSize(20);
+        // 第 20 行（下标 19）的 id：游标就是它，与改造前一致
+        assertThat(page.nextCursor()).isEqualTo("181");
+        verify(postRepository, never()).findHotCandidates(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("hot：候选按「(点赞 + 评论×2) × 时间衰减」排序，新帖压过权重更高的旧帖")
+    void shouldRankHotWithDecay() {
+        Instant now = Instant.now();
+        // 旧帖权重更高（评论 15 → 30），新帖权重较低（评论 10 → 20）；但旧帖年龄 72h 衰减到 ~0.37
+        Post fresh = approvedPost(2L, now);
+        Post old = approvedPost(1L, now.minus(Duration.ofHours(72)));
+        ReflectionTestUtils.setField(fresh, "commentCount", 10);
+        ReflectionTestUtils.setField(old, "commentCount", 15);
+        when(postRepository.findHotCandidates(eq(PostStatus.APPROVED), isNull(), any(Instant.class),
+                any(Pageable.class))).thenReturn(List.of(old, fresh));
+
+        CursorPage<PostSummaryResponse> page =
+                postService.listFeed(null, PostSort.HOT, null, Viewer.anonymous());
+
+        // 若没有时间衰减，旧帖（30）会排在新帖（20）之前；衰减后新帖胜出
+        assertThat(page.items()).extracting(PostSummaryResponse::id).containsExactly(2L, 1L);
+
+        ArgumentCaptor<Instant> windowStart = ArgumentCaptor.forClass(Instant.class);
+        verify(postRepository).findHotCandidates(eq(PostStatus.APPROVED), isNull(),
+                windowStart.capture(), any(Pageable.class));
+        // 窗口起点约等于 now-7d（配置默认）
+        assertThat(windowStart.getValue()).isBetween(
+                now.minus(Duration.ofDays(7)).minusSeconds(10),
+                now.minus(Duration.ofDays(7)).plusSeconds(10));
+    }
+
+    @Test
+    @DisplayName("hot：并列分数按 id 倒序，复合游标翻页不重不漏")
+    void shouldPageHotWithCompositeCursorAndTies() {
+        Instant fixed = Instant.now();
+        List<Post> candidates = LongStream.iterate(21, i -> i - 1).limit(21)
+                .mapToObj(id -> approvedPost(id, fixed))
+                .toList();
+        when(postRepository.findHotCandidates(eq(PostStatus.APPROVED), isNull(), any(Instant.class),
+                any(Pageable.class))).thenReturn(candidates);
+
+        CursorPage<PostSummaryResponse> first =
+                postService.listFeed(null, PostSort.HOT, null, Viewer.anonymous());
+        assertThat(first.items()).extracting(PostSummaryResponse::id)
+                .containsExactlyElementsOf(LongStream.iterate(21, i -> i - 1).limit(20).boxed().toList());
+
+        CursorPage<PostSummaryResponse> second =
+                postService.listFeed(null, PostSort.HOT, first.nextCursor(), Viewer.anonymous());
+        assertThat(second.items()).extracting(PostSummaryResponse::id).containsExactly(1L);
+        assertThat(second.nextCursor()).isNull();
+    }
+
+    // ------------------------------------------------------------------ 我的帖子（学生端阶段 3）
+
+    @Test
+    @DisplayName("我的帖子：带状态与仅作者可见的理由，出参不含他人身份字段")
+    void shouldListMineWithStatusAndReason() {
+        Post takenDown = TestFixtures.takenDownPost(30L, "内容", "ABUSE: 人身攻击");
+        TestFixtures.setCreatedAt(takenDown, Instant.parse("2026-10-01T00:00:00Z"));
+        when(postRepository.findMinePage(eq(AUTHOR_ID), isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(List.of(takenDown));
+
+        CursorPage<MyPostItemResponse> page = postService.listMine(AUTHOR_ID, null, null);
+
+        assertThat(page.items()).hasSize(1);
+        assertThat(page.items().get(0).status()).isEqualTo(PostStatus.TAKEN_DOWN);
+        assertThat(page.items().get(0).reviewReason()).isEqualTo("ABUSE: 人身攻击");
+
+        Set<String> names = Arrays.stream(MyPostItemResponse.class.getRecordComponents())
+                .map(RecordComponent::getName).collect(Collectors.toSet());
+        assertThat(names).doesNotContain("authorId", "email", "studentId", "emailHash");
+    }
+
+    @Test
+    @DisplayName("我的帖子：状态筛选与游标原样透传给仓储")
+    void shouldPassMineStatusAndCursor() {
+        long micros = Instant.parse("2026-10-01T00:00:00Z").getEpochSecond() * 1_000_000L;
+        when(postRepository.findMinePage(eq(AUTHOR_ID), eq(PostStatus.REJECTED),
+                eq(Instant.parse("2026-10-01T00:00:00Z")), eq(9L), any(Pageable.class)))
+                .thenReturn(List.of());
+
+        CursorPage<MyPostItemResponse> page = postService.listMine(AUTHOR_ID, PostStatus.REJECTED, micros + ":9");
+
+        assertThat(page.items()).isEmpty();
+        verify(postRepository).findMinePage(eq(AUTHOR_ID), eq(PostStatus.REJECTED),
+                eq(Instant.parse("2026-10-01T00:00:00Z")), eq(9L), any(Pageable.class));
     }
 
     // ------------------------------------------------------------------ 发布
@@ -194,7 +315,8 @@ class PostServiceTest {
         };
         PostService strict = new PostService(postRepository, postImageRepository, topicRepository,
                 likeRepository, anonymousCodeService, userService, auditLogService,
-                new PostProperties(60, 9), blocking, announcementService, notificationPort, ephemeralStore);
+                new PostProperties(60, 9, Duration.ofDays(7), 500),
+                blocking, announcementService, notificationPort, ephemeralStore);
 
         assertThatThrownBy(() -> strict.create(AUTHOR_ID, new CreatePostRequest(TOPIC_ID, "正文", null, null)))
                 .isInstanceOf(BizException.class)

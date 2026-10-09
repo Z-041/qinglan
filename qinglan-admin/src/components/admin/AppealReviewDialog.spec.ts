@@ -90,4 +90,31 @@ describe('AppealReviewDialog', () => {
 
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
+
+  it('打开时按 initialApproved 预置结论（快捷键 2 = 维持原判）', async () => {
+    const wrapper = mount(AppealReviewDialog, {
+      props: { open: false, initialApproved: false },
+      global: { stubs: { ElDialog: ElDialogStub } },
+    })
+    await wrapper.setProps({ open: true })
+    await wrapper.get('textarea').setValue('依据不足')
+
+    await buttonByText(wrapper, '提交复审').trigger('click')
+
+    expect(wrapper.emitted('submit')?.[0]).toEqual([false, '依据不足'])
+  })
+
+  it('弹窗内 Enter 确认：多行输入区之外触发提交，textarea 内的 Enter 不触发', async () => {
+    const wrapper = mountDialog()
+    await wrapper.get('textarea').setValue('证据充分')
+
+    // textarea 里的 Enter 是换行，不能当确认
+    await wrapper.get('textarea').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('submit')).toBeUndefined()
+
+    // 其余位置（如结论单选组）Enter 即确认
+    await wrapper.get('.gap-4').trigger('keydown', { key: 'Enter' })
+
+    expect(wrapper.emitted('submit')?.[0]).toEqual([true, '证据充分'])
+  })
 })

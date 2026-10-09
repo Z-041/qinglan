@@ -8,11 +8,13 @@ import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import CommentItem from '@/components/CommentItem.vue'
 import ReportDialog from '@/components/ReportDialog.vue'
 import { usePostDetail } from '@/composables/usePostDetail'
+import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import { useReport } from '@/composables/useReport'
 import { useToast } from '@shared/composables/useToast'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useUserStore } from '@shared/stores/user'
 import type { Comment } from '@/types/comment'
+import type { ReportStatus } from '@/types/report'
 import type { ReportReason } from '@shared/types/review-common'
 
 const route = useRoute()
@@ -24,6 +26,7 @@ const postId = Number(route.params.id)
 const {
   post,
   comments,
+  reportState,
   loading,
   loadingMore,
   hasMore,
@@ -32,6 +35,7 @@ const {
   appealSubmitting,
   appealed,
   load,
+  refreshReportState,
   loadMoreComments,
   toggleLike,
   toggleCommentLike,
@@ -66,6 +70,20 @@ const contactText = computed(() => post.value?.contact ?? '')
 /** 举报入口只对已认证访问者出现：举报人取自登录态，游客点了也只会被弹去登录 */
 const reportAllowed = computed(() => userStore.isAuthenticated)
 
+/** 我已举报过该帖。体验层用它把入口置灰、提前挡掉重复举报；真正的防线是后端不变量 #4（409） */
+const reported = computed(() => reportState.value?.reported === true)
+
+/** 举报进度文案：PENDING 处理中 / UPHELD 举报成立、内容已处理 / DISMISSED 未获支持 */
+const REPORT_STATUS_TEXT: Record<ReportStatus, string> = {
+  PENDING: '处理中',
+  UPHELD: '举报成立，内容已处理',
+  DISMISSED: '未获支持',
+}
+const reportStatusText = computed(() => {
+  const status = reportState.value?.status
+  return status ? REPORT_STATUS_TEXT[status] : ''
+})
+
 onMounted(() => {
   void load()
 })
@@ -88,6 +106,8 @@ function openCommentReport(comment: Comment): void {
 async function handleReportSubmit(reasonCode: ReportReason, detail: string): Promise<void> {
   if (await submitReport(reasonCode, detail)) {
     pushToast('举报已提交，我们会尽快核实', 'info')
+    // 刷新举报状态：入口随即置灰并显示「处理中」，避免用户重复提交拿到 409
+    await refreshReportState()
   }
 }
 
@@ -164,17 +184,21 @@ async function handleAppeal(): Promise<void> {
         <div class="min-w-0 self-start">
           <BaseCard>
             <div class="flex items-center gap-2">
-              <span class="ql-badge bg-primary-soft text-primary-deep">{{ post.topicName }}</span>
-              <span class="truncate text-xs text-muted">{{ post.anonymousCode }}</span>
-              <span v-if="post.mine" class="ql-badge shrink-0 bg-primary-tint text-primary-deep">
+              <span class="ql-tag shrink-0 bg-primary-soft text-primary-deep">{{ post.topicName }}</span>
+              <span v-if="post.mine" class="ql-tag shrink-0 bg-primary-tint text-primary-deep">
                 我
               </span>
-              <time class="ml-auto shrink-0 text-xs text-muted" :datetime="post.createdAt">
-                {{ new Date(post.createdAt).toLocaleString() }}
+              <span class="truncate text-xs text-muted">{{ post.anonymousCode }}</span>
+              <time
+                class="ml-auto shrink-0 text-xs text-muted"
+                :datetime="post.createdAt"
+                :title="formatAbsoluteTime(post.createdAt)"
+              >
+                {{ formatRelativeTime(post.createdAt) }}
               </time>
             </div>
 
-            <p class="mt-3 text-sm leading-relaxed break-words whitespace-pre-wrap text-ink">
+            <p class="mt-3 text-[17px] leading-[1.75] break-words whitespace-pre-wrap text-ink">
               {{ post.content }}
             </p>
 
@@ -276,14 +300,18 @@ async function handleAppeal(): Promise<void> {
                 <span>{{ post.likeCount }}</span>
               </button>
               <span class="text-xs text-muted">评论 {{ post.commentCount }}</span>
-              <button
-                v-if="reportAllowed && !post.mine"
-                type="button"
-                class="ml-auto cursor-pointer text-xs text-muted transition hover:text-danger"
-                @click="openPostReport"
-              >
-                举报
-              </button>
+              <!-- 已举报时入口置灰并展示处理进度，提前挡掉重复举报（防线仍是后端 409） -->
+              <div v-if="reportAllowed && !post.mine" class="ml-auto flex items-center gap-2">
+                <span v-if="reported" class="text-xs text-muted">举报{{ reportStatusText }}</span>
+                <button
+                  type="button"
+                  class="cursor-pointer text-xs text-muted transition hover:text-danger disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:text-muted"
+                  :disabled="reported"
+                  @click="openPostReport"
+                >
+                  {{ reported ? '已举报' : '举报' }}
+                </button>
+              </div>
             </div>
           </BaseCard>
 

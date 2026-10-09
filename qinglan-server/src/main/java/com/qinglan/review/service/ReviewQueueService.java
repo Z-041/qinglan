@@ -13,6 +13,8 @@ import com.qinglan.post.repository.PostImageRepository;
 import com.qinglan.post.repository.PostRepository;
 import com.qinglan.review.dto.ReviewQueueItemResponse;
 import com.qinglan.review.dto.ReviewQueueProposalResponse;
+import com.qinglan.review.dto.ReviewQueueQuery;
+import com.qinglan.review.dto.ReviewQueueSort;
 import com.qinglan.review.entity.Report;
 import com.qinglan.review.entity.ReportReason;
 import com.qinglan.review.entity.ReportStatus;
@@ -30,6 +32,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -65,8 +68,24 @@ public class ReviewQueueService {
     private static final Instant FIRST_PAGE_FIRST_REPORTED_AT = Instant.EPOCH;
     private static final long FIRST_PAGE_TARGET_ID = Long.MAX_VALUE;
     private static final int FIRST_PAGE_TYPE_RANK = Integer.MAX_VALUE;
-    /** 游标段数：举报数 : 首报微秒 : 目标 id : 目标类型序 */
-    private static final int CURSOR_SEGMENTS = 4;
+    /** 默认排序游标段数：举报数 : 首报微秒 : 目标 id : 目标类型序 */
+    private static final int REPORT_COUNT_CURSOR_SEGMENTS = 4;
+    /** 首报升序游标段数：首报微秒 : 目标 id : 目标类型序 */
+    private static final int FIRST_REPORTED_CURSOR_SEGMENTS = 3;
+
+    /**
+     * 超时口径：首报早于「当前时刻 - 24 小时」即视为超时，与前端标红逻辑一致。
+     * {@code overdueOnly} 开关即按此阈值过滤聚合结果。
+     */
+    private static final Duration OVERDUE_WINDOW = Duration.ofHours(24);
+
+    /**
+     * 不过滤理由时的等价集合：填全部举报理由。
+     *
+     * <p>用「全部值」而不是空集合走 {@code is empty} 分支，是为了绕开空集合 {@code in} 在不同
+     * 数据库 / 驱动上的行为差异——对全部枚举值做 {@code in} 与不过滤等价，且始终非空。</p>
+     */
+    private static final List<ReportReason> ALL_REASONS = List.of(ReportReason.values());
 
     private final ReportRepository reportRepository;
     private final PostRepository postRepository;
@@ -76,19 +95,25 @@ public class ReviewQueueService {
     private final ReviewVoteRepository voteRepository;
 
     /**
+     * @param query    筛选与排序条件（理由 / 目标类型 / 只看超时 / 排序口径）
      * @param viewerId 当前操作者，用于回填「我是否已投这一票」；队列行只给汇总，不含任何投票人身份
      */
     @Transactional(readOnly = true)
-    public CursorPage<ReviewQueueItemResponse> queue(String cursorRaw, Long viewerId) {
-        ReviewQueueCursor cursor = parseCursor(cursorRaw);
+    public CursorPage<ReviewQueueItemResponse> queue(String cursorRaw, ReviewQueueQuery query, Long viewerId) {
+        ReviewQueueCursor cursor = parseCursor(cursorRaw, query.sort());
+        List<ReportReason> reasons = query.reasons().isEmpty() ? ALL_REASONS : query.reasons();
+        // 超时阈值随请求时刻计算：只看超时（首报早于 now-24h）时才传，否则传 null 让 having 恒真
+        Instant overdueBefore = query.overdueOnly() ? Instant.now().minus(OVERDUE_WINDOW) : null;
         // 多取一条判断是否还有下一页，避免额外 count 查询
-        List<ReviewQueueRow> rows = reportRepository.findQueueAggregates(
-                ReportStatus.PENDING,
-                cursor.reportCount(),
-                cursor.firstReportedAt(),
-                cursor.targetId(),
-                cursor.typeRank(),
-                PageRequest.of(0, DEFAULT_PAGE_SIZE + 1));
+        PageRequest limit = PageRequest.of(0, DEFAULT_PAGE_SIZE + 1);
+        List<ReviewQueueRow> rows = switch (query.sort()) {
+            case REPORT_COUNT_DESC -> reportRepository.findQueueAggregates(
+                    ReportStatus.PENDING, reasons, query.targetType(), overdueBefore,
+                    cursor.reportCount(), cursor.firstReportedAt(), cursor.targetId(), cursor.typeRank(), limit);
+            case FIRST_REPORTED_ASC -> reportRepository.findQueueAggregatesByFirstReportedAsc(
+                    ReportStatus.PENDING, reasons, query.targetType(), overdueBefore,
+                    cursor.firstReportedAt(), cursor.targetId(), cursor.typeRank(), limit);
+        };
 
         boolean hasMore = rows.size() > DEFAULT_PAGE_SIZE;
         List<ReviewQueueRow> page = hasMore ? List.copyOf(rows.subList(0, DEFAULT_PAGE_SIZE)) : rows;
@@ -105,7 +130,7 @@ public class ReviewQueueService {
         List<ReviewQueueItemResponse> items = page.stream()
                 .map(row -> toItem(row, posts, postImages, comments, summaries, proposals))
                 .toList();
-        String nextCursor = hasMore ? formatCursor(page.get(page.size() - 1)) : null;
+        String nextCursor = hasMore ? formatCursor(page.get(page.size() - 1), query.sort()) : null;
         return CursorPage.of(items, nextCursor);
     }
 
@@ -280,20 +305,35 @@ public class ReviewQueueService {
     }
 
     /**
-     * 解析游标。游标对客户端不透明，只要求原样回传；格式为
-     * 「举报数:首报微秒:目标 id:目标类型序」，四段必须齐全，数字段不得为负，
-     * 缺段或分段错位一律按非法游标拒绝。
+     * 解析游标。游标对客户端不透明，只要求原样回传；**段数由排序口径决定**：
+     * <ul>
+     *   <li>默认排序（举报数降序）：「举报数:首报微秒:目标 id:目标类型序」四元组</li>
+     *   <li>首报升序：「首报微秒:目标 id:目标类型序」三元组</li>
+     * </ul>
+     * 段数不符、数字段为负、非数字一律按非法游标拒绝——不静默按首页重来，否则会把
+     * 「排序与游标不匹配」这类前端错误伪装成正常结果。
      */
-    private ReviewQueueCursor parseCursor(String raw) {
+    private ReviewQueueCursor parseCursor(String raw, ReviewQueueSort sort) {
         if (raw == null || raw.isBlank()) {
             return new ReviewQueueCursor(FIRST_PAGE_REPORT_COUNT, FIRST_PAGE_FIRST_REPORTED_AT,
                     FIRST_PAGE_TARGET_ID, FIRST_PAGE_TYPE_RANK);
         }
+        int expectedSegments = sort == ReviewQueueSort.FIRST_REPORTED_ASC
+                ? FIRST_REPORTED_CURSOR_SEGMENTS : REPORT_COUNT_CURSOR_SEGMENTS;
         String[] parts = raw.split(KEY_SEPARATOR);
-        if (parts.length != CURSOR_SEGMENTS) {
+        if (parts.length != expectedSegments) {
             throw new BizException(ErrorCode.CURSOR_INVALID);
         }
         try {
+            if (sort == ReviewQueueSort.FIRST_REPORTED_ASC) {
+                Instant firstReportedAt = CursorCodec.decode(Long.parseLong(parts[0]));
+                long targetId = Long.parseLong(parts[1]);
+                int typeRank = Integer.parseInt(parts[2]);
+                if (targetId <= 0 || typeRank < 0) {
+                    throw new NumberFormatException("游标各段不合法");
+                }
+                return new ReviewQueueCursor(FIRST_PAGE_REPORT_COUNT, firstReportedAt, targetId, typeRank);
+            }
             long reportCount = Long.parseLong(parts[0]);
             Instant firstReportedAt = CursorCodec.decode(Long.parseLong(parts[1]));
             long targetId = Long.parseLong(parts[2]);
@@ -307,9 +347,14 @@ public class ReviewQueueService {
         }
     }
 
-    private String formatCursor(ReviewQueueRow row) {
-        return row.reportCount() + KEY_SEPARATOR + CursorCodec.encode(row.firstReportedAt())
-                + KEY_SEPARATOR + row.targetId() + KEY_SEPARATOR + typeRank(row.targetType());
+    /** 游标格式必须与排序口径一致，否则下一次翻页会因段数不符被拒 */
+    private String formatCursor(ReviewQueueRow row, ReviewQueueSort sort) {
+        String firstReported = CursorCodec.encode(row.firstReportedAt()) + KEY_SEPARATOR
+                + row.targetId() + KEY_SEPARATOR + typeRank(row.targetType());
+        if (sort == ReviewQueueSort.FIRST_REPORTED_ASC) {
+            return firstReported;
+        }
+        return row.reportCount() + KEY_SEPARATOR + firstReported;
     }
 
     /**

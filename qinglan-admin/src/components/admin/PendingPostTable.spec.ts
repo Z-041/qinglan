@@ -40,14 +40,26 @@ describe('PendingPostTable', () => {
   })
 
   it('渲染摘要、状态码对应文案与提交时间', () => {
+    const submittedAt = '2026-10-06T00:00:00Z'
     const wrapper = mount(PendingPostTable, {
-      props: { items: [pendingPost({ targetStatus: 'REVIEWING' })] },
+      props: { items: [pendingPost({ targetStatus: 'REVIEWING', submittedAt })] },
     })
     const text = wrapper.text()
 
     expect(text).toContain('测试正文')
     expect(text).toContain('审核中')
-    expect(text).toContain(new Date('2026-10-06T00:00:00Z').toLocaleString())
+    // 提交时间改为相对时间渲染，绝对时间落在 title 上（相对文案随当前时刻变化，不断言其字面）
+    const timeCell = wrapper
+      .findAll('td')
+      .find((cell) => cell.attributes('title') === new Date(submittedAt).toLocaleString())
+    expect(timeCell).toBeDefined()
+  })
+
+  it('表头固定：thead 带 sticky + 不透明底色', () => {
+    const thead = mount(PendingPostTable, { props: { items: [pendingPost()] } }).find('thead')
+
+    expect(thead.classes()).toContain('sticky')
+    expect(thead.classes()).toContain('bg-surface')
   })
 
   it('渲染缩略图：按序渲染全部图片，点开在新标签页看原图', () => {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import type { AdminAnnouncementItem, AnnouncementLevel, AnnouncementStatus } from '@/types/admin'
 
 const props = withDefaults(
@@ -45,8 +46,17 @@ function statusLabel(status: AnnouncementStatus): string {
   return STATUS_LABELS[status] ?? '未知'
 }
 
+/** 生效区间是「窗口」而非单一时刻，用绝对时间；发布时间改为相对时间（阶段 B） */
 function dateText(value: string | null): string {
   return value ? new Date(value).toLocaleString() : '—'
+}
+
+function publishedText(item: AdminAnnouncementItem): string {
+  return item.publishedAt ? formatRelativeTime(item.publishedAt) : '—'
+}
+
+function publishedTitle(item: AdminAnnouncementItem): string {
+  return item.publishedAt ? formatAbsoluteTime(item.publishedAt) : ''
 }
 
 function periodText(item: AdminAnnouncementItem): string {
@@ -60,7 +70,7 @@ function boolText(value: boolean): string {
 
 <template>
   <table class="w-full border-collapse text-sm">
-    <thead>
+    <thead class="sticky top-0 z-10 bg-surface">
       <tr class="border-b border-line text-left text-xs text-muted">
         <th class="px-3 py-2.5 font-medium">标题</th>
         <th class="px-3 py-2.5 font-medium">等级</th>
@@ -85,7 +95,9 @@ function boolText(value: boolean): string {
         <td class="px-3 py-3">{{ row.minReadSeconds }}</td>
         <td class="px-3 py-3">{{ boolText(row.requireScrollToEnd) }}</td>
         <td class="px-3 py-3">{{ boolText(row.requireConfirm) }}</td>
-        <td class="whitespace-nowrap px-3 py-3">{{ dateText(row.publishedAt) }}</td>
+        <td class="whitespace-nowrap px-3 py-3" :title="publishedTitle(row)">
+          {{ publishedText(row) }}
+        </td>
         <td class="px-3 py-3">
           <div class="flex gap-2">
             <button

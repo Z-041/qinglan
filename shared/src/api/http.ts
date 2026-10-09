@@ -58,6 +58,52 @@ const instance = axios.create({
 })
 
 /**
+ * 读 Blob 文本。优先用 `Blob.text()`；老环境（含单测用的 jsdom）没有它，
+ * 退回 `FileReader`，避免下载错误体的解析在这些环境下静默失效。
+ */
+async function readBlobText(blob: Blob): Promise<string> {
+  if (typeof blob.text === 'function') {
+    return blob.text()
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error ?? new Error('读取响应体失败'))
+    reader.readAsText(blob)
+  })
+}
+
+/**
+ * 下载接口的响应体是二进制（{@link httpGetBlob} 用 `responseType: 'blob'`），
+ * 出错时后端返回的却是 JSON。axios 会把这个 JSON 原样包成 Blob，于是拦截器读不到
+ * `code` / `message`，只能退化成通用「网络异常」——导出超限这类**可行动的原因**就丢了。
+ * 这里把 Blob 读回文本再解析；读不出 JSON（例如真拿到了 CSV）就返回 null。
+ */
+async function readApiResponseFromBlob(blob: Blob): Promise<ApiResponse<unknown> | null> {
+  try {
+    const text = await readBlobText(blob)
+    return text ? (JSON.parse(text) as ApiResponse<unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+/** 从 `Content-Disposition` 里取文件名（`attachment; filename="xxx.csv"`）；拿不到返回 null */
+export function parseFileName(disposition: string | undefined | null): string | null {
+  if (!disposition) {
+    return null
+  }
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+/** 二进制下载的返回：文件内容 + 后端给出的文件名（可能缺失） */
+export interface BlobDownload {
+  blob: Blob
+  fileName: string | null
+}
+
+/**
  * localStorage 的安全读写。
  *
  * 浏览器禁用站点数据（或部分隐私模式）时，`localStorage` 的读写会抛 `SecurityError`。
@@ -135,10 +181,16 @@ instance.interceptors.request.use((config) => {
 
 instance.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<ApiResponse<unknown>>) => {
+  async (error: AxiosError<ApiResponse<unknown>>) => {
     const status = error.response?.status
-    const code = error.response?.data?.code ?? 'QL-500-001'
-    const message = error.response?.data?.message ?? '网络异常，请稍后重试'
+    // 错误体可能是 Blob（下载接口）：先读回文本解析出 code / message，别把明确原因退化成「网络异常」
+    let raw: unknown = error.response?.data
+    if (raw instanceof Blob) {
+      raw = await readApiResponseFromBlob(raw)
+    }
+    const body = (raw ?? null) as ApiResponse<unknown> | null
+    const code = body?.code ?? 'QL-500-001'
+    const message = body?.message ?? '网络异常，请稍后重试'
 
     if (status === 401) {
       // 令牌已失效：内存态与持久化一并清掉，再交给应用层重置 Pinia 并跳认证页
@@ -150,7 +202,7 @@ instance.interceptors.response.use(
         pushToast(message, 'error')
         unauthorizedHandler?.()
       }
-      return Promise.reject(new ApiError(code, message, status))
+      throw new ApiError(code, message, status)
     }
 
     if (status === 428) {
@@ -161,7 +213,7 @@ instance.interceptors.response.use(
       // 若直接 `handler?.(...)` 就会既无弹窗也无提示、用户以为点了没反应。
       // 故未注册时退化为 toast——把「管理端不会遇到 428」这一假设变成代码保证。
       if (preconditionRequiredHandler) {
-        preconditionRequiredHandler(error.response?.data?.data)
+        preconditionRequiredHandler(body?.data)
       } else {
         pushToast(message, 'error')
       }
@@ -169,7 +221,7 @@ instance.interceptors.response.use(
       pushToast(message, 'error')
     }
 
-    return Promise.reject(new ApiError(code, message, status))
+    throw new ApiError(code, message, status)
   },
 )
 
@@ -193,6 +245,33 @@ export function httpGet<T>(url: string, params?: Record<string, unknown>): Promi
 
 export function httpPost<T>(url: string, body?: unknown): Promise<T> {
   return unwrap(instance.post<ApiResponse<T>>(url, body))
+}
+
+/**
+ * 二进制下载（CSV 导出）。与 JSON 客户端分开的原因：
+ * 成功响应是文件流（不是 `ApiResponse`），且失败时后端返回的是 JSON——错误体经 axios 包成 Blob 后
+ * 由响应拦截器解析回 `code` / `message`（见上文），调用方只需按 {@link ApiError} 处理。
+ *
+ * 若后端误把错误按 `200 + application/json` 返回，这里也兜住：解析成 `ApiResponse` 并抛错，
+ * 绝不把一段 JSON 当成 CSV 落盘（“下载到的文件内容是一段错误 JSON”比报错更难排查）。
+ */
+export async function httpGetBlob(
+  url: string,
+  params?: Record<string, unknown>,
+): Promise<BlobDownload> {
+  const response = await instance.get<Blob>(url, { params, responseType: 'blob' })
+  const contentType = String(response.headers['content-type'] ?? '')
+  if (contentType.includes('application/json')) {
+    const body = await readApiResponseFromBlob(response.data)
+    const code = body?.code ?? 'QL-500-001'
+    const message = body?.message ?? '导出失败，请稍后重试'
+    pushToast(message, 'error')
+    throw new ApiError(code, message, response.status)
+  }
+  return {
+    blob: response.data,
+    fileName: parseFileName(String(response.headers['content-disposition'] ?? '')),
+  }
 }
 
 export function httpDelete<T>(url: string): Promise<T> {

@@ -1,4 +1,5 @@
 import type { AnnouncementLevel } from '@shared/types/announcement'
+import type { ReportReason } from '@shared/types/review-common'
 import type { UserProfile, UserRole, UserStatus } from '@shared/types/user'
 import type { AdminPermission } from '@/types/permission'
 
@@ -29,6 +30,47 @@ export interface ChangeUserRolePayload {
 
 /** 与后端 common/audit/AuditTargetType 一致 */
 export type AuditTargetType = 'USER' | 'POST' | 'COMMENT' | 'ANNOUNCEMENT'
+
+/** 审计目标类型 → 中文（审计日志页与上下文面板共用） */
+export const AUDIT_TARGET_TYPE_LABELS: Record<AuditTargetType, string> = {
+  USER: '用户',
+  POST: '帖子',
+  COMMENT: '评论',
+  ANNOUNCEMENT: '公告',
+}
+
+/**
+ * 审计动作码 → 中文。与后端 common/audit/AuditAction 一一对应。
+ * 未知码退化为原码展示（版本不同步时宁可显示码，也不要渲染出空）。
+ */
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  BAN: '封禁用户',
+  UNBAN: '解封用户',
+  CREDIT_ADJUST: '调整信用分',
+  POST_APPROVE: '放行帖子',
+  POST_REJECT: '驳回帖子',
+  POST_TAKEDOWN: '下架帖子',
+  POST_AUTO_TAKEDOWN: '自动下架（举报达阈值）',
+  POST_RESTORE: '恢复帖子可见',
+  POST_HIDE_CONTACT: '隐藏联系方式',
+  POST_SHOW_CONTACT: '恢复联系方式',
+  COMMENT_REMOVE: '移除评论',
+  REPORT_DISMISS: '驳回举报',
+  REPORT_UPHOLD: '维持下架',
+  APPEAL_REVIEW: '复审申诉',
+  ROLE_GRANT: '下放管理权限',
+  ROLE_REVOKE: '收回管理权限',
+  ANNOUNCEMENT_CREATE: '创建公告草稿',
+  ANNOUNCEMENT_PUBLISH: '发布公告',
+  ANNOUNCEMENT_REVOKE: '撤回公告',
+  /** 查看联系方式：由普通用户浏览触发，量级最大，排在最后 */
+  CONTACT_VIEW: '查看联系方式',
+}
+
+/** 取审计动作文案；未知码退化为原码，不渲染出空 */
+export function auditActionLabel(action: string): string {
+  return AUDIT_ACTION_LABELS[action] ?? action
+}
 
 /**
  * 与后端 review/dto/AdminAuditLogItemResponse 一一对应（P5 7.5）。
@@ -73,6 +115,34 @@ export interface DailyCount {
   count: number
 }
 
+/** 与后端 review/dto/AdminStatsResponse.ReasonCount 一一对应：举报按理由分布的一项 */
+export interface ReasonCount {
+  reason: ReportReason
+  count: number
+}
+
+/** 与后端 review/dto/AdminStatsResponse.LatencyStats 一一对应：处置时效分位数（单位秒） */
+export interface LatencyStats {
+  p50Seconds: number
+  p90Seconds: number
+  sampleSize: number
+}
+
+/** 与后端 review/dto/AdminStatsResponse.ProposalStats 一一对应 */
+export interface ProposalStats {
+  approved: number
+  rejected: number
+  escalated: number
+  /** 通过率 = approved / (approved + rejected)；分母为 0 时为 0 */
+  approvalRate: number
+}
+
+/** 与后端 review/dto/AdminStatsResponse.ModeratorRank 一一对应：只有 operatorId 与计数 */
+export interface ModeratorRank {
+  operatorId: number
+  count: number
+}
+
 /** 与后端 review/dto/AdminStatsResponse 一一对应 */
 export interface AdminStats {
   content: {
@@ -93,6 +163,32 @@ export interface AdminStats {
     bannedUsers: number
     todayNewUsers: number
   }
+  /** 处置趋势：近 7 日与近 30 日两组，均按日期升序、无数据补 0 */
+  trends: {
+    last7Days: DailyCount[]
+    last30Days: DailyCount[]
+  }
+  /** 举报按理由分布（举报总数，不限状态） */
+  reportReasons: ReasonCount[]
+  /** 处置时效分位数（近 30 天样本） */
+  dispositionLatency: LatencyStats
+  /** 提案表决概况 */
+  proposals: ProposalStats
+  /** 审核员处置量排行；只有 operatorId 与计数，不含身份明文 */
+  moderatorRanking: ModeratorRank[]
+}
+
+/**
+ * 与后端 review/dto/AdminTodoCountsResponse 一一对应（阶段 B 顶栏铃铛）。
+ *
+ * **无权限的分组字段直接缺失（不是 0）**，故四个字段全部可选；读取时按可选处理——
+ * 只有「字段存在」才代表「有权限且这是真实计数」。
+ */
+export interface AdminTodoCounts {
+  pendingPosts?: number
+  pendingReports?: number
+  proposable?: number
+  escalated?: number
 }
 
 /** 与后端 user/dto/BanUserRequest 一一对应 */

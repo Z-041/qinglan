@@ -288,16 +288,27 @@ public class ReviewService {
      * 举报处置完毕，逐条通知**各自的举报人**（同一目标的多条举报分别通知）。
      *
      * <p>收件人是 {@code report.reporterId}，不聚合、不去重——举报人身份只在此处用于投递，
-     * 不出现在任何对外 DTO 里（不变量 #1 的引申）。目标的链接：帖子给 {@code /posts/{id}}，
-     * 评论拿不到所属帖子 id（跨模块不在本层展开查询）故留空，前端按 null 处理。</p>
+     * 不出现在任何对外 DTO 里（不变量 #1 的引申）。</p>
      */
     private void notifyReporters(List<Report> reports, String title,
                                  ReviewTargetType targetType, Long targetId, Long operatorId) {
-        String link = targetType == ReviewTargetType.POST ? "/posts/" + targetId : null;
+        String link = reportFeedbackLink(targetType, targetId);
         for (Report report : reports) {
             notificationPort.notify(report.getReporterId(), operatorId,
                     new NotificationMessage(NotificationType.REPORT_FEEDBACK, title, null, link));
         }
+    }
+
+    /**
+     * 举报反馈通知的详情回链：帖子直接给 {@code /posts/{id}}；评论回链到其<b>所属帖子</b>
+     * （评论模块负责解析，不在本层展开跨模块查询）。解析不到（评论已不存在）时为 {@code null}，
+     * 通知退化为不可点的普通条目，前端按 null 处理。</p>
+     */
+    private String reportFeedbackLink(ReviewTargetType targetType, Long targetId) {
+        if (targetType == ReviewTargetType.POST) {
+            return "/posts/" + targetId;
+        }
+        return commentService.findPostId(targetId).map(postId -> "/posts/" + postId).orElse(null);
     }
 
     /**

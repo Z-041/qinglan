@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 
 import { createComment, deleteComment, fetchComments, likeComment, unlikeComment } from '@/api/comment'
 import { fetchPostDetail, likePost, unlikePost } from '@/api/post'
+import { fetchMyReportState } from '@/api/report'
+import { setAuthToken } from '@shared/api/http'
 import { submitAppeal } from '@shared/api/report'
 import { usePostDetail } from '@/composables/usePostDetail'
+import { useUserStore } from '@shared/stores/user'
 import type { CursorPage } from '@shared/types/api'
 import type { Comment } from '@/types/comment'
 import type { PostDetail } from '@/types/post'
@@ -22,6 +26,10 @@ vi.mock('@/api/post', () => ({
   unlikePost: vi.fn(),
 }))
 
+vi.mock('@/api/report', () => ({
+  fetchMyReportState: vi.fn(),
+}))
+
 vi.mock('@shared/api/report', () => ({
   createReport: vi.fn(),
   submitAppeal: vi.fn(),
@@ -36,6 +44,7 @@ const mockedUnlikeComment = vi.mocked(unlikeComment)
 const mockedLikePost = vi.mocked(likePost)
 const mockedUnlikePost = vi.mocked(unlikePost)
 const mockedSubmitAppeal = vi.mocked(submitAppeal)
+const mockedFetchMyReportState = vi.mocked(fetchMyReportState)
 
 function detail(overrides: Partial<PostDetail> = {}): PostDetail {
   return {
@@ -80,6 +89,10 @@ function page(items: Comment[], nextCursor: string | null = null): CursorPage<Co
 
 describe('usePostDetail', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    // 令牌是 api/http 的模块级内存态，不会随 pinia 重建复位，必须显式清掉
+    setAuthToken(null)
     vi.clearAllMocks()
   })
 
@@ -278,5 +291,49 @@ describe('usePostDetail', () => {
 
     expect(state.appealed.value).toBe(false)
     expect(state.appealSubmitting.value).toBe(false)
+  })
+
+  it('未登录时不请求举报状态接口（该接口需登录）', async () => {
+    mockedFetchPostDetail.mockResolvedValue(detail())
+    mockedFetchComments.mockResolvedValue(page([]))
+
+    const state = usePostDetail(7)
+    await state.load()
+
+    expect(mockedFetchMyReportState).not.toHaveBeenCalled()
+    expect(state.reportState.value).toBeNull()
+  })
+
+  it('已登录时按 POST 目标拉取本人举报状态', async () => {
+    useUserStore().setAccessToken('token')
+    mockedFetchPostDetail.mockResolvedValue(detail())
+    mockedFetchComments.mockResolvedValue(page([]))
+    mockedFetchMyReportState.mockResolvedValue({
+      reported: true,
+      status: 'UPHELD',
+      createdAt: '2026-10-01T08:00:00Z',
+      handledAt: '2026-10-02T08:00:00Z',
+    })
+
+    const state = usePostDetail(7)
+    await state.load()
+
+    expect(mockedFetchMyReportState).toHaveBeenCalledWith('POST', 7)
+    expect(state.reportState.value?.reported).toBe(true)
+    expect(state.reportState.value?.status).toBe('UPHELD')
+  })
+
+  it('举报状态拉取失败不影响详情主流程，状态置空', async () => {
+    useUserStore().setAccessToken('token')
+    mockedFetchPostDetail.mockResolvedValue(detail())
+    mockedFetchComments.mockResolvedValue(page([]))
+    mockedFetchMyReportState.mockRejectedValue(new Error('网络异常'))
+
+    const state = usePostDetail(7)
+    await state.load()
+
+    expect(state.post.value?.id).toBe(7)
+    expect(state.failed.value).toBe(false)
+    expect(state.reportState.value).toBeNull()
   })
 })

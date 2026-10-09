@@ -56,4 +56,39 @@ public interface AuditLogRepository extends Repository<AuditLog, Long> {
             @Param("cursorCreatedAt") Instant cursorCreatedAt,
             @Param("cursorId") Long cursorId,
             Pageable limit);
+
+    /**
+     * 某目标的处置流水（阶段 A 的目标处置历史），最近的在前。
+     *
+     * <p>刻意排除 {@code CONTACT_VIEW}：那是普通用户浏览触发的读取轨迹，不是「处置」，
+     * 混进来会让管理员读到的流水里充满无关的「有人看过联系方式」。命中
+     * {@code idx_review_log_target (target_type, target_id, created_at)}。</p>
+     *
+     * <p>只加读方法，不引入 delete / update 入口，不变量 #7 不受影响。</p>
+     */
+    @Query("""
+            select l from AuditLog l
+            where l.targetType = :targetType
+              and l.targetId = :targetId
+              and l.action <> com.qinglan.common.audit.AuditAction.CONTACT_VIEW
+            order by l.createdAt desc, l.id desc
+            """)
+    List<AuditLog> findDispositionHistory(
+            @Param("targetType") AuditTargetType targetType,
+            @Param("targetId") Long targetId,
+            Pageable limit);
+
+    /**
+     * 指定筛选条件下的审计条数，供导出前做「行数上限」判断（超限明确报错，不静默截断）。
+     */
+    @Query("""
+            select count(l) from AuditLog l
+            where (:action is null or l.action = :action)
+              and (:from is null or l.createdAt >= :from)
+              and (:to is null or l.createdAt < :to)
+            """)
+    long countAdminFiltered(
+            @Param("action") AuditAction action,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
 }

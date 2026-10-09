@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchTopics } from '@/api/topic'
 import { uploadImage } from '@/api/upload'
 import ImagePicker from '@/components/ImagePicker.vue'
+import { POST_DRAFT_STORAGE_KEY } from '@/composables/usePostDraft'
 import PublishView from '@/views/PublishView.vue'
 
 vi.mock('vue-router', () => ({
@@ -26,9 +27,15 @@ function imageSources(wrapper: VueWrapper): (string | undefined)[] {
   return wrapper.findAll('img').map((img) => img.attributes('src'))
 }
 
+function textareaValue(wrapper: VueWrapper): string {
+  return (wrapper.get('textarea').element as HTMLTextAreaElement).value
+}
+
 describe('PublishView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // 草稿落在 localStorage，测试间必须清掉，否则上一用例的草稿会漏进下一用例
+    localStorage.clear()
     mockedFetchTopics.mockResolvedValue([])
   })
 
@@ -85,5 +92,53 @@ describe('PublishView', () => {
     await flushPromises()
 
     expect(imageSources(wrapper)).toEqual(['/uploads/a.jpg', '/uploads/c.jpg'])
+  })
+
+  it('检出本地草稿时给出「恢复 / 丢弃」，不静默覆盖当前输入', async () => {
+    localStorage.setItem(
+      POST_DRAFT_STORAGE_KEY,
+      JSON.stringify({ topicId: 1, content: '旧草稿正文', contact: '', images: [] }),
+    )
+
+    const wrapper = mount(PublishView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('发现上次未提交的草稿')
+    // 未点「恢复」前不得把草稿填进表单（否则会覆盖用户新输入）
+    expect(textareaValue(wrapper)).toBe('')
+
+    await wrapper.findAll('button').find((button) => button.text() === '恢复草稿')?.trigger('click')
+    await flushPromises()
+
+    expect(textareaValue(wrapper)).toBe('旧草稿正文')
+    expect(wrapper.text()).not.toContain('发现上次未提交的草稿')
+  })
+
+  it('点「丢弃」后本地草稿被清除，不再提示恢复', async () => {
+    localStorage.setItem(
+      POST_DRAFT_STORAGE_KEY,
+      JSON.stringify({ topicId: 1, content: '旧草稿正文', contact: '', images: [] }),
+    )
+
+    const wrapper = mount(PublishView)
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === '丢弃')?.trigger('click')
+    await flushPromises()
+
+    expect(localStorage.getItem(POST_DRAFT_STORAGE_KEY)).toBeNull()
+    expect(wrapper.text()).not.toContain('发现上次未提交的草稿')
+  })
+
+  it('表单字段变更后自动写入本地草稿', async () => {
+    const wrapper = mount(PublishView)
+    await flushPromises()
+
+    await wrapper.get('textarea').setValue('写了一半的内容')
+    await flushPromises()
+
+    const raw = localStorage.getItem(POST_DRAFT_STORAGE_KEY)
+    expect(raw).not.toBeNull()
+    expect(JSON.parse(raw as string).content).toBe('写了一半的内容')
   })
 })
