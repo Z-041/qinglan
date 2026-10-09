@@ -3,7 +3,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig, presetWind3, transformerDirectives, transformerVariantGroup } from 'unocss'
 
 // 相对路径而非 @shared：本文件由 UnoCSS 经 jiti 加载，不在 Vite 的模块解析链路里，
-// 别名不生效（详见 前后台拆分实施计划.md 步 2 的记录）。
+// 别名解析不到（写 '@shared/...' 会直接抛「模块找不到」）。
 import { preflights, shortcuts, theme } from '../shared/src/uno.base'
 
 /**

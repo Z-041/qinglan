@@ -13,7 +13,8 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
       // 共享包以源码形式引入。必须与 tsconfig.json 的 paths 同步，否则会出现
-      // 「vite build 通过、vue-tsc 报红」这类难查的症状（见 前后台拆分实施计划.md §5.2）
+      // 「vite build 通过、vue-tsc 报红」这类难查的症状——esbuild 走别名、vue-tsc 走 paths，
+      // 两处不一致时就只有其中一边报错。
       '@shared': fileURLToPath(new URL('../shared/src', import.meta.url)),
     },
   },
