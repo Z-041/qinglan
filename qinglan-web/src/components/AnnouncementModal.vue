@@ -140,6 +140,8 @@ watch(
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeydown, true)
   window.removeEventListener('popstate', handlePopState)
+  // 先摘监听再释放：否则 history.back() 触发的 popstate 会被 handlePopState 当成「用户按了返回」再压回
+  releaseGuardEntry()
 })
 </script>
 
