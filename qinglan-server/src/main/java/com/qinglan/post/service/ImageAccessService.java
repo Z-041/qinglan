@@ -41,8 +41,10 @@ public class ImageAccessService {
     /**
      * 已知所属帖状态时的判定：**免查库**。仅 APPROVED 公开 → 干净原 URL；其余 → 签名 URL。
      *
-     * <p>{@code readable} 恒为 true：调用方（详情 / 我的帖子 / 待审队列）都已先行确认当前 viewer
-     * 有权看到该帖子，此处只负责挑 URL 形态。</p>
+     * <p><b>前置条件</b>：调用方必须已确认当前 viewer 有权看到该帖子（详情 / 我的帖子 / 待审队列
+     * 都是先做了可见性判定才走到这里），因此本方法恒返回 {@code readable = true}，只负责挑 URL 形态。
+     * 新增调用点若跳过可见性判定，会直接把私有图放行——拿不准时改用 {@link #resolve}（按
+     * {@code objectKey} 反查并判定可见性）。</p>
      *
      * @param status    图片所属帖子的审核状态；无归属时传 null（按私有处理）
      * @param cleanUrls 干净的对外地址（来自 {@code post_image.url}）

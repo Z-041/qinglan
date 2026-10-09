@@ -37,8 +37,8 @@ class ModuleBoundaryTest {
      * <p>P2（审核体系）起，审计日志底座下沉到 {@code common.audit}，{@code post}/{@code user}
      * 不再依赖 {@code review}；{@code review} 升为审核编排者，单向依赖业务模块。</p>
      *
-     * <p>未列出的模块（含将来的 announcement / notification）取值空集，即除 {@code common} 外
-     * 禁止被任何模块依赖；确需新增方向时先改 AGENTS.md，再同步这里。</p>
+     * <p>{@code ALLOWED} 只登记「本模块允许依赖谁」；表里没有的模块默认取值空集，
+     * 即除 {@code common} 外不主动依赖任何其他模块。确需新增方向时先改 AGENTS.md，再同步这里。</p>
      */
     private static final Map<String, Set<String>> ALLOWED = Map.of(
             "auth", Set.of("user"),

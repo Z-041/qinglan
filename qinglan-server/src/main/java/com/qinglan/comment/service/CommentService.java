@@ -52,8 +52,12 @@ import java.util.stream.Collectors;
  * <p>评论走「先发后审」（设计方案第一章红线 2），因此不参与主帖那套审核状态机，
  * 只有 {@code PUBLISHED / REMOVED} 两态；遇违规由管理员直接移除或由举报驱动。</p>
  *
- * <p>跨模块依赖：{@code comment → post}，用于校验帖子可见性与维护 {@code post.comment_count}
- * （AGENTS.md 第三章白名单，冗余计数是为了让信息流不必逐帖 count）。</p>
+ * <p>跨模块依赖（AGENTS.md 第三章白名单）：</p>
+ * <ul>
+ *   <li>{@code comment → post}：校验帖子可见性、维护 {@code post.comment_count}
+ *       （冗余计数是为了让信息流不必逐帖 count）</li>
+ *   <li>{@code comment → user}：取作者匿名 salt 派生评论代号，并校验账号可用性</li>
+ * </ul>
  */
 @Service
 @RequiredArgsConstructor

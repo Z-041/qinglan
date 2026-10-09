@@ -9,7 +9,7 @@ import type { ReviewAction } from '@/types/review'
 export type ActionInput = 'direct' | 'reason' | 'dialog'
 
 /**
- * 处置动作的**输入类别**——视图据它数据驱动地分发，不再写 switch。
+ * 处置动作的**输入类别**——视图据它把各动作归成三类分支分发（取代逐个动作的 if/switch 树）。
  *
  * <p>与 {@link REVIEW_ACTION_META}（文案 / 权限）配对：本表只回答「这个动作需要什么输入」，
  * 「调哪个执行器」由视图持有的执行器映射决定（执行器是 `useReviewActions()` 绑定的函数，

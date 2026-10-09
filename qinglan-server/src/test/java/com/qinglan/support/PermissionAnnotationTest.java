@@ -4,10 +4,13 @@ import com.qinglan.common.security.AdminPermission;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,6 +46,51 @@ class PermissionAnnotationTest {
      * 经验 #11：永远为真的断言等于没写。
      */
     private static final int MIN_ANNOTATED_METHODS = 15;
+
+    /** 管理端路由前缀：这些端点的授权只能来自方法级注解（SecurityConfig 只保证「已认证」） */
+    private static final String ADMIN_PREFIX = "/api/admin";
+
+    /**
+     * 反向门禁：上一条只保证「写了注解的必须合法」，保不住「管理端端点忘了写注解」——
+     * 漏注解时 {@code SecurityConfig} 的 {@code anyRequest().authenticated()} 会把端点放给
+     * 任意登录用户。故补齐：管理端控制器的每个公开方法都必须带 {@code @PreAuthorize}。
+     */
+    @ArchTest
+    static void 管理端端点必须逐方法声明权限注解(JavaClasses classes) {
+        List<String> violations = new ArrayList<>();
+        int adminMethods = 0;
+
+        for (JavaClass javaClass : classes) {
+            if (!isAdminController(javaClass)) {
+                continue;
+            }
+            for (JavaMethod method : javaClass.getMethods()) {
+                if (!method.getOwner().equals(javaClass)
+                        || !method.getModifiers().contains(JavaModifier.PUBLIC)) {
+                    continue;
+                }
+                adminMethods++;
+                if (!method.isAnnotatedWith(PreAuthorize.class)) {
+                    violations.add("%s 未声明 @PreAuthorize——管理端端点必须默认拒绝"
+                            .formatted(method.getFullName()));
+                }
+            }
+        }
+
+        assertThat(violations).as("管理端端点必须逐方法声明权限注解").isEmpty();
+        assertThat(adminMethods)
+                .as("扫描到的管理端方法数不应为 0（否则是断言空转）")
+                .isGreaterThan(0);
+    }
+
+    private static boolean isAdminController(JavaClass javaClass) {
+        if (!javaClass.isAnnotatedWith(RestController.class)
+                || !javaClass.isAnnotatedWith(RequestMapping.class)) {
+            return false;
+        }
+        String[] paths = javaClass.getAnnotationOfType(RequestMapping.class).value();
+        return Arrays.stream(paths).anyMatch(path -> path.startsWith(ADMIN_PREFIX));
+    }
 
     @ArchTest
     static void 权限注解只能引用已登记的权限点且不得写角色(JavaClasses classes) {
