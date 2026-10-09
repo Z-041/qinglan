@@ -4,6 +4,7 @@ import { createComment, deleteComment, fetchComments, likeComment, unlikeComment
 import { fetchPostDetail, likePost, unlikePost } from '@/api/post'
 import { fetchMyReportState } from '@/api/report'
 import { submitAppeal as requestAppeal } from '@shared/api/report'
+import { useSubmit } from '@shared/composables/useSubmit'
 import { useUserStore } from '@shared/stores/user'
 import type { Comment } from '@/types/comment'
 import type { PostDetail } from '@/types/post'
@@ -27,8 +28,8 @@ export function usePostDetail(postId: number) {
   const loadingMore = ref(false)
   /** 是否还有下一页一级评论；由后端 nextCursor 推导，末页为 false */
   const hasMore = ref(false)
-  const submitting = ref(false)
-  const appealSubmitting = ref(false)
+  const { submitting, run: runComment } = useSubmit()
+  const { submitting: appealSubmitting, run: runAppeal } = useSubmit()
   /** 正文/评论加载失败过。用于把「失败」渲染成带重试的屏，而不是一片空白 */
   const failed = ref(false)
 
@@ -160,18 +161,12 @@ export function usePostDetail(postId: number) {
 
   /** 发表评论或回复；返回是否成功，失败时由调用方保留已输入的草稿 */
   async function submitComment(content: string, parentId: number | null = null): Promise<boolean> {
-    submitting.value = true
-    try {
+    return runComment(async () => {
       await createComment(postId, { content, parentId })
       // 重新拉取首页以保证排序与层级与后端一致（一级评论最早在前，新评论落在末页）
       await loadCommentFirstPage()
       adjustCommentCount(1)
-      return true
-    } catch {
-      return false
-    } finally {
-      submitting.value = false
-    }
+    })
   }
 
   /** 删除自己的评论（一级评论会连同其回复一起删除） */
@@ -189,16 +184,10 @@ export function usePostDetail(postId: number) {
 
   /** 作者对已下架帖子申诉；返回是否成功，失败时由调用方保留已输入的理由 */
   async function submitAppeal(reason: string): Promise<boolean> {
-    appealSubmitting.value = true
-    try {
+    return runAppeal(async () => {
       await requestAppeal({ postId, reason })
       appealed.value = true
-      return true
-    } catch {
-      return false
-    } finally {
-      appealSubmitting.value = false
-    }
+    })
   }
 
   return {

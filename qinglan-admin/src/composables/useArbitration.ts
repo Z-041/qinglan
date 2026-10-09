@@ -1,6 +1,5 @@
-import { ref } from 'vue'
-
 import { useCursorList } from '@shared/composables/useCursorList'
+import { useSubmit } from '@shared/composables/useSubmit'
 
 import { arbitrateProposal, fetchEscalatedProposals } from '@/api/proposals'
 import type { ArbitratePayload, EscalatedProposal } from '@/types/proposal'
@@ -12,7 +11,7 @@ import type { ArbitratePayload, EscalatedProposal } from '@/types/proposal'
  */
 export function useArbitration() {
   /** 裁决在途：按钮据此禁用，防重复提交 */
-  const submitting = ref(false)
+  const { submitting, run } = useSubmit()
 
   const list = useCursorList<EscalatedProposal>({
     fetchPage: (cursor) => fetchEscalatedProposals(cursor),
@@ -20,17 +19,10 @@ export function useArbitration() {
 
   /** 裁决成功后重拉第一页 */
   async function arbitrate(proposalId: number, payload: ArbitratePayload): Promise<boolean> {
-    submitting.value = true
-    try {
+    return run(async () => {
       await arbitrateProposal(proposalId, payload)
       await list.refresh()
-      return true
-    } catch {
-      // 错误已由拦截器提示
-      return false
-    } finally {
-      submitting.value = false
-    }
+    })
   }
 
   return {

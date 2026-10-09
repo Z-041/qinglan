@@ -7,6 +7,7 @@ import BaseCard from '@shared/components/base/BaseCard.vue'
 import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import { pushToast } from '@shared/composables/useToast'
 import { useUserLabels } from '@shared/composables/useUserLabels'
+import { useSubmit } from '@shared/composables/useSubmit'
 import {
   ASSIGNABLE_ROLE_OPTIONS,
   isCommitteeRole,
@@ -21,7 +22,7 @@ const { roleLabel, statusLabel } = useUserLabels()
 const members = ref<UserProfile[]>([])
 const loading = ref(false)
 const failed = ref(false)
-const submitting = ref(false)
+const { submitting, run } = useSubmit()
 
 const targetUserId = ref('')
 const targetRole = ref<AssignableRole>('REVIEWER')
@@ -68,18 +69,12 @@ async function submitChange(userId: number, role: AssignableRole, title: string)
   if (reason === null) {
     return false
   }
-  submitting.value = true
-  try {
+  // 失败（名额已满 / 不可动超管 / 不能改自己）已由拦截器提示
+  return run(async () => {
     await changeUserRole(userId, { role, reason })
     pushToast(role === 'STUDENT' ? '已收回管理权限' : '已下放权限', 'info')
     await load()
-    return true
-  } catch {
-    // 错误（名额已满 / 不可动超管 / 不能改自己）已由拦截器提示
-    return false
-  } finally {
-    submitting.value = false
-  }
+  })
 }
 
 async function grant(): Promise<void> {

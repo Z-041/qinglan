@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 
 import { createReport } from '@shared/api/report'
+import { useSubmit } from '@shared/composables/useSubmit'
 import type { ReportReason, ReviewTargetType } from '@shared/types/review-common'
 
 /** 举报对象：目标类型 + id + 弹层文案（让用户确认自己在举报什么） */
@@ -18,7 +19,7 @@ export interface ReportTarget {
  */
 export function useReport() {
   const target = ref<ReportTarget | null>(null)
-  const submitting = ref(false)
+  const { submitting, run } = useSubmit()
 
   function open(next: ReportTarget): void {
     target.value = next
@@ -34,8 +35,7 @@ export function useReport() {
     if (!current) {
       return false
     }
-    submitting.value = true
-    try {
+    return run(async () => {
       await createReport({
         targetType: current.targetType,
         targetId: current.targetId,
@@ -43,13 +43,7 @@ export function useReport() {
         detail: detail.trim() || null,
       })
       close()
-      return true
-    } catch {
-      // 错误已由拦截器提示
-      return false
-    } finally {
-      submitting.value = false
-    }
+    })
   }
 
   return { target, submitting, open, close, submit }

@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 
 import { useCursorList } from '@shared/composables/useCursorList'
+import { useSubmit } from '@shared/composables/useSubmit'
 
 import { adjustCredit, banUser, fetchAdminUsers, unbanUser } from '@/api/admin'
 import type {
@@ -64,7 +65,7 @@ export function toQuery(filters: UserFilterState, cursor: string | null): AdminU
 export function useUserManage() {
   const filters = ref<UserFilterState>(createEmptyFilters())
   /** 处置动作在途：行内按钮据此禁用，防重复提交 */
-  const submitting = ref(false)
+  const { submitting, run } = useSubmit()
 
   /** 上一次**成功查询**所用的筛选快照（JSON 串）。用来判断「筛选改了但还没查询」 */
   const appliedFilters = ref<string | null>(null)
@@ -90,19 +91,6 @@ export function useUserManage() {
   async function reset(): Promise<void> {
     filters.value = createEmptyFilters()
     await list.refresh()
-  }
-
-  /** 处置动作的统一收尾：成功返回 true；失败只复位 submitting，错误由拦截器提示 */
-  async function run(action: () => Promise<void>): Promise<boolean> {
-    submitting.value = true
-    try {
-      await action()
-      return true
-    } catch {
-      return false
-    } finally {
-      submitting.value = false
-    }
   }
 
   return {

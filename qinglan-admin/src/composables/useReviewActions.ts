@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { useSubmit } from '@shared/composables/useSubmit'
 
 import {
   acceptAppeal,
@@ -16,26 +16,12 @@ import {
 import type { DismissReportsPayload, ProposalDispositionPayload, ReasonPayload } from '@/types/review'
 
 /**
- * 处置动作编排：把「提交中」状态与「成功 / 失败」语义收在一处，
+ * 处置动作编排：提交态与「成功 / 失败」语义交给 {@link useSubmit}，
  * 视图只关心成功后做什么（刷新列表、关闭面板）。
  * 失败一律由 http 拦截器提示，这里不重复渲染文案。
  */
 export function useReviewActions() {
-  const submitting = ref(false)
-
-  /** 返回值类型放宽为 unknown：发起提案的接口会回 { proposalId }，这里只关心是否成功 */
-  async function run(action: () => Promise<unknown>): Promise<boolean> {
-    submitting.value = true
-    try {
-      await action()
-      return true
-    } catch {
-      // 错误已由拦截器提示
-      return false
-    } finally {
-      submitting.value = false
-    }
-  }
+  const { submitting, run } = useSubmit()
 
   return {
     submitting,

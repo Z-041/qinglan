@@ -1,6 +1,5 @@
-import { ref } from 'vue'
-
 import type { BlobDownload } from '@shared/api/http'
+import { useSubmit } from '@shared/composables/useSubmit'
 
 /** 两位补零，供兜底文件名的时间戳拼接 */
 function pad(value: number): string {
@@ -36,25 +35,20 @@ export function saveBlob(blob: Blob, fileName: string): void {
  * 不再重复提示（AGENTS.md 第七章：请求错误只有一个出口）。</p>
  */
 export function useCsvExport() {
-  const exporting = ref(false)
+  const { submitting, run } = useSubmit()
 
   /** 成功返回 true；失败返回 false（错误已由拦截器提示） */
   async function download(
     request: () => Promise<BlobDownload>,
     fallbackBase: string,
   ): Promise<boolean> {
-    exporting.value = true
-    try {
+    return run(async () => {
       const { blob, fileName } = await request()
       // 文件名以后端 Content-Disposition 为准；拿不到才用带时间戳的兜底名
       saveBlob(blob, fileName ?? timestampedFileName(fallbackBase))
-      return true
-    } catch {
-      return false
-    } finally {
-      exporting.value = false
-    }
+    })
   }
 
-  return { exporting, download }
+  // 对外仍叫 exporting（本页语义），实现与其它提交态共用 useSubmit
+  return { exporting: submitting, download }
 }

@@ -1,6 +1,7 @@
 import { ref, watch } from 'vue'
 
 import { useCursorList } from '@shared/composables/useCursorList'
+import { useSubmit } from '@shared/composables/useSubmit'
 
 import { fetchAdminProposals, voteProposal } from '@/api/proposals'
 import type { ProposalStatus, ProposalSummary, VoteDecision } from '@/types/proposal'
@@ -13,7 +14,7 @@ import type { ProposalStatus, ProposalSummary, VoteDecision } from '@/types/prop
  */
 export function useProposalList() {
   /** 投票在途：行内按钮据此禁用，防重复投票 */
-  const submitting = ref(false)
+  const { submitting, run } = useSubmit()
 
   /** 顶部筛选：默认看进行中；打开「只看我发起的」即「我的提案」 */
   const status = ref<ProposalStatus>('OPEN')
@@ -25,17 +26,10 @@ export function useProposalList() {
 
   /** 投票成功后重拉第一页，保留当前筛选 */
   async function vote(proposalId: number, decision: VoteDecision): Promise<boolean> {
-    submitting.value = true
-    try {
+    return run(async () => {
       await voteProposal(proposalId, { decision })
       await list.refresh()
-      return true
-    } catch {
-      // 错误已由拦截器提示
-      return false
-    } finally {
-      submitting.value = false
-    }
+    })
   }
 
   // 筛选变化即重拉第一页；游标随 refresh 一起清空
