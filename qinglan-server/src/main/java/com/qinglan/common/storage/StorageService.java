@@ -12,6 +12,9 @@ import java.util.Optional;
  * <p><b>URL 契约</b>：{@link #store} 返回的地址形如 {@code /uploads/YYYY/MM/uuid.ext}，前端
  * {@code <img src>} 直接使用、CSP 为 {@code img-src 'self'}。两种实现都必须返回同一形态的地址，
  * 且**对象 key 与 URL 去掉 {@code /uploads/} 前缀后的路径段一致**，图片下发端点据此反查归属。</p>
+ *
+ * <p>该形态的拼装与解析**统一走 {@link StorageUrl}**：两种实现都不得自写一套前缀判断或路径解析，
+ * 否则「什么地址算合法」会在两处漂移（本地盘宽松、S3 严格）。</p>
  */
 public interface StorageService {
 

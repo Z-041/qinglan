@@ -25,9 +25,6 @@ import java.util.UUID;
 @Slf4j
 public class LocalStorageService implements StorageService {
 
-    /** 对外访问前缀，与 {@link StorageUrl#PUBLIC_PREFIX} 对应（此处不带结尾斜杠，便于 startsWith 判断） */
-    private static final String PUBLIC_PREFIX = "/uploads";
-
     private final Path root;
 
     public LocalStorageService(Path root) {
@@ -39,7 +36,8 @@ public class LocalStorageService implements StorageService {
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
         String relativeDir = "%d/%02d".formatted(today.getYear(), today.getMonthValue());
         String fileName = UUID.randomUUID().toString().replace("-", "") + "." + extension;
-        Path target = root.resolve(relativeDir).resolve(fileName).normalize();
+        String objectKey = relativeDir + "/" + fileName;
+        Path target = root.resolve(objectKey).normalize();
         if (!target.startsWith(root)) {
             // 理论上不可能触发，留作兜底：一旦目录拼接被污染，宁可失败也不写到根目录之外
             throw new BizException(ErrorCode.STORAGE_ERROR);
@@ -51,7 +49,8 @@ public class LocalStorageService implements StorageService {
             log.error("写入文件失败 path={}", target, ex);
             throw new BizException(ErrorCode.STORAGE_ERROR);
         }
-        return PUBLIC_PREFIX + "/" + relativeDir + "/" + fileName;
+        // 对外 URL 由 StorageUrl 统一拼装（与解析同源，形态不会两处漂移）
+        return StorageUrl.publicUrl(objectKey);
     }
 
     @Override
@@ -94,14 +93,16 @@ public class LocalStorageService implements StorageService {
     /**
      * 把对外 URL 还原为磁盘路径；地址非法或解析到根目录之外时返回 null。
      *
-     * <p>{@code normalize()} 会把 {@code ..} 折叠掉，随后必须再确认结果仍在 root 之内——否则
-     * 一个精心构造的地址可能指到上传目录之外。</p>
+     * <p>URL 形态统一由 {@link StorageUrl} 解析（与 S3 实现同口径，只接受本站生成的
+     * {@code /uploads/yyyy/MM/32hex.ext}）。{@code normalize()} 后再确认结果仍在 root 之内——
+     * 冗余的纵深防御，与 {@link #store} 里的同类兜底一致。</p>
      */
     private Path resolve(String url) {
-        if (url == null || !url.startsWith(PUBLIC_PREFIX + "/")) {
+        String objectKey = StorageUrl.objectKey(url).orElse(null);
+        if (objectKey == null) {
             return null;
         }
-        Path target = root.resolve(url.substring(PUBLIC_PREFIX.length() + 1)).normalize();
+        Path target = root.resolve(objectKey).normalize();
         return target.startsWith(root) ? target : null;
     }
 }
