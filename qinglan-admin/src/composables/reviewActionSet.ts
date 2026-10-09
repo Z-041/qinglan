@@ -13,21 +13,68 @@ export interface ReviewActionMeta {
   shortcut: string
   /** 该动作所需权限点（与后端端点注解一一对应）；无权限时不渲染也不响应 */
   permission: AdminPermission
+  /** 处置成功后统一 toast 的文案（默认文案；个别页面如需更具体的措辞可自行覆盖） */
+  successText: string
+  /** 需二次确认 / 填理由的弹窗标题；无需弹窗的动作（如直接通过）不设 */
+  dialogTitle?: string
 }
 
-/** 处置动作的唯一元数据来源：按钮文案、变体、快捷键、权限点都在此一处 */
+/** 发起提案成功后的统一提示：把用户引到「我的提案与投票」跟进后续表决 */
+const PROPOSAL_SUCCESS_TEXT = '已发起处置提案，请在「我的提案与投票」中跟进'
+
+/** 处置动作的唯一元数据来源：按钮文案、变体、快捷键、权限点、成功提示、弹窗标题都在此一处 */
 export const REVIEW_ACTION_META: Record<ReviewAction, ReviewActionMeta> = {
-  approve: { key: 'approve', label: '通过', variant: 'primary', shortcut: '1', permission: 'POST_REVIEW' },
-  reject: { key: 'reject', label: '驳回', variant: 'ghost', shortcut: '2', permission: 'POST_REVIEW' },
-  'take-down': { key: 'take-down', label: '下架', variant: 'danger', shortcut: '3', permission: 'PROPOSAL_CREATE' },
-  dismiss: { key: 'dismiss', label: '举报不成立', variant: 'ghost', shortcut: '4', permission: 'REPORT_DISMISS' },
-  uphold: { key: 'uphold', label: '维持下架', variant: 'ghost', shortcut: '5', permission: 'PROPOSAL_CREATE' },
+  approve: {
+    key: 'approve',
+    label: '通过',
+    variant: 'primary',
+    shortcut: '1',
+    permission: 'POST_REVIEW',
+    successText: '已通过',
+  },
+  reject: {
+    key: 'reject',
+    label: '驳回',
+    variant: 'ghost',
+    shortcut: '2',
+    permission: 'POST_REVIEW',
+    successText: '已驳回',
+    dialogTitle: '驳回帖子',
+  },
+  'take-down': {
+    key: 'take-down',
+    label: '下架',
+    variant: 'danger',
+    shortcut: '3',
+    permission: 'PROPOSAL_CREATE',
+    successText: PROPOSAL_SUCCESS_TEXT,
+    dialogTitle: '发起下架提案',
+  },
+  dismiss: {
+    key: 'dismiss',
+    label: '举报不成立',
+    variant: 'ghost',
+    shortcut: '4',
+    permission: 'REPORT_DISMISS',
+    successText: '已驳回举报',
+  },
+  uphold: {
+    key: 'uphold',
+    label: '维持下架',
+    variant: 'ghost',
+    shortcut: '5',
+    permission: 'PROPOSAL_CREATE',
+    successText: PROPOSAL_SUCCESS_TEXT,
+    dialogTitle: '发起维持下架提案',
+  },
   'hide-contact': {
     key: 'hide-contact',
     label: '隐藏联系方式',
     variant: 'ghost',
     shortcut: '6',
     permission: 'PROPOSAL_CREATE',
+    successText: PROPOSAL_SUCCESS_TEXT,
+    dialogTitle: '发起隐藏联系方式提案',
   },
   'remove-comment': {
     key: 'remove-comment',
@@ -35,14 +82,26 @@ export const REVIEW_ACTION_META: Record<ReviewAction, ReviewActionMeta> = {
     variant: 'danger',
     shortcut: '7',
     permission: 'PROPOSAL_CREATE',
+    successText: PROPOSAL_SUCCESS_TEXT,
+    dialogTitle: '发起移除评论提案',
   },
-  restore: { key: 'restore', label: '恢复可见', variant: 'primary', shortcut: '8', permission: 'DISPOSITION_REVOKE' },
+  restore: {
+    key: 'restore',
+    label: '恢复可见',
+    variant: 'primary',
+    shortcut: '8',
+    permission: 'DISPOSITION_REVOKE',
+    successText: '已恢复可见',
+    dialogTitle: '恢复帖子可见',
+  },
   'show-contact': {
     key: 'show-contact',
     label: '恢复联系方式',
     variant: 'ghost',
     shortcut: '9',
     permission: 'DISPOSITION_REVOKE',
+    successText: '已恢复联系方式',
+    dialogTitle: '恢复联系方式',
   },
 }
 

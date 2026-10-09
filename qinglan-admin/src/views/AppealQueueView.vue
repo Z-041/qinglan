@@ -5,8 +5,8 @@ import AppealReviewDialog from '@/components/admin/AppealReviewDialog.vue'
 import AppealTable from '@/components/admin/AppealTable.vue'
 import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import { pushToast } from '@shared/composables/useToast'
 import { useAppealQueue } from '@/composables/useAppealQueue'
+import { useDispositionFinisher } from '@/composables/useDispositionFinisher'
 import { useQueuePolling } from '@/composables/useQueuePolling'
 import { useQueueShortcuts, type QueueShortcut } from '@/composables/useQueueShortcuts'
 import { useReviewActions } from '@/composables/useReviewActions'
@@ -84,6 +84,22 @@ function onKeydown(event: KeyboardEvent): void {
   openReview(row, action === 'accept')
 }
 
+/**
+ * 处置成功后的收尾：关弹窗、提示、刷新队列，并夹回焦点。
+ * 本页无上下文面板，故不推进选中（无 selectActive）。
+ */
+const { finish } = useDispositionFinisher({
+  cleanup: () => {
+    dialogOpen.value = false
+    current.value = null
+  },
+  refresh,
+  advance: () => {
+    // 连续处置：被复审的条目已从队列消失，同一焦点位即下一条；越界则夹回末行
+    clamp()
+  },
+})
+
 async function handleSubmit(approved: boolean, reason: string): Promise<void> {
   const row = current.value
   if (!row) {
@@ -94,12 +110,7 @@ async function handleSubmit(approved: boolean, reason: string): Promise<void> {
     // 失败原因（含「复审人不得是原处置人」）已由拦截器提示，弹窗保持打开便于改判
     return
   }
-  dialogOpen.value = false
-  current.value = null
-  pushToast(approved ? '已通过申诉，内容恢复可见' : '已维持原判', 'info')
-  await refresh()
-  // 连续处置：被复审的条目已从队列消失，同一焦点位即下一条；越界则夹回末行
-  clamp()
+  await finish(approved ? '已通过申诉，内容恢复可见' : '已维持原判')
 }
 </script>
 

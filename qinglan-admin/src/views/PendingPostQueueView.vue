@@ -5,7 +5,7 @@ import PendingPostTable from '@/components/admin/PendingPostTable.vue'
 import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
 import ReviewContextPanel from '@/components/admin/ReviewContextPanel.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import { pushToast } from '@shared/composables/useToast'
+import { useDispositionFinisher } from '@/composables/useDispositionFinisher'
 import { usePendingPostQueue } from '@/composables/usePendingPostQueue'
 import { useQueuePolling } from '@/composables/useQueuePolling'
 import { useQueueShortcuts, type QueueShortcut } from '@/composables/useQueueShortcuts'
@@ -111,23 +111,25 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 /**
- * 处置成功后的收尾：提示、刷新队列，并把焦点推进到下一条（连续处置）。
+ * 处置成功后的收尾：清理、提示、刷新队列，并把焦点推进到下一条（连续处置）。
  *
- * 不刷新上下文：面板随焦点行切换会自动 `open()`，旧的上下文已被新目标覆盖。
+ * 本页无弹窗可关（理由弹窗的开关在自身 finally 里复位），故不传 cleanup；
+ * 也不刷新上下文：面板随焦点行切换会自动 `open()`，旧的上下文已被新目标覆盖。
  */
-async function advanceAfterHandled(message: string): Promise<void> {
-  pushToast(message, 'info')
-  await refresh()
-  clamp()
-  selectActive()
-}
+const { finish } = useDispositionFinisher({
+  refresh,
+  advance: () => {
+    clamp()
+    selectActive()
+  },
+})
 
 async function handleApprove(): Promise<void> {
   if (!target.value) {
     return
   }
   if (await approvePost(target.value.targetId)) {
-    await advanceAfterHandled('已通过，帖子对外可见')
+    await finish('已通过，帖子对外可见')
   }
 }
 
@@ -153,7 +155,7 @@ async function handleReject(): Promise<void> {
     reasonPromptOpen.value = false
   }
   if (await rejectPost(target.value.targetId, { reason })) {
-    await advanceAfterHandled('已驳回，仅作者可见')
+    await finish('已驳回，仅作者可见')
   }
 }
 </script>

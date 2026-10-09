@@ -8,9 +8,10 @@ import QueueTable from '@/components/admin/QueueTable.vue'
 import ReviewActionBar from '@/components/admin/ReviewActionBar.vue'
 import ReviewContextPanel from '@/components/admin/ReviewContextPanel.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import { pushToast } from '@shared/composables/useToast'
 import { useUserLabels } from '@shared/composables/useUserLabels'
-import { availableReviewActions, blockedByOpenProposal } from '@/composables/reviewActionSet'
+import { REVIEW_ACTION_FLOW } from '@/composables/reviewActionFlow'
+import { availableReviewActions, blockedByOpenProposal, REVIEW_ACTION_META } from '@/composables/reviewActionSet'
+import { useDispositionFinisher } from '@/composables/useDispositionFinisher'
 import { usePermissions } from '@/composables/usePermissions'
 import { useQueuePolling } from '@/composables/useQueuePolling'
 import { useQueueShortcuts, type QueueShortcut } from '@/composables/useQueueShortcuts'
@@ -31,24 +32,8 @@ import {
 
 /**
  * 二期起转为「发起提案」的四个动作（P5 决策 D5）：不再直接处置，需委员会表决。
- * 标题与确认文案按动作区分，其余交给通用的 ProposalReasonDialog。
+ * 动作的输入类别与文案元数据都在 `reviewActionFlow` / `reviewActionSet` 一处，视图不再各存一份。
  */
-const PROPOSAL_ACTIONS: Partial<Record<ReviewAction, { title: string; confirmText: string }>> = {
-  'take-down': { title: '发起下架提案', confirmText: '发起下架提案' },
-  'hide-contact': { title: '发起隐藏联系方式提案', confirmText: '发起隐藏联系方式提案' },
-  uphold: { title: '发起维持下架提案', confirmText: '发起维持下架提案' },
-  'remove-comment': { title: '发起移除评论提案', confirmText: '发起移除评论提案' },
-}
-
-/** 仍需单人处置、只填自由文本理由的动作 → MessageBox 标题 / 成功提示 */
-const REASON_ACTIONS: Partial<Record<ReviewAction, { title: string; success: string }>> = {
-  reject: { title: '驳回帖子', success: '已驳回' },
-  restore: { title: '恢复帖子可见', success: '已恢复可见' },
-  'show-contact': { title: '恢复联系方式', success: '已恢复联系方式' },
-}
-
-/** 发起提案成功后的统一提示：把用户引到「我的提案与投票」跟进后续表决 */
-const PROPOSAL_TOAST = '已发起处置提案，请在「我的提案与投票」中跟进'
 
 const { filters, filtersDirty, items, loading, loadingMore, hasMore, failed, refresh, loadMore, headKeys } =
   useReviewQueue()
@@ -140,13 +125,14 @@ const selectedProposal = computed(() => {
   )
 })
 
-const proposalMeta = computed(
-  () =>
-    (proposalAction.value ? PROPOSAL_ACTIONS[proposalAction.value] : undefined) ?? {
-      title: '',
-      confirmText: '',
-    },
-)
+const proposalMeta = computed(() => {
+  const action = proposalAction.value
+  if (!action) {
+    return { title: '', confirmText: '' }
+  }
+  const title = REVIEW_ACTION_META[action].dialogTitle ?? REVIEW_ACTION_META[action].label
+  return { title, confirmText: title }
+})
 
 /**
  * 一键处置快捷键：只取「当前焦点目标可用且本账号有权限」的动作。
@@ -248,17 +234,39 @@ function onKeydown(event: KeyboardEvent): void {
   }
 }
 
-/** 处置成功后的统一收尾：关弹窗、提示、刷新队列，并把焦点推进到下一条（连续处置） */
-async function advanceAfterHandled(message: string): Promise<void> {
-  proposalOpen.value = false
-  dismissOpen.value = false
-  proposalAction.value = null
-  pushToast(message, 'info')
-  await refresh()
-  // 被处置的条目已从队列消失，同一焦点位即下一条；越界则夹回末行
-  clamp()
-  selectActive()
+/** 单人处置执行器（输入自由文本理由）：动作 → 执行器 */
+const REASON_EXECUTORS: Partial<
+  Record<ReviewAction, (targetId: number, payload: ReasonPayload) => Promise<boolean>>
+> = {
+  reject: rejectPost,
+  restore: restorePost,
+  'show-contact': showPostContact,
 }
+
+/** 发起提案执行器（输入提案载荷）：动作 → 执行器 */
+const PROPOSAL_EXECUTORS: Partial<
+  Record<ReviewAction, (targetId: number, payload: ProposalDispositionPayload) => Promise<boolean>>
+> = {
+  'take-down': takeDownPost,
+  'hide-contact': hidePostContact,
+  uphold: upholdReports,
+  'remove-comment': removeComment,
+}
+
+/** 处置成功后的统一收尾：关弹窗、提示、刷新队列，并把焦点推进到下一条（连续处置） */
+const { finish } = useDispositionFinisher({
+  cleanup: () => {
+    proposalOpen.value = false
+    dismissOpen.value = false
+    proposalAction.value = null
+  },
+  refresh,
+  advance: () => {
+    // 被处置的条目已从队列消失，同一焦点位即下一条；越界则夹回末行
+    clamp()
+    selectActive()
+  },
+})
 
 /** 二次确认 + 填理由；用户取消返回 null（不是错误，静默返回） */
 async function promptReason(title: string): Promise<string | null> {
@@ -278,73 +286,41 @@ async function promptReason(title: string): Promise<string | null> {
   }
 }
 
-/** 单人处置动作（仍直接执行）；发起提案的动作不走这里 */
-async function runReasonAction(action: ReviewAction, targetId: number, payload: ReasonPayload): Promise<boolean> {
-  switch (action) {
-    case 'reject':
-      return rejectPost(targetId, payload)
-    case 'restore':
-      return restorePost(targetId, payload)
-    case 'show-contact':
-      return showPostContact(targetId, payload)
-    default:
-      return false
-  }
-}
-
-/** 发起提案：四个动作各自对应一个「不直接处置」的端点，返回提案号 */
-async function runProposalAction(
-  action: ReviewAction,
-  targetId: number,
-  payload: ProposalDispositionPayload,
-): Promise<boolean> {
-  switch (action) {
-    case 'take-down':
-      return takeDownPost(targetId, payload)
-    case 'hide-contact':
-      return hidePostContact(targetId, payload)
-    case 'uphold':
-      return upholdReports(targetId, payload)
-    case 'remove-comment':
-      return removeComment(targetId, payload)
-    default:
-      return false
-  }
-}
-
+/** 按输入类别数据驱动分发；执行器映射与文案元数据见文件上方与 reviewActionFlow / reviewActionSet */
 async function handleAction(action: ReviewAction): Promise<void> {
   const current = target.value
   if (!current) {
     return
   }
   const targetId = current.targetId
+  const meta = REVIEW_ACTION_META[action]
 
-  if (action === 'approve') {
-    if (await approvePost(targetId)) {
-      await advanceAfterHandled('已通过')
+  switch (REVIEW_ACTION_FLOW[action]) {
+    case 'direct':
+      if (await approvePost(targetId)) {
+        await finish(meta.successText)
+      }
+      return
+    case 'reason': {
+      const reason = await promptReason(meta.dialogTitle ?? meta.label)
+      if (reason === null) {
+        return
+      }
+      const executor = REASON_EXECUTORS[action]
+      if (executor && (await executor(targetId, { reason }))) {
+        await finish(meta.successText)
+      }
+      return
     }
-    return
-  }
-  if (action === 'dismiss') {
-    dismissOpen.value = true
-    return
-  }
-  if (PROPOSAL_ACTIONS[action]) {
-    proposalAction.value = action
-    proposalOpen.value = true
-    return
-  }
-
-  const meta = REASON_ACTIONS[action]
-  if (!meta) {
-    return
-  }
-  const reason = await promptReason(meta.title)
-  if (reason === null) {
-    return
-  }
-  if (await runReasonAction(action, targetId, { reason })) {
-    await advanceAfterHandled(meta.success)
+    case 'dialog':
+      // 「举报不成立」走专用弹窗；其余四个是发起提案（P5 决策 D5）
+      if (action === 'dismiss') {
+        dismissOpen.value = true
+      } else {
+        proposalAction.value = action
+        proposalOpen.value = true
+      }
+      return
   }
 }
 
@@ -354,8 +330,9 @@ async function handleProposalSubmit(payload: ProposalDispositionPayload): Promis
   if (!current || !action) {
     return
   }
-  if (await runProposalAction(action, current.targetId, payload)) {
-    await advanceAfterHandled(PROPOSAL_TOAST)
+  const executor = PROPOSAL_EXECUTORS[action]
+  if (executor && (await executor(current.targetId, payload))) {
+    await finish(REVIEW_ACTION_META[action].successText)
   }
 }
 
@@ -366,7 +343,7 @@ async function handleDismiss(reason: string): Promise<void> {
   }
   const payload = { targetType: current.targetType, targetId: current.targetId, reason }
   if (await dismissReports(payload)) {
-    await advanceAfterHandled('已驳回举报')
+    await finish(REVIEW_ACTION_META.dismiss.successText)
   }
 }
 </script>
