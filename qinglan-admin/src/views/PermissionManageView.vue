@@ -7,17 +7,14 @@ import BaseCard from '@shared/components/base/BaseCard.vue'
 import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import { pushToast } from '@shared/composables/useToast'
 import { useUserLabels } from '@shared/composables/useUserLabels'
+import {
+  ASSIGNABLE_ROLE_OPTIONS,
+  isCommitteeRole,
+  isRoleRevocable,
+  MAX_COMMITTEE_SIZE,
+} from '@/composables/rolePolicy'
 import type { AssignableRole } from '@/types/admin'
 import type { UserProfile } from '@shared/types/user'
-
-/** 与后端 UserRole.MAX_COMMITTEE_SIZE 一致；仅用于文案「已用 N / 6」 */
-const MAX_COMMITTEE_SIZE = 6
-
-/** 可下放的角色：与后端 AssignableRole 一致，刻意不含 SUPER_ADMIN */
-const ASSIGNABLE_OPTIONS: { value: AssignableRole; label: string }[] = [
-  { value: 'ADMIN', label: '管理员' },
-  { value: 'REVIEWER', label: '学生评议员' },
-]
 
 const { roleLabel, statusLabel } = useUserLabels()
 
@@ -30,7 +27,7 @@ const targetUserId = ref('')
 const targetRole = ref<AssignableRole>('REVIEWER')
 
 /** 在册人数由后端名单长度决定，不在前端另算——两边各算一次必然漂移 */
-const used = computed(() => members.value.filter((member) => member.role !== 'SUPER_ADMIN').length)
+const used = computed(() => members.value.filter((member) => isCommitteeRole(member.role)).length)
 const full = computed(() => used.value >= MAX_COMMITTEE_SIZE)
 
 async function load(): Promise<void> {
@@ -123,7 +120,7 @@ async function revoke(member: UserProfile): Promise<void> {
         <el-input v-model="targetUserId" class="w-[160px]" placeholder="用户 ID" inputmode="numeric" />
         <el-select v-model="targetRole" class="w-[160px]">
           <el-option
-            v-for="option in ASSIGNABLE_OPTIONS"
+            v-for="option in ASSIGNABLE_ROLE_OPTIONS"
             :key="option.value"
             :label="option.label"
             :value="option.value"
@@ -166,7 +163,7 @@ async function revoke(member: UserProfile): Promise<void> {
             <td class="px-3 py-3">
               <!-- 超管不可被收回：后端也会拒（唯一超管是后台的最后一道保险） -->
               <button
-                v-if="member.role !== 'SUPER_ADMIN'"
+                v-if="isRoleRevocable(member.role)"
                 type="button"
                 class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-danger hover:text-danger-deep disabled:cursor-not-allowed"
                 :disabled="submitting"

@@ -18,9 +18,12 @@ public enum AssignableRole {
     /** 学生（即收回管理权限） */
     STUDENT;
 
-    /** 是否属于「委员会」（参与表决）。上限与分母快照都只约束这一档 */
+    /**
+     * 是否属于「委员会」（参与表决）。上限与分母快照都只约束这一档。
+     * 判定复用 {@link UserRole#isCommittee()}，不另写一份，避免两处口径漂移。
+     */
     public boolean isCommittee() {
-        return this == ADMIN || this == REVIEWER;
+        return toUserRole().isCommittee();
     }
 
     /**
