@@ -31,6 +31,16 @@ class S3StorageServiceTest {
     static final S3MockExtension S3_MOCK = S3MockExtension.builder()
             .silent()
             .withSecureConnection(false)
+            // S3Mock 3.x 自己就是一个 Spring Boot 应用：内部 `new SpringApplicationBuilder(S3MockApplication.class)`
+            // 会按 classpath 上的自动配置建上下文，于是把本项目的 spring-boot-starter-data-jpa 与 flyway 一并扫进来，
+            // 去建 entityManagerFactory → flyway → dataSource，而 S3Mock 的上下文里根本没有数据库配置。
+            // 本机存在 src/main/resources/application.yml（已被 .gitignore 忽略、含本地库连接）时侥幸能起；
+            // 干净的 checkout（CI）里没有该文件，就以 "Failed to determine a suitable driver class" 整类报错。
+            // S3Mock 只是个 S3 服务、不需要数据库，这里显式关掉这条链，让用例不再依赖本地是否配了库。
+            .withProperty("spring.autoconfigure.exclude", String.join(",",
+                    "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration",
+                    "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration",
+                    "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration"))
             .withInitialBuckets(BUCKET)
             .build();
 
