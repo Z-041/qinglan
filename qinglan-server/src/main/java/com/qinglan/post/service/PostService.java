@@ -20,6 +20,8 @@ import com.qinglan.common.notify.NotificationType;
 import com.qinglan.common.security.Viewer;
 import com.qinglan.common.storage.StorageUrl;
 import com.qinglan.common.store.EphemeralStore;
+import com.qinglan.common.web.CompositeCursor;
+import com.qinglan.common.web.CompositeCursor.KeyKind;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.post.config.PostProperties;
@@ -575,15 +577,7 @@ public class PostService {
             // 首页游标取 Long.MAX_VALUE，省掉 SQL 里的 null 分支
             return Long.MAX_VALUE;
         }
-        try {
-            long cursor = Long.parseLong(raw.trim());
-            if (cursor <= 0) {
-                throw new NumberFormatException("游标必须为正整数");
-            }
-            return cursor;
-        } catch (NumberFormatException ex) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
+        return CompositeCursor.parse(raw, KeyKind.POSITIVE_LONG)[0];
     }
 
     /**
@@ -594,24 +588,12 @@ public class PostService {
         if (raw == null || raw.isBlank()) {
             return HotCursor.firstPage();
         }
-        String[] parts = raw.split(KEY_SEPARATOR);
-        if (parts.length != CURSOR_SEGMENTS) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
-        try {
-            long scoreMicros = Long.parseLong(parts[0]);
-            long id = Long.parseLong(parts[1]);
-            if (scoreMicros < 0 || id <= 0) {
-                throw new NumberFormatException("游标各段不合法");
-            }
-            return new HotCursor(scoreMicros, id);
-        } catch (NumberFormatException ex) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
+        long[] key = CompositeCursor.parse(raw, KeyKind.NON_NEGATIVE_LONG, KeyKind.POSITIVE_LONG);
+        return new HotCursor(key[0], key[1]);
     }
 
     private String formatHotCursor(ScoredPost last) {
-        return last.scoreMicros() + KEY_SEPARATOR + last.post().getId();
+        return CompositeCursor.format(last.scoreMicros(), last.post().getId());
     }
 
     /** 解析「我的帖子」游标「发布时间(微秒):帖子 id」 */
@@ -619,29 +601,13 @@ public class PostService {
         if (raw == null || raw.isBlank()) {
             return new MineCursor(null, null);
         }
-        String[] parts = raw.split(KEY_SEPARATOR);
-        if (parts.length != CURSOR_SEGMENTS) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
-        try {
-            long micros = Long.parseLong(parts[0]);
-            long id = Long.parseLong(parts[1]);
-            if (micros <= 0 || id <= 0) {
-                throw new NumberFormatException("游标各段不合法");
-            }
-            return new MineCursor(CursorCodec.decode(micros), id);
-        } catch (NumberFormatException ex) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
+        long[] key = CompositeCursor.parse(raw, KeyKind.MICROS, KeyKind.POSITIVE_LONG);
+        return new MineCursor(CursorCodec.decode(key[0]), key[1]);
     }
 
     private String formatMineCursor(Post last) {
-        return CursorCodec.encode(last.getCreatedAt()) + KEY_SEPARATOR + last.getId();
+        return CompositeCursor.format(CursorCodec.encode(last.getCreatedAt()), last.getId());
     }
-
-    /** 复合游标段分隔符（信息流系）/ 段数（均为两段） */
-    private static final String KEY_SEPARATOR = ":";
-    private static final int CURSOR_SEGMENTS = 2;
 
     /** 一条带热度分的候选帖子 */
     private record ScoredPost(Post post, long scoreMicros) {

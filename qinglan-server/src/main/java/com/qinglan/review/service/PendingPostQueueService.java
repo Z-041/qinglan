@@ -1,7 +1,7 @@
 package com.qinglan.review.service;
 
-import com.qinglan.common.error.BizException;
-import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.web.CompositeCursor;
+import com.qinglan.common.web.CompositeCursor.KeyKind;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.common.web.TextPreview;
@@ -44,9 +44,6 @@ public class PendingPostQueueService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int PREVIEW_LENGTH = 80;
-    private static final String KEY_SEPARATOR = ":";
-    /** 游标段数：提交微秒 : 帖子 id */
-    private static final int CURSOR_SEGMENTS = 2;
 
     /**
      * 与看板 {@code content.pendingPosts} 同口径（{@code PENDING} + {@code REVIEWING}）：
@@ -119,24 +116,12 @@ public class PendingPostQueueService {
         if (raw == null || raw.isBlank()) {
             return new PendingPostCursor(null, null);
         }
-        String[] parts = raw.split(KEY_SEPARATOR);
-        if (parts.length != CURSOR_SEGMENTS) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
-        try {
-            long micros = Long.parseLong(parts[0]);
-            long id = Long.parseLong(parts[1]);
-            if (micros <= 0 || id <= 0) {
-                throw new NumberFormatException("游标各段不合法");
-            }
-            return new PendingPostCursor(CursorCodec.decode(micros), id);
-        } catch (NumberFormatException ex) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
+        long[] key = CompositeCursor.parse(raw, KeyKind.MICROS, KeyKind.POSITIVE_LONG);
+        return new PendingPostCursor(CursorCodec.decode(key[0]), key[1]);
     }
 
     private String formatCursor(Post post) {
-        return CursorCodec.encode(post.getCreatedAt()) + KEY_SEPARATOR + post.getId();
+        return CompositeCursor.format(CursorCodec.encode(post.getCreatedAt()), post.getId());
     }
 
     /** 待审队列游标：与 {@link PostRepository#findPendingPage} 的排序键逐一对应 */

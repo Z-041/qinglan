@@ -7,6 +7,8 @@ import com.qinglan.common.audit.AuditLogService;
 import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.web.CompositeCursor;
+import com.qinglan.common.web.CompositeCursor.KeyKind;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.common.web.TextPreview;
@@ -69,8 +71,6 @@ public class ProposalService {
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int PREVIEW_LENGTH = 80;
     private static final String KEY_SEPARATOR = ":";
-    /** 游标段数：创建微秒 : 提案 id */
-    private static final int CURSOR_SEGMENTS = 2;
 
     private final ReviewProposalRepository proposalRepository;
     private final ReviewVoteRepository voteRepository;
@@ -543,24 +543,12 @@ public class ProposalService {
         if (raw == null || raw.isBlank()) {
             return new ProposalCursor(null, null);
         }
-        String[] parts = raw.split(KEY_SEPARATOR);
-        if (parts.length != CURSOR_SEGMENTS) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
-        try {
-            long micros = Long.parseLong(parts[0]);
-            long id = Long.parseLong(parts[1]);
-            if (micros <= 0 || id <= 0) {
-                throw new NumberFormatException("游标各段不合法");
-            }
-            return new ProposalCursor(CursorCodec.decode(micros), id);
-        } catch (NumberFormatException ex) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
+        long[] key = CompositeCursor.parse(raw, KeyKind.MICROS, KeyKind.POSITIVE_LONG);
+        return new ProposalCursor(CursorCodec.decode(key[0]), key[1]);
     }
 
     private String formatCursor(ReviewProposal proposal) {
-        return CursorCodec.encode(proposal.getCreatedAt()) + KEY_SEPARATOR + proposal.getId();
+        return CompositeCursor.format(CursorCodec.encode(proposal.getCreatedAt()), proposal.getId());
     }
 
     /** 提案列表游标：与 {@link ReviewProposalRepository#findAdminPage} 的排序键逐一对应 */

@@ -2,8 +2,8 @@ package com.qinglan.review.service;
 
 import com.qinglan.comment.entity.Comment;
 import com.qinglan.comment.repository.CommentRepository;
-import com.qinglan.common.error.BizException;
-import com.qinglan.common.error.ErrorCode;
+import com.qinglan.common.web.CompositeCursor;
+import com.qinglan.common.web.CompositeCursor.KeyKind;
 import com.qinglan.common.web.CursorCodec;
 import com.qinglan.common.web.CursorPage;
 import com.qinglan.common.web.TextPreview;
@@ -74,10 +74,6 @@ public class ReviewQueueService {
     private static final Instant FIRST_PAGE_FIRST_REPORTED_AT = Instant.EPOCH;
     private static final long FIRST_PAGE_TARGET_ID = Long.MAX_VALUE;
     private static final int FIRST_PAGE_TYPE_RANK = Integer.MAX_VALUE;
-    /** 默认排序游标段数：举报数 : 首报微秒 : 目标 id : 目标类型序 */
-    private static final int REPORT_COUNT_CURSOR_SEGMENTS = 4;
-    /** 首报升序游标段数：首报微秒 : 目标 id : 目标类型序 */
-    private static final int FIRST_REPORTED_CURSOR_SEGMENTS = 3;
 
     /**
      * 超时口径：首报早于「当前时刻 - 24 小时」即视为超时，与前端标红逻辑一致。
@@ -329,43 +325,25 @@ public class ReviewQueueService {
             return new ReviewQueueCursor(FIRST_PAGE_REPORT_COUNT, FIRST_PAGE_FIRST_REPORTED_AT,
                     FIRST_PAGE_TARGET_ID, FIRST_PAGE_TYPE_RANK);
         }
-        int expectedSegments = sort == ReviewQueueSort.FIRST_REPORTED_ASC
-                ? FIRST_REPORTED_CURSOR_SEGMENTS : REPORT_COUNT_CURSOR_SEGMENTS;
-        String[] parts = raw.split(KEY_SEPARATOR);
-        if (parts.length != expectedSegments) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
+        if (sort == ReviewQueueSort.FIRST_REPORTED_ASC) {
+            long[] key = CompositeCursor.parse(raw,
+                    KeyKind.MICROS, KeyKind.POSITIVE_LONG, KeyKind.NON_NEGATIVE_INT);
+            return new ReviewQueueCursor(FIRST_PAGE_REPORT_COUNT, CursorCodec.decode(key[0]),
+                    key[1], (int) key[2]);
         }
-        try {
-            if (sort == ReviewQueueSort.FIRST_REPORTED_ASC) {
-                Instant firstReportedAt = CursorCodec.decode(Long.parseLong(parts[0]));
-                long targetId = Long.parseLong(parts[1]);
-                int typeRank = Integer.parseInt(parts[2]);
-                if (targetId <= 0 || typeRank < 0) {
-                    throw new NumberFormatException("游标各段不合法");
-                }
-                return new ReviewQueueCursor(FIRST_PAGE_REPORT_COUNT, firstReportedAt, targetId, typeRank);
-            }
-            long reportCount = Long.parseLong(parts[0]);
-            Instant firstReportedAt = CursorCodec.decode(Long.parseLong(parts[1]));
-            long targetId = Long.parseLong(parts[2]);
-            int typeRank = Integer.parseInt(parts[3]);
-            if (reportCount <= 0 || targetId <= 0 || typeRank < 0) {
-                throw new NumberFormatException("游标各段不合法");
-            }
-            return new ReviewQueueCursor(reportCount, firstReportedAt, targetId, typeRank);
-        } catch (NumberFormatException ex) {
-            throw new BizException(ErrorCode.CURSOR_INVALID);
-        }
+        long[] key = CompositeCursor.parse(raw,
+                KeyKind.POSITIVE_LONG, KeyKind.MICROS, KeyKind.POSITIVE_LONG, KeyKind.NON_NEGATIVE_INT);
+        return new ReviewQueueCursor(key[0], CursorCodec.decode(key[1]), key[2], (int) key[3]);
     }
 
     /** 游标格式必须与排序口径一致，否则下一次翻页会因段数不符被拒 */
     private String formatCursor(ReviewQueueRow row, ReviewQueueSort sort) {
-        String firstReported = CursorCodec.encode(row.firstReportedAt()) + KEY_SEPARATOR
-                + row.targetId() + KEY_SEPARATOR + typeRank(row.targetType());
+        long firstReported = CursorCodec.encode(row.firstReportedAt());
         if (sort == ReviewQueueSort.FIRST_REPORTED_ASC) {
-            return firstReported;
+            return CompositeCursor.format(firstReported, row.targetId(), typeRank(row.targetType()));
         }
-        return row.reportCount() + KEY_SEPARATOR + firstReported;
+        return CompositeCursor.format(row.reportCount(), firstReported, row.targetId(),
+                typeRank(row.targetType()));
     }
 
     /**
