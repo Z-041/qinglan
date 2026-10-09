@@ -4,7 +4,6 @@ import com.qinglan.comment.entity.Comment;
 import com.qinglan.comment.repository.CommentRepository;
 import com.qinglan.common.audit.AuditAction;
 import com.qinglan.common.audit.AuditLogService;
-import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.common.web.CompositeCursor;
@@ -110,7 +109,7 @@ public class ProposalService {
             // uk_proposal_open_target：同一目标已有进行中提案，明确回报而不是静默吞掉
             throw new BizException(ErrorCode.PROPOSAL_ALREADY_OPEN);
         }
-        auditLogService.record(auditTarget(saved.getTargetType()), saved.getTargetId(),
+        auditLogService.record(saved.getTargetType().auditTarget(), saved.getTargetId(),
                 AuditAction.PROPOSAL_CREATE, proposerId, describeCreate(saved));
         log.info("发起处置提案 proposalId={} action={} target={}:{}，发起人 proposerId={}",
                 saved.getId(), saved.getAction(), saved.getTargetType(), saved.getTargetId(), proposerId);
@@ -360,7 +359,7 @@ public class ProposalService {
     }
 
     private void auditResolve(ReviewProposal proposal, Long operatorId, String reason) {
-        auditLogService.record(auditTarget(proposal.getTargetType()), proposal.getTargetId(),
+        auditLogService.record(proposal.getTargetType().auditTarget(), proposal.getTargetId(),
                 AuditAction.PROPOSAL_RESOLVE, operatorId, reason);
     }
 
@@ -530,13 +529,6 @@ public class ProposalService {
 
     private String normalize(String value) {
         return value == null || value.isBlank() ? null : value.trim();
-    }
-
-    private AuditTargetType auditTarget(ReviewTargetType targetType) {
-        return switch (targetType) {
-            case POST -> AuditTargetType.POST;
-            case COMMENT -> AuditTargetType.COMMENT;
-        };
     }
 
     private ProposalCursor parseCursor(String raw) {

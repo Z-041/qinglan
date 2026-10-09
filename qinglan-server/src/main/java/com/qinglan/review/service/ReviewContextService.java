@@ -4,7 +4,6 @@ import com.qinglan.comment.entity.Comment;
 import com.qinglan.comment.repository.CommentRepository;
 import com.qinglan.common.audit.AuditLog;
 import com.qinglan.common.audit.AuditLogRepository;
-import com.qinglan.common.audit.AuditTargetType;
 import com.qinglan.common.error.BizException;
 import com.qinglan.common.error.ErrorCode;
 import com.qinglan.post.entity.Post;
@@ -90,7 +89,7 @@ public class ReviewContextService {
                         post.getId(), post.getStatus().name(), post.getCreatedAt()))
                 .toList();
         List<AdminReviewHistoryResponse.DispositionItem> dispositions = auditLogRepository
-                .findDispositionHistory(auditTargetType(targetType), targetId,
+                .findDispositionHistory(targetType.auditTarget(), targetId,
                         PageRequest.of(0, DISPOSITION_LIMIT))
                 .stream()
                 .map(ReviewContextService::toDisposition)
@@ -101,14 +100,6 @@ public class ReviewContextService {
     private static AdminReviewHistoryResponse.DispositionItem toDisposition(AuditLog log) {
         return new AdminReviewHistoryResponse.DispositionItem(
                 log.getAction(), log.getOperatorId(), log.getReason(), log.getCreatedAt());
-    }
-
-    /** 审核目标类型 → 审计目标类型：两者取值一致（POST / COMMENT），但分属不同的枚举，需显式映射 */
-    private AuditTargetType auditTargetType(ReviewTargetType targetType) {
-        return switch (targetType) {
-            case POST -> AuditTargetType.POST;
-            case COMMENT -> AuditTargetType.COMMENT;
-        };
     }
 
     private Target resolveTarget(ReviewTargetType targetType, Long targetId) {

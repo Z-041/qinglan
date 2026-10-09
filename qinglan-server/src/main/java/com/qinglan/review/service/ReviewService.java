@@ -244,7 +244,7 @@ public class ReviewService {
         if (request.targetType() == ReviewTargetType.POST) {
             postRepository.adjustReportCount(request.targetId(), -pending.size());
         }
-        auditLogService.record(auditTarget(request.targetType()), request.targetId(),
+        auditLogService.record(request.targetType().auditTarget(), request.targetId(),
                 AuditAction.REPORT_DISMISS, operatorId, normalize(request.reason()));
         notifyReporters(pending, REPORT_DISMISSED_TITLE, request.targetType(), request.targetId(), operatorId);
         log.info("驳回举报 targetType={} targetId={} 共 {} 条，操作人 operatorId={}",
@@ -324,12 +324,5 @@ public class ReviewService {
 
     private String normalize(String value) {
         return value == null || value.isBlank() ? null : value.trim();
-    }
-
-    private AuditTargetType auditTarget(ReviewTargetType targetType) {
-        return switch (targetType) {
-            case POST -> AuditTargetType.POST;
-            case COMMENT -> AuditTargetType.COMMENT;
-        };
     }
 }
