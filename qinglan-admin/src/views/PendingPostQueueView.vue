@@ -27,8 +27,11 @@ const { items, loading, loadingMore, hasMore, failed, refresh, loadMore, headKey
 const {
   target,
   context,
+  history,
   loading: contextLoading,
+  historyLoading,
   failed: contextFailed,
+  historyFailed,
   open,
   close,
 } = useReviewContext()
@@ -207,8 +210,11 @@ async function handleReject(): Promise<void> {
     <ReviewContextPanel
       v-model:open="panelOpen"
       :context="context"
+      :history="history"
       :loading="contextLoading"
+      :history-loading="historyLoading"
       :failed="contextFailed"
+      :history-failed="historyFailed"
     >
       <!-- 只用「通过 / 驳回」两个动作，因此不挂 ReviewActionBar：那条处置栏还会给出
            「下架 / 隐藏联系方式 / 举报不成立」，而待审帖从未对外可见，下架会触发非法状态迁移。

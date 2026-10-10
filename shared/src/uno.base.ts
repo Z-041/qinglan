@@ -63,8 +63,6 @@ export const shortcuts = {
 
   // 卡片（管理端与详情/表单等仍在使用，语义保持不变；学生端列表行改用下方的 ql-row）
   'ql-card': 'rounded-xl border border-line bg-surface shadow-sm',
-  'ql-card-interactive':
-    'ql-card relative transition duration-200 hover:-translate-y-0.5 hover:border-primary-soft hover:shadow-md',
 
   // 社区列表行：白底 + 底部 1px 分割线 + 悬停仅换底色（不浮起、不圆角、不投影）
   // 学生端信息流用，管理端不使用
