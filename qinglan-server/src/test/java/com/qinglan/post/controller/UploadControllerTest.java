@@ -106,6 +106,16 @@ class UploadControllerTest {
     }
 
     @Test
+    @DisplayName("完全不带 file 部分返回 400（而不是落到兜底分支的 500）")
+    void shouldRejectMissingFilePart() throws Exception {
+        authenticate();
+
+        mockMvc.perform(multipart("/api/uploads/images"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("QL-400-001"));
+    }
+
+    @Test
     @DisplayName("批量换取图片地址成功，逐条回填可读与可用地址")
     void shouldRefreshImageUrls() throws Exception {
         authenticate();

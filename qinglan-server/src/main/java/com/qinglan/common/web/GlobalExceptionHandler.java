@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 /**
  * 全局异常处理。对外只返回错误码与安全文案，堆栈仅落服务端日志。
@@ -81,6 +82,17 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ApiResponse<Void>> handleMissingParam(MissingServletRequestParameterException ex) {
+        return ResponseEntity.status(ErrorCode.INVALID_REQUEST.status())
+                .body(ApiResponse.error(ErrorCode.INVALID_REQUEST.code(), ErrorCode.INVALID_REQUEST.message()));
+    }
+
+    /**
+     * 缺少 multipart 必填部分（如上传接口未带 {@code file}）。
+     * 它与 {@link MissingServletRequestParameterException} 是两支不同的异常，
+     * 不映射会落到兜底分支返回 500，把「调用方漏传文件」误报成「服务故障」。
+     */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingPart(MissingServletRequestPartException ex) {
         return ResponseEntity.status(ErrorCode.INVALID_REQUEST.status())
                 .body(ApiResponse.error(ErrorCode.INVALID_REQUEST.code(), ErrorCode.INVALID_REQUEST.message()));
     }
