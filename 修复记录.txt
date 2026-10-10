@@ -17,6 +17,65 @@
 
 
 --------------------------------------------------------------------------------
+R-40 UI 与可访问性专项审查（Vercel Web Interface Guidelines）：系统性三类，20+ 文件
+--------------------------------------------------------------------------------
+[2026-10-10]  类型：前端可访问性加固  状态：已交付；三包 typecheck/lint/test/build 真跑，浏览器与屏幕阅读器实测未做
+来源：换方向审查——前几轮都在架构 / 规范 / 安全，本轮对 58 个 .vue 按 Vercel Web Interface
+Guidelines（可访问性 / 焦点态 / 表单 / 动效 / 排版 / 触控 / i18n）做审查，共 62 项发现。
+按用户「全部修复」处理了其中低成本、纯属性或样式类的系统性三类；行为改造类登记 T-30/T-31/T-32。
+
+现象（系统性最强的三类）
+  - 全仓无 prefers-reduced-motion 兜底：toast、公告倒计时进度条、按钮 / 上传 spinner、ECharts
+    共 5 处动效，开启系统「减少动态效果」的用户无法关闭。
+  - 弹窗 / 滚动区缺 overscroll-behavior: contain：公告弹窗、举报弹窗、删评论确认遮罩、公告正文
+    滚动区共 4 处，滚到边界会连锁滚动背后的页面（滚动穿透）。
+  - 可访问名缺失：点赞按钮内容只有数字；申诉 / 评论两个 textarea 无 label；管理端 el-input /
+    el-select 无 aria-label；BaseInput / BaseTextarea 不支持 name；登录框缺 name / spellcheck /
+    验证码自动填充。同类还有 sr-only radio 无键盘焦点环、消息列表用 div@click、无 skip link、
+    h1 缺失、筛选按钮无 aria-pressed、数值列非 tabular-nums、时间格式隐式跟随浏览器语言等。
+
+根因
+  - 项目此前没有可访问性基线。这些属性框架不默认给、肉眼测试看不出，没有外部清单时不会被发现；
+    其中「公告正文滚动区无 tabindex」不是体验问题而是功能阻断——键盘用户无法滚到底，强制阅读
+    弹窗永远关不掉。
+
+处理
+  ① 动效：shared/src/styles/main.css 加一处全局 @media (prefers-reduced-motion: reduce)，
+    把 animation / transition 压到 0.01ms、scroll-behavior 回 auto，CSS 兜底一次覆盖
+    toast / 进度条 / spinner 四处；ECharts 是 canvas 动画、CSS 管不到，EChart.vue 内用
+    matchMedia 判定后 setOption({ animation: false })（无 matchMedia 的 jsdom 按不减少处理）。
+  ② 滚动穿透：4 处加 UnoCSS 的 overscroll-contain；公告正文滚动区同时补 tabindex=0，
+    修掉键盘用户无法滚动的功能阻断。
+  ③ 可访问名与同类低成本项：
+    - BaseInput / BaseTextarea 新增 name / ariaLabel / spellcheck 三个 props 并透传；
+    - 两端登录页 email / 验证码 / 学号补 name 与 spellcheck=false，验证码补
+      autocomplete=one-time-code，placeholder 改为带示例并以「…」结尾；
+    - 两个点赞按钮补 aria-label（aria-pressed 原本已有）；两个 textarea 补 name + aria-label；
+    - PermissionManageView / AuditLogView 的 el-input、el-select 补 aria-label；
+    - TopicFilter / HomeSidebar 筛选按钮补 aria-pressed、容器补 role=group + aria-label
+      （PublishView 话题组随 TopicFilter 一并解决，图片组补 role=group）；
+    - ReportDialog / AppealReviewDialog 的 sr-only radio 补 peer-focus-visible 焦点环；
+    - NotificationsView 无链接条目由 div@click 改为真 button（键盘可聚焦、可回车）；
+    - 学生端 App.vue 与管理端 AdminLayout 补「跳到主内容」skip link（平时 sr-only、focus 显现，
+      分别锚定 main#main-content / main#admin-main）；
+    - HomeView 与 PostDetailView 补 sr-only h1（后者的 h2「评论」原本前无 h1）；
+    - TodoBell 的 aria-label 含角标数量，另加 sr-only 的 aria-live 区域播报轮询变化，
+      视觉角标标 aria-hidden 避免重复朗读；
+    - 5 处并排数值（信用分 / 最短阅读秒数 / 看板指标 / 两处票数）补 tabular-nums；
+    - formatAbsoluteTime 由裸 toLocaleString() 改为显式 Intl.DateTimeFormat('zh-CN', …)，
+      formatter 提模块级复用；ProfileView 不再自调 toLocaleString，统一走共享函数；
+    - EChart 容器补 role="img" 与 ariaLabel prop，Dashboard 5 个图表逐个传入名称；
+    - 「更换邮箱」「取消回复」两个纯文字按钮补 hover 态。
+
+验证
+  - shared / qinglan-web / qinglan-admin 三包：typecheck、lint 全过；测试 13 / 23 / 40 个
+    测试文件全绿；build 全过。
+  - 3 个旧测试（AuditLogView / QueueTable / PendingPostTable 的 spec）原本用裸
+    new Date(iso).toLocaleString() 当 title 定位键，随格式口径变更改为引用共享
+    formatAbsoluteTime——定位意图不变，不是放宽断言；格式本身由 useRelativeTime 的测试负责。
+  - 浏览器真实键盘 / 屏幕阅读器（NVDA / VoiceOver）实测未做。
+
+--------------------------------------------------------------------------------
 R-39 私有图片在浏览器中取不到（<img> 不带令牌）：按 viewer 签发短时签名 URL
 --------------------------------------------------------------------------------
 [2026-10-09]  类型：设计疏漏修正  状态：已交付；后端真跑验证，浏览器真实取图与真实对象存储未实测
@@ -2247,6 +2306,24 @@ T-09（软删残留 like_record）已由 R-15 解决并移出；T-12（R-19 复�
 解决并移出，其 G 项的归属绑定部分转为上面的 T-12'；T-19（5 处 sm: 逐级增强写法）已由 R-25
 解决并移出——实际是 6 处，且 BaseCard.spec 断言 sm:p-6 才是当时没顺手改的真实原因，两者都已处理；T-21（PostCard 紧凑行点赞按钮嵌在 <a> 内）已由 R-27 解决并移出。
 
+T-30  列表 / 看板的筛选状态未同步 URL query（R-40 遗留，共 6 处）
+      HomeView 的话题、ReviewQueueView（理由 / 类型 / 排序 / 只看超时）、ProposalListView
+      （状态 / 只看我发起的）、UserManageView（状态 / 角色 / 信用分 / 时间）、AuditLogView
+      （动作 / 时间范围）、DashboardView 的 trendRange（7d/30d）。现状只存内存：刷新即丢、
+      链接不可分享、浏览器前进后退不还原。改法要统一（nuqs 类库或自研 route query 同步），
+      涉及每个 composable 的取数时机，属交互行为改造，专项处理而非在 a11y 轮次顺手改。
+
+T-31  4 个管理端弹窗「校验未过即 disabled 提交按钮」（R-40 遗留）
+      AnnouncementFormDialog / DismissReportsDialog / AppealReviewDialog / CreditAdjustDialog /
+      BanUserDialog 共 5 个弹窗（报告写 4 个，复核为 5 个）。Web Interface Guidelines 要求按钮
+      保持可用、提交时再校验并把焦点移到首个错误——disabled 会让屏幕阅读器读不到「为什么不能点」。
+      改造涉及各弹窗校验时机与既有表单测试，留专项；当前不是可访问性阻断（错误原因在字段上可见）。
+
+T-32  帖子详情单图无显式宽高（CLS 风险，R-40 遗留）
+      PostDetailView 单图分支只有 max-h-96，无 width/height 也无固定 aspect-ratio，图片加载
+      完成时正文会下移。彻底修需要后端在图片上传时记录尺寸并下发，或与产品约定统一宽高比规则，
+      有视觉回归风险，未在 a11y 轮次擅动。
+
 
 ================================================================================
 三、经验（跨条目，务必延续）
@@ -2539,3 +2616,11 @@ T-09（软删残留 like_record）已由 R-15 解决并移出；T-12（R-19 复�
     由此得出一条改造清单：改掉一个入口的调用方式后，要专门回头看一眼「原来由它触发的下游分支
     还有没有人能触发」，并顺手把随之失效的测试一起删——留着它比删掉更危险，它会让下一个人以为
     那个功能还在。
+
+53. 可访问性问题的特点是「框架不默认给、肉眼测不出、但真实用户会被挡住」。R-40 的 62 项里没有
+    一项会让普通鼠标用户察觉，但「公告正文滚动区无 tabindex」会让键盘用户永远滚不到底、强制阅读
+    弹窗关不掉——a11y 缺陷可以直接等于功能不可用，不只是体验优化。这类属性靠 code review 肉眼
+    看不住，要靠一份外部清单（本轮是 Vercel Web Interface Guidelines）定期过；修法优先级是
+    「全局一处兜底」优先（reduced-motion 媒体查询放 main.css 一处、焦点环用 peer-focus-visible
+    类），而不是每个组件各写一遍；同时区分「纯属性修复」（可顺手做）与「行为变更」（筛选入 URL、
+    disabled 改提交时校验），后者必须登记待办、不能混在 a11y 轮次里改了产品交互。

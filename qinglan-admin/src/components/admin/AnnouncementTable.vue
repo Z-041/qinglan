@@ -92,7 +92,7 @@ function boolText(value: boolean): string {
         </td>
         <td class="px-3 py-3">{{ statusLabel(row.status) }}</td>
         <td class="whitespace-nowrap px-3 py-3">{{ periodText(row) }}</td>
-        <td class="px-3 py-3">{{ row.minReadSeconds }}</td>
+        <td class="px-3 py-3 tabular-nums">{{ row.minReadSeconds }}</td>
         <td class="px-3 py-3">{{ boolText(row.requireScrollToEnd) }}</td>
         <td class="px-3 py-3">{{ boolText(row.requireConfirm) }}</td>
         <td class="whitespace-nowrap px-3 py-3" :title="publishedTitle(row)">

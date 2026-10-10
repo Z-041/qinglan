@@ -131,7 +131,13 @@ onMounted(() => {
 
     <section class="ql-card overflow-clip">
       <div class="flex flex-wrap items-center gap-2 border-b border-line px-3 py-3">
-        <el-select v-model="actionFilter" class="w-[200px]" placeholder="全部动作" clearable>
+        <el-select
+          v-model="actionFilter"
+          class="w-[200px]"
+          placeholder="全部动作"
+          clearable
+          aria-label="按动作筛选"
+        >
           <el-option
             v-for="(label, action) in ACTION_LABELS"
             :key="action"
@@ -139,9 +145,21 @@ onMounted(() => {
             :value="action"
           />
         </el-select>
-        <el-input v-model="fromFilter" type="datetime-local" class="w-[210px]" placeholder="起始时间" />
+        <el-input
+          v-model="fromFilter"
+          type="datetime-local"
+          class="w-[210px]"
+          placeholder="起始时间"
+          aria-label="起始时间"
+        />
         <span class="text-xs text-muted">至</span>
-        <el-input v-model="toFilter" type="datetime-local" class="w-[210px]" placeholder="结束时间" />
+        <el-input
+          v-model="toFilter"
+          type="datetime-local"
+          class="w-[210px]"
+          placeholder="结束时间"
+          aria-label="结束时间"
+        />
         <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">筛选</BaseButton>
       </div>
 

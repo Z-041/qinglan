@@ -86,6 +86,13 @@ watch(
 
 <template>
   <div class="flex min-h-screen flex-col">
+    <!-- 跳到主内容：平时视觉隐藏，键盘 Tab 的第一站显现，避免每次都穿过页头 -->
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-toast focus:rounded-lg focus:border focus:border-line focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:text-ink focus:shadow-xl"
+    >
+      跳到主内容
+    </a>
     <AppHeader
       :authenticated="authenticated"
       :role="profile?.role ?? null"
@@ -94,7 +101,7 @@ watch(
       @sign-out="handleSignOut"
     />
 
-    <main :class="fullWidth ? 'flex-1' : 'ql-container flex-1 py-10 max-sm:py-6'">
+    <main id="main-content" :class="fullWidth ? 'flex-1' : 'ql-container flex-1 py-10 max-sm:py-6'">
       <!-- 按 path 强制重建：Vue Router 对「同一路由只换参数」默认复用组件实例，
            于是 /posts/1 直接改成 /posts/2 时 setup 不会重跑、页面仍显示旧帖。
            按 path 加 key 让参数变化等同一次重新进入，代价只是这类跳转多做一次挂载。 -->

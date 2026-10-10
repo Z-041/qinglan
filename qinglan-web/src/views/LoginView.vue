@@ -148,9 +148,11 @@ function changeEmail(): void {
       >
         <BaseInput
           v-model="email"
+          name="email"
           type="email"
           autocomplete="email"
           placeholder="name@qinglan.edu.cn"
+          :spellcheck="false"
           required
         />
       </FormField>
@@ -163,7 +165,11 @@ function changeEmail(): void {
         <span class="min-w-0 truncate text-muted">
           验证码已发送至 <span class="font-medium text-ink">{{ email }}</span>
         </span>
-        <button type="button" class="shrink-0 cursor-pointer text-primary-deep" @click="changeEmail">
+        <button
+          type="button"
+          class="shrink-0 cursor-pointer text-primary-deep transition-colors hover:text-primary-strong"
+          @click="changeEmail"
+        >
           更换邮箱
         </button>
       </div>
@@ -174,7 +180,16 @@ function changeEmail(): void {
         </p>
         <p class="text-xs text-muted">验证码有效期 {{ CODE_TTL_MINUTES }} 分钟。</p>
         <FormField label="验证码">
-          <BaseInput v-model="code" inputmode="numeric" :maxlength="6" placeholder="6 位数字" required />
+          <BaseInput
+            v-model="code"
+            name="code"
+            inputmode="numeric"
+            :maxlength="6"
+            placeholder="如 123456"
+            autocomplete="one-time-code"
+            :spellcheck="false"
+            required
+          />
         </FormField>
         <BaseButton html-type="submit" block :loading="submitting">验证并登录</BaseButton>
         <BaseButton
@@ -194,7 +209,13 @@ function changeEmail(): void {
           :hint="studentId && !studentIdValid ? '' : '4-24 位字母或数字，绑定后不可更改'"
           :error="studentId && !studentIdValid ? '学号须为 4-24 位字母或数字' : ''"
         >
-          <BaseInput v-model="studentId" placeholder="请输入学号" required />
+          <BaseInput
+            v-model="studentId"
+            name="studentId"
+            placeholder="请输入学号…"
+            :spellcheck="false"
+            required
+          />
         </FormField>
         <BaseButton html-type="submit" block :loading="submitting" :disabled="!studentIdValid">
           完成认证

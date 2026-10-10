@@ -91,7 +91,15 @@ async function handleVerify(): Promise<void> {
 
       <form v-if="step === 'email'" class="mt-6 flex flex-col gap-4" @submit.prevent="handleSendCode">
         <FormField label="校园邮箱" hint="使用管理员账号绑定的校园邮箱">
-          <BaseInput v-model="email" type="email" autocomplete="email" placeholder="name@qinglan.edu.cn" required />
+          <BaseInput
+            v-model="email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            placeholder="name@qinglan.edu.cn"
+            :spellcheck="false"
+            required
+          />
         </FormField>
         <BaseButton html-type="submit" block :loading="submitting" :disabled="resendRemaining > 0">
           {{ resendRemaining > 0 ? `请 ${resendRemaining}s 后再试` : '获取验证码' }}
@@ -107,7 +115,16 @@ async function handleVerify(): Promise<void> {
           本地联调验证码：<span class="font-semibold tracking-wide">{{ devCode }}</span>
         </p>
         <FormField label="验证码">
-          <BaseInput v-model="code" inputmode="numeric" :maxlength="6" placeholder="6 位数字" required />
+          <BaseInput
+            v-model="code"
+            name="code"
+            inputmode="numeric"
+            :maxlength="6"
+            placeholder="如 123456"
+            autocomplete="one-time-code"
+            :spellcheck="false"
+            required
+          />
         </FormField>
         <BaseButton html-type="submit" block :loading="submitting">登录</BaseButton>
         <BaseButton variant="ghost" size="sm" block @click="step = 'email'">更换邮箱</BaseButton>

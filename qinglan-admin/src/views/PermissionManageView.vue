@@ -112,8 +112,14 @@ async function revoke(member: UserProfile): Promise<void> {
         出于隐私要求后台看不到学号与邮箱，请填写目标用户的 ID（可由本人提供）。
       </p>
       <div class="mt-3 flex flex-wrap items-center gap-2">
-        <el-input v-model="targetUserId" class="w-[160px]" placeholder="用户 ID" inputmode="numeric" />
-        <el-select v-model="targetRole" class="w-[160px]">
+        <el-input
+          v-model="targetUserId"
+          class="w-[160px]"
+          placeholder="用户 ID"
+          inputmode="numeric"
+          aria-label="目标用户 ID"
+        />
+        <el-select v-model="targetRole" class="w-[160px]" aria-label="要授予的角色">
           <el-option
             v-for="option in ASSIGNABLE_ROLE_OPTIONS"
             :key="option.value"

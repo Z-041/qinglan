@@ -183,7 +183,7 @@ async function handleSubmit(): Promise<void> {
             <p v-if="blockedReason" class="ql-error" role="alert">{{ blockedReason }}</p>
           </div>
 
-          <div class="mt-5">
+          <div class="mt-5" role="group" :aria-label="`图片（最多 ${MAX_IMAGES_PER_POST} 张）`">
             <span class="ql-label">图片（最多 {{ MAX_IMAGES_PER_POST }} 张）</span>
             <!-- 显式传 max：上限只认 useImageUpload 的常量，不让组件默认值与它各写一份 -->
             <ImagePicker

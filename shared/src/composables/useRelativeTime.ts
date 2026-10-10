@@ -28,10 +28,26 @@ function pad(value: number): string {
   return String(value).padStart(2, '0')
 }
 
-/** 绝对时间（本地时区完整格式），供 `title` 悬停展示 */
+/**
+ * 绝对时间（本地时区完整格式），供 `title` 悬停展示。
+ *
+ * 显式锁定 zh-CN 而不是裸 {@code toLocaleString()}：后者随浏览器语言变，
+ * 同一时刻在英文环境会渲染成 "10/9/2026, 3:04:05 PM"，与中文界面不一致。formatter
+ * 提到模块级复用，避免每次渲染都构造一次。
+ */
+const absoluteFormatter = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+})
+
 export function formatAbsoluteTime(iso: string): string {
   const date = new Date(iso)
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString()
+  return Number.isNaN(date.getTime()) ? '' : absoluteFormatter.format(date)
 }
 
 /**

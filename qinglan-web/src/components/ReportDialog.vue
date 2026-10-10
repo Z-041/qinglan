@@ -81,7 +81,7 @@ function handleSubmit(): void {
     v-if="props.open"
     ref="dialogRef"
     tabindex="-1"
-    class="fixed inset-0 z-overlay flex items-center justify-center bg-black/40 p-4 outline-none max-sm:items-end"
+    class="fixed inset-0 z-overlay flex overscroll-contain items-center justify-center bg-black/40 p-4 outline-none max-sm:items-end"
     role="dialog"
     aria-modal="true"
     aria-label="举报"
@@ -116,7 +116,7 @@ function handleSubmit(): void {
               :value="reason"
             />
             <span
-              class="block rounded-lg border border-line px-3 py-2 text-center text-xs text-muted transition peer-checked:(border-primary bg-primary-soft font-medium text-primary-deep)"
+              class="block rounded-lg border border-line px-3 py-2 text-center text-xs text-muted transition peer-checked:(border-primary bg-primary-soft font-medium text-primary-deep) peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-1"
             >
               {{ reportReasonLabel(reason) }}
             </span>
@@ -131,7 +131,7 @@ function handleSubmit(): void {
           v-model="detail"
           :rows="3"
           :maxlength="500"
-          placeholder="补充具体情况，便于我们核实"
+          placeholder="补充具体情况，便于我们核实…"
         />
       </div>
 

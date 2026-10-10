@@ -16,11 +16,14 @@ const total = computed(() => props.groups.reduce((sum, group) => sum + group.cou
 
 <template>
   <el-popover trigger="click" placement="bottom-end" :width="210">
+    <!-- 轮询会让总数变化：视觉隐藏的 live region 负责把变化播报给屏幕阅读器；
+         按钮自身的 aria-label 也带数量，保证聚焦时读到的是完整语义 -->
+    <span class="sr-only" aria-live="polite">{{ total > 0 ? `待办提醒，${total} 项待处理` : '' }}</span>
     <template #reference>
       <button
         type="button"
         class="relative flex cursor-pointer items-center rounded-lg px-2 py-1.5 text-muted transition hover:bg-primary-tint hover:text-ink"
-        aria-label="待办提醒"
+        :aria-label="total > 0 ? `待办提醒，${total} 项待处理` : '待办提醒，暂无待办'"
       >
         <!-- 铃铛图标用 currentColor，不引入图标库、不硬编码色值 -->
         <svg
@@ -38,6 +41,7 @@ const total = computed(() => props.groups.reduce((sum, group) => sum + group.cou
         </svg>
         <span
           v-if="total > 0"
+          aria-hidden="true"
           class="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-danger px-1 text-center text-[11px] font-medium leading-[18px] text-white"
         >
           {{ total > 99 ? '99+' : total }}

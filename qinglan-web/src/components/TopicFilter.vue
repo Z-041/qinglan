@@ -20,11 +20,12 @@ const CHIP_OFF = 'border-line bg-surface text-muted hover:border-primary-soft ho
 </script>
 
 <template>
-  <div class="flex flex-wrap gap-2">
+  <div class="flex flex-wrap gap-2" role="group" aria-label="话题筛选">
     <button
       v-if="allowAll"
       type="button"
       :class="[CHIP_BASE, model === null ? CHIP_ON : CHIP_OFF]"
+      :aria-pressed="model === null"
       @click="model = null"
     >
       全部
@@ -34,6 +35,7 @@ const CHIP_OFF = 'border-line bg-surface text-muted hover:border-primary-soft ho
       :key="topic.id"
       type="button"
       :class="[CHIP_BASE, model === topic.id ? CHIP_ON : CHIP_OFF]"
+      :aria-pressed="model === topic.id"
       @click="model = topic.id"
     >
       {{ topic.name }}

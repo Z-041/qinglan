@@ -19,16 +19,28 @@ const props = defineProps<{
   option: EChartsOption
   /** 容器高度；图表必须有确定高度，否则初次渲染高度为 0 */
   height?: string
+  /** 图表的可访问名：屏幕阅读器据此得知图表含义（canvas 本身无文字） */
+  ariaLabel?: string
 }>()
 
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRenderer])
+
+/**
+ * 用户开启系统级「减少动态效果」时关闭 ECharts 的入场动画——CSS 媒体查询管不到 canvas 动画，
+ * 必须在 setOption 前关掉。jsdom 等无 matchMedia 的环境按「不减少」处理。
+ */
+const prefersReducedMotion: boolean =
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    : false
 
 const el = ref<HTMLDivElement | null>(null)
 let chart: ReturnType<typeof echarts.init> | null = null
 let observer: ResizeObserver | null = null
 
 function render(): void {
-  chart?.setOption(props.option, true)
+  // notMerge=true（第二参）会整体替换 option，故把 animation 开关合并在传入对象上
+  chart?.setOption({ ...props.option, animation: !prefersReducedMotion }, true)
 }
 
 function resize(): void {
@@ -66,5 +78,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="el" class="w-full" :style="{ height: props.height ?? '280px' }" />
+  <div
+    ref="el"
+    role="img"
+    :aria-label="props.ariaLabel ?? '数据图表'"
+    class="w-full"
+    :style="{ height: props.height ?? '280px' }"
+  />
 </template>

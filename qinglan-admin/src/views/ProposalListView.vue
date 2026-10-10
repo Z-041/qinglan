@@ -82,7 +82,7 @@ async function handleVote(row: ProposalSummary, decision: VoteDecision): Promise
             <td class="max-w-[320px] truncate px-3 py-3" :title="row.preview">{{ row.preview }}</td>
             <td class="px-3 py-3">{{ proposalActionLabel(row.action) }}</td>
             <td class="px-3 py-3">{{ proposalStatusLabel(row.status) }}</td>
-            <td class="px-3 py-3">
+            <td class="px-3 py-3 tabular-nums">
               {{ row.agreeCount }}/{{ row.needed }} 同意（已投 {{ row.votedCount }} 票）
             </td>
             <td class="px-3 py-3" :title="formatAbsoluteTime(row.createdAt)">

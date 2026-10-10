@@ -64,7 +64,7 @@ function handleEnter(event: KeyboardEvent): void {
           <label class="cursor-pointer">
             <input v-model="approved" class="peer sr-only" type="radio" name="appeal-verdict" :value="true" />
             <span
-              class="block rounded-lg border border-line px-3 py-2 text-xs text-muted transition peer-checked:(border-primary bg-primary-soft font-medium text-primary-deep)"
+              class="block rounded-lg border border-line px-3 py-2 text-xs text-muted transition peer-checked:(border-primary bg-primary-soft font-medium text-primary-deep) peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-1"
             >
               通过申诉（恢复内容）
             </span>
@@ -72,7 +72,7 @@ function handleEnter(event: KeyboardEvent): void {
           <label class="cursor-pointer">
             <input v-model="approved" class="peer sr-only" type="radio" name="appeal-verdict" :value="false" />
             <span
-              class="block rounded-lg border border-line px-3 py-2 text-xs text-muted transition peer-checked:(border-primary bg-primary-soft font-medium text-primary-deep)"
+              class="block rounded-lg border border-line px-3 py-2 text-xs text-muted transition peer-checked:(border-primary bg-primary-soft font-medium text-primary-deep) peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-1"
             >
               维持原判
             </span>

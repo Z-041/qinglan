@@ -65,7 +65,7 @@ async function handleArbitrate(payload: ArbitratePayload): Promise<void> {
           <tr v-for="row in items" :key="row.proposalId" class="border-b border-line last:border-0">
             <td class="max-w-[280px] truncate px-3 py-3" :title="row.preview">{{ row.preview }}</td>
             <td class="px-3 py-3">{{ proposalActionLabel(row.action) }}</td>
-            <td class="px-3 py-3">
+            <td class="px-3 py-3 tabular-nums">
               {{ row.agreeCount }}/{{ row.needed }} 同意（已投 {{ row.votedCount }} 票）
             </td>
             <td class="px-3 py-3">

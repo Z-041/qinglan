@@ -153,7 +153,7 @@ onBeforeUnmount(() => {
     <div
       v-if="current"
       ref="dialogRef"
-      class="fixed inset-0 z-announcement flex items-center justify-center bg-black/40 p-4"
+      class="fixed inset-0 z-announcement flex overscroll-contain items-center justify-center bg-black/40 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="announcement-title"

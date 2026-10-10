@@ -5,6 +5,7 @@ import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
 import { useAuth } from '@shared/composables/useAuth'
 import { useUserLabels } from '@shared/composables/useUserLabels'
+import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
 import { useUserStore } from '@shared/stores/user'
 
 const userStore = useUserStore()
@@ -23,7 +24,7 @@ const rows = computed(() => {
   return [
     { key: '状态', value: statusLabel(profile.status) },
     { key: '信用分', value: String(profile.creditScore) },
-    { key: '注册时间', value: new Date(profile.createdAt).toLocaleString() },
+    { key: '注册时间', value: formatAbsoluteTime(profile.createdAt) },
   ]
 })
 

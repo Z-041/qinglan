@@ -29,7 +29,7 @@ const model = defineModel<number | null>({ default: null })
 
     <div v-if="topics.length" class="ql-card p-4">
       <p class="text-sm font-semibold text-ink">话题</p>
-      <nav class="mt-2 flex flex-col">
+      <nav class="mt-2 flex flex-col" aria-label="话题筛选">
         <button
           type="button"
           class="cursor-pointer rounded-lg px-2 py-1.5 text-left text-sm transition"
@@ -38,6 +38,7 @@ const model = defineModel<number | null>({ default: null })
               ? 'bg-primary-soft font-medium text-primary-deep'
               : 'text-muted hover:bg-primary-tint hover:text-ink'
           "
+          :aria-pressed="model === null"
           @click="model = null"
         >
           全部
@@ -52,6 +53,7 @@ const model = defineModel<number | null>({ default: null })
               ? 'bg-primary-soft font-medium text-primary-deep'
               : 'text-muted hover:bg-primary-tint hover:text-ink'
           "
+          :aria-pressed="model === topic.id"
           @click="model = topic.id"
         >
           {{ topic.name }}

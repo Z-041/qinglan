@@ -49,6 +49,7 @@ const emit = defineEmits<{ 'toggle-like': [] }>()
         class="flex cursor-pointer items-center gap-1 text-xs transition"
         :class="post.liked ? 'text-primary-deep' : 'text-muted hover:text-primary-deep'"
         :aria-pressed="post.liked"
+        :aria-label="post.liked ? '取消点赞' : '点赞'"
         @click="emit('toggle-like')"
       >
         <svg

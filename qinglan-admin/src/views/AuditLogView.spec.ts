@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { exportAuditLogs, fetchAuditLogs } from '@/api/admin'
 import AuditLogView from '@/views/AuditLogView.vue'
 import type { AdminAuditLogItem } from '@/types/admin'
+import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
 
 vi.mock('@/api/admin', () => ({ fetchAuditLogs: vi.fn(), exportAuditLogs: vi.fn() }))
 
@@ -37,9 +38,9 @@ describe('AuditLogView', () => {
 
     const cell = wrapper
       .findAll('td')
-      .find((element) => element.attributes('title') === new Date(createdAt).toLocaleString())
+      .find((element) => element.attributes('title') === formatAbsoluteTime(createdAt))
     expect(cell).toBeDefined()
-    // 短格式为 `YYYY-MM-DD HH:mm`——不含 toLocaleString 长格式的秒与「年/月/日」字样
+    // 短格式为 `YYYY-MM-DD HH:mm`——title 是完整绝对时间，正文压掉秒便于扫读
     expect(cell?.text()).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
   })
 

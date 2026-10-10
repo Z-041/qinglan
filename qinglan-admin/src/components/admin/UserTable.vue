@@ -42,7 +42,7 @@ function dateText(value: string | null): string {
         <td class="px-3 py-3" :class="row.status === 'ACTIVE' ? '' : 'font-medium text-danger-deep'">
           {{ statusLabel(row.status) }}
         </td>
-        <td class="px-3 py-3">{{ row.creditScore }}</td>
+        <td class="px-3 py-3 tabular-nums">{{ row.creditScore }}</td>
         <!-- 封禁至指向未来时刻，用绝对时间；相对时间会把未来归为「刚刚」，反而误导 -->
         <td class="px-3 py-3">{{ dateText(row.bannedUntil) }}</td>
         <td class="px-3 py-3">

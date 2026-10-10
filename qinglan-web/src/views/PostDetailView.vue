@@ -180,6 +180,8 @@ async function handleAppeal(): Promise<void> {
     </div>
 
     <template v-else-if="post">
+      <!-- 帖子无标题字段，h1 仅用于建立标题层级（下方「评论」是 h2），视觉隐藏 -->
+      <h1 class="sr-only">帖子详情</h1>
       <div class="mt-3 grid grid-cols-[minmax(0,1fr)_320px] gap-10 max-lg:(grid-cols-1 gap-6)">
         <div class="min-w-0 self-start">
           <BaseCard>
@@ -237,6 +239,8 @@ async function handleAppeal(): Promise<void> {
               <template v-else>
                 <BaseTextarea
                   v-model="appealReason"
+                  name="appealReason"
+                  aria-label="申诉理由"
                   class="mt-2"
                   :rows="3"
                   :maxlength="500"
@@ -282,6 +286,7 @@ async function handleAppeal(): Promise<void> {
                 class="flex cursor-pointer items-center gap-1.5 text-sm transition"
                 :class="post.liked ? 'text-primary-deep' : 'text-muted hover:text-primary-deep'"
                 :aria-pressed="post.liked"
+                :aria-label="post.liked ? '取消点赞' : '点赞'"
                 @click="toggleLike()"
               >
                 <svg
@@ -342,12 +347,18 @@ async function handleAppeal(): Promise<void> {
             <form v-if="userStore.isAuthenticated" class="mt-4" @submit.prevent="handleComment">
               <div v-if="replyTo" class="mb-2 flex items-center gap-2 text-xs text-muted">
                 <span>正在回复 {{ replyTo.anonymousCode }}</span>
-                <button type="button" class="cursor-pointer text-primary-deep" @click="replyTo = null">
+                <button
+                  type="button"
+                  class="cursor-pointer text-primary-deep transition-colors hover:text-primary-strong"
+                  @click="replyTo = null"
+                >
                   取消
                 </button>
               </div>
               <BaseTextarea
                 v-model="commentText"
+                name="comment"
+                aria-label="评论内容"
                 :rows="3"
                 :maxlength="500"
                 placeholder="友善发言，理性讨论"
@@ -410,7 +421,7 @@ async function handleAppeal(): Promise<void> {
         v-if="pendingDeleteId !== null"
         ref="deleteDialogRef"
         tabindex="-1"
-        class="fixed inset-0 z-overlay flex items-center justify-center bg-black/40 p-4 outline-none"
+        class="fixed inset-0 z-overlay flex overscroll-contain items-center justify-center bg-black/40 p-4 outline-none"
         role="dialog"
         aria-modal="true"
         aria-label="删除评论"

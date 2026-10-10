@@ -121,7 +121,7 @@ onMounted(() => {
           <dl class="mt-4 flex flex-col gap-3">
             <div v-for="metric in section.items" :key="metric.label" class="flex items-baseline justify-between">
               <dt class="text-sm text-muted">{{ metric.label }}</dt>
-              <dd class="text-xl font-semibold text-ink">{{ metric.value ?? '—' }}</dd>
+              <dd class="text-xl font-semibold tabular-nums text-ink">{{ metric.value ?? '—' }}</dd>
             </div>
           </dl>
         </BaseCard>
@@ -137,19 +137,24 @@ onMounted(() => {
             </el-radio-group>
           </div>
           <!-- 图表容器固定高度（EChart 默认 280px），避免布局跳动 -->
-          <EChart v-if="trendData.length" class="mt-3" :option="trendOption" />
+          <EChart v-if="trendData.length" class="mt-3" :option="trendOption" aria-label="处置趋势图" />
           <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
         </BaseCard>
 
         <BaseCard>
           <h2 class="text-sm font-medium text-muted">举报按理由分布</h2>
-          <EChart v-if="reasonItems.length" class="mt-3" :option="reasonChartOption" />
+          <EChart v-if="reasonItems.length" class="mt-3" :option="reasonChartOption" aria-label="举报按理由分布图" />
           <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
         </BaseCard>
 
         <BaseCard>
           <h2 class="text-sm font-medium text-muted">处置时效（近 30 天）</h2>
-          <EChart v-if="latency.sampleSize > 0" class="mt-3" :option="latencyChartOption" />
+          <EChart
+            v-if="latency.sampleSize > 0"
+            class="mt-3"
+            :option="latencyChartOption"
+            aria-label="处置时效图（近 30 天）"
+          />
           <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
         </BaseCard>
 
@@ -158,13 +163,24 @@ onMounted(() => {
             <h2 class="text-sm font-medium text-muted">提案表决概况</h2>
             <span class="text-sm text-muted">通过率 <span class="font-medium text-ink">{{ approvalRateText }}</span></span>
           </div>
-          <EChart v-if="proposalTotal > 0" class="mt-3" :option="proposalChartOption" />
+          <EChart
+            v-if="proposalTotal > 0"
+            class="mt-3"
+            :option="proposalChartOption"
+            aria-label="提案通过率图"
+          />
           <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
         </BaseCard>
 
         <BaseCard class="col-span-2">
           <h2 class="text-sm font-medium text-muted">审核员处置量排行</h2>
-          <EChart v-if="ranking.length" class="mt-3" :option="rankingChartOption" height="320px" />
+          <EChart
+            v-if="ranking.length"
+            class="mt-3"
+            :option="rankingChartOption"
+            height="320px"
+            aria-label="审核员处置量排行图"
+          />
           <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
         </BaseCard>
       </div>

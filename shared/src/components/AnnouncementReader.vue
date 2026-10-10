@@ -99,10 +99,13 @@ watch(
       {{ props.title }}
     </h2>
 
-    <!-- 正文：超出可视高度时出现滚动条，滚到底才满足强制阅读条件 -->
+    <!-- 正文：超出可视高度时出现滚动条，滚到底才满足强制阅读条件。
+         tabindex=0 让键盘用户也能聚焦并滚动该区域（否则无法滚到底、弹窗永远关不掉）；
+         overscroll-contain 防止滚到边界后连锁滚动背后的页面 -->
     <div
       ref="scrollAreaRef"
-      class="mt-3 min-h-0 flex-1 overflow-y-auto px-5 text-sm leading-relaxed text-ink"
+      tabindex="0"
+      class="mt-3 min-h-0 flex-1 overscroll-contain overflow-y-auto px-5 text-sm leading-relaxed text-ink"
       @scroll="handleScroll"
     >
       <p class="whitespace-pre-wrap break-words">{{ props.content }}</p>

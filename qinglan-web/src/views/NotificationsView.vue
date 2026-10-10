@@ -51,13 +51,15 @@ onMounted(() => {
 
     <ul v-else class="ql-card mt-5 divide-y divide-line overflow-hidden">
       <li v-for="item in items" :key="item.id">
-        <!-- 有 link 时整条是导航链接；无 link 时退化为普通块，两种都点击即标已读。
-             `to` 只在有 link 时才是 RouterLink 的 prop，无 link 时会落到普通 div 上、
-             渲染成一个非标准属性，故用 `?? undefined` 交由 Vue 移除该属性。 -->
+        <!-- 有 link 时整条是导航链接；无 link 时退化为 button——必须是真 button 而非 div@click，
+             否则键盘用户无法聚焦、无法回车标记已读。
+             `to` 只在有 link 时才是 RouterLink 的 prop，无 link 时会落到 button 上、
+             渲染成一个非标准属性，故用 `?? undefined` 交由 Vue 移除该属性；type 同理。 -->
         <component
-          :is="item.link ? RouterLink : 'div'"
+          :is="item.link ? RouterLink : 'button'"
           :to="item.link ?? undefined"
-          class="flex items-start gap-3 px-4 py-3.5 transition hover:bg-primary-tint"
+          :type="item.link ? undefined : 'button'"
+          class="flex w-full items-start gap-3 bg-transparent px-4 py-3.5 text-left transition hover:bg-primary-tint"
           :class="item.readAt ? '' : 'bg-primary-tint'"
           @click="markRead(item.id)"
         >

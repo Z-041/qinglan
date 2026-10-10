@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import QueueTable from '@/components/admin/QueueTable.vue'
 import type { AdminQueueItem } from '@/types/review'
+import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
 
 function item(overrides: Partial<AdminQueueItem> = {}): AdminQueueItem {
   return {
@@ -90,7 +91,7 @@ describe('QueueTable', () => {
     // 列序一旦增删，写死的下标会指向别的列，断言就失去意义了
     const cell = wrapper
       .findAll('td')
-      .find((element) => element.attributes('title') === new Date(firstReportedAt).toLocaleString())
+      .find((element) => element.attributes('title') === formatAbsoluteTime(firstReportedAt))
 
     expect(cell).toBeDefined()
     expect(cell?.classes()).toContain('text-danger-deep')
@@ -102,7 +103,7 @@ describe('QueueTable', () => {
 
     const cell = wrapper
       .findAll('td')
-      .find((element) => element.attributes('title') === new Date(firstReportedAt).toLocaleString())
+      .find((element) => element.attributes('title') === formatAbsoluteTime(firstReportedAt))
 
     expect(cell).toBeDefined()
     expect(cell?.classes()).not.toContain('text-danger-deep')
@@ -114,7 +115,7 @@ describe('QueueTable', () => {
 
     const cell = wrapper
       .findAll('td')
-      .find((element) => element.attributes('title') === new Date(firstReportedAt).toLocaleString())
+      .find((element) => element.attributes('title') === formatAbsoluteTime(firstReportedAt))
 
     expect(cell?.text()).toBe('刚刚')
   })

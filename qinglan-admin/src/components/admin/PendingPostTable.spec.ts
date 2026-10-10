@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import PendingPostTable from '@/components/admin/PendingPostTable.vue'
 import type { AdminPendingPostItem } from '@/types/review'
+import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
 
 function pendingPost(overrides: Partial<AdminPendingPostItem> = {}): AdminPendingPostItem {
   return {
@@ -51,7 +52,7 @@ describe('PendingPostTable', () => {
     // 提交时间改为相对时间渲染，绝对时间落在 title 上（相对文案随当前时刻变化，不断言其字面）
     const timeCell = wrapper
       .findAll('td')
-      .find((cell) => cell.attributes('title') === new Date(submittedAt).toLocaleString())
+      .find((cell) => cell.attributes('title') === formatAbsoluteTime(submittedAt))
     expect(timeCell).toBeDefined()
   })
 

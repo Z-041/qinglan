@@ -51,6 +51,8 @@ watch(topicId, () => {
 
 <template>
   <section class="ql-shell py-6 max-lg:py-4">
+    <!-- 信息流首页无视觉大标题，h1 仅服务于标题层级与屏幕阅读器地标 -->
+    <h1 class="sr-only">最新帖子</h1>
     <!-- 话题横导航（取代原 hero 横幅）：话题是信息流的一级筛选，置于内容最上方 -->
     <div class="border-b border-line pb-3">
       <TopicFilter v-model="topicId" :topics="topics" />

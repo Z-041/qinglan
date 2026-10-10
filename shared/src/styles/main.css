@@ -36,3 +36,20 @@
 
   color-scheme: light;
 }
+
+/*
+ * 可访问性：系统层开启「减少动态效果」时，统一停掉装饰性过渡 / 动画。
+ *
+ * 放在全局一处，而不是每个组件各写一遍媒体查询。CSS 兜底管不到 JS 驱动的动画
+ * （ECharts 的 canvas 动画），那类需在组件内用 matchMedia 单独关闭。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

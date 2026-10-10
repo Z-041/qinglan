@@ -47,6 +47,13 @@ function signOut(): void {
 <template>
   <!-- el-config-provider 已上提到 App.vue：/login 与本布局是同级路由，放这里登录页拿不到语言包 -->
   <div class="flex min-h-screen bg-canvas">
+    <!-- 跳到主内容：侧栏导航十余项，键盘用户不跳链接就要逐项 Tab 才能到工作区 -->
+    <a
+      href="#admin-main"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-toast focus:rounded-lg focus:border focus:border-line focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:text-ink focus:shadow-xl"
+    >
+      跳到主内容
+    </a>
     <aside class="flex w-[200px] shrink-0 flex-col border-r border-line bg-surface">
       <p class="px-5 py-5 text-sm font-semibold text-ink">青栏管理后台</p>
       <nav class="flex flex-1 flex-col gap-1 px-2">
@@ -78,7 +85,7 @@ function signOut(): void {
 
       <!-- 拆分后管理端 App.vue 不再有外层 <main>，这里用 <main> 才是正确语义
            （每个页面应恰有一个主内容地标）。原先为避免嵌套地标才退化成 div。 -->
-      <main class="flex-1 p-6">
+      <main id="admin-main" class="flex-1 p-6" tabindex="-1">
         <!-- 管理端仅支持 PC，不做移动断点（AGENTS.md 第七章） -->
         <RouterView />
       </main>
