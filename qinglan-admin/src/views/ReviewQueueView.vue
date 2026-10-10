@@ -9,6 +9,7 @@ import ReviewActionBar from '@/components/admin/ReviewActionBar.vue'
 import ReviewContextPanel from '@/components/admin/ReviewContextPanel.vue'
 import WorkbenchList from '@/components/admin/WorkbenchList.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import FormField from '@shared/components/base/FormField.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { REVIEW_ACTION_FLOW } from '@/composables/reviewActionFlow'
 import { availableReviewActions, blockedByOpenProposal, REVIEW_ACTION_META } from '@/composables/reviewActionSet'
@@ -338,8 +339,7 @@ async function handleDismiss(reason: string): Promise<void> {
 
     <!-- 筛选一律作为查询参数传后端（不前端本地过滤），切换后 watch 会重置游标回第一页 -->
     <section class="ql-card flex flex-wrap items-end gap-3 p-4">
-      <label class="flex flex-col gap-1">
-        <span class="ql-label">举报理由</span>
+      <FormField label="举报理由">
         <el-select v-model="filters.reasons" multiple collapse-tags class="w-[280px]" placeholder="全部理由">
           <el-option
             v-for="reason in REPORT_REASONS"
@@ -348,19 +348,17 @@ async function handleDismiss(reason: string): Promise<void> {
             :value="reason"
           />
         </el-select>
-      </label>
+      </FormField>
 
-      <label class="flex flex-col gap-1">
-        <span class="ql-label">目标类型</span>
+      <FormField label="目标类型">
         <el-select v-model="targetTypeFilter" class="w-[130px]" placeholder="全部">
           <el-option label="全部类型" value="" />
           <el-option :label="targetTypeLabel('POST')" value="POST" />
           <el-option :label="targetTypeLabel('COMMENT')" value="COMMENT" />
         </el-select>
-      </label>
+      </FormField>
 
-      <label class="flex flex-col gap-1">
-        <span class="ql-label">排序</span>
+      <FormField label="排序">
         <el-select v-model="filters.sort" class="w-[160px]">
           <el-option
             v-for="option in SORT_OPTIONS"
@@ -369,7 +367,7 @@ async function handleDismiss(reason: string): Promise<void> {
             :value="option.value"
           />
         </el-select>
-      </label>
+      </FormField>
 
       <label class="flex items-center gap-2 pb-2.5">
         <el-switch v-model="filters.overdueOnly" />

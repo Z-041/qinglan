@@ -13,6 +13,7 @@ import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { useCursorList } from '@shared/composables/useCursorList'
+import { useSubmit } from '@shared/composables/useSubmit'
 import { usePermissions } from '@/composables/usePermissions'
 import type { AdminAnnouncementItem, CreateAnnouncementPayload } from '@/types/admin'
 
@@ -26,7 +27,8 @@ const { can } = usePermissions()
  */
 const canOperate = computed(() => can('ANNOUNCEMENT_MANAGE'))
 
-const submitting = ref(false)
+/** 提交态统一走 shared/useSubmit；成功才关弹窗，失败保持打开（错误由拦截器提示） */
+const { submitting, run } = useSubmit()
 const formOpen = ref(false)
 
 /**
@@ -44,16 +46,11 @@ onMounted(() => {
 })
 
 async function handleCreate(payload: CreateAnnouncementPayload): Promise<void> {
-  submitting.value = true
-  try {
+  await run(async () => {
     await createAnnouncement(payload)
     formOpen.value = false
     await refresh()
-  } catch {
-    // 失败保持弹窗打开便于修正，错误已由拦截器提示
-  } finally {
-    submitting.value = false
-  }
+  })
 }
 
 /**
@@ -70,15 +67,11 @@ async function handlePublish(row: AdminAnnouncementItem): Promise<void> {
   } catch {
     return
   }
-  submitting.value = true
-  try {
+  // 失败错误已由拦截器提示（QL-409-008 状态不允许 / QL-429-004 当日发布超上限）
+  await run(async () => {
     await publishAnnouncement(row.id)
     await refresh()
-  } catch {
-    // 错误已由拦截器提示（QL-409-008 状态不允许 / QL-429-004 当日发布超上限）
-  } finally {
-    submitting.value = false
-  }
+  })
 }
 
 async function handleRevoke(row: AdminAnnouncementItem): Promise<void> {
@@ -91,15 +84,10 @@ async function handleRevoke(row: AdminAnnouncementItem): Promise<void> {
   } catch {
     return
   }
-  submitting.value = true
-  try {
+  await run(async () => {
     await revokeAnnouncement(row.id)
     await refresh()
-  } catch {
-    // 错误已由拦截器提示
-  } finally {
-    submitting.value = false
-  }
+  })
 }
 </script>
 

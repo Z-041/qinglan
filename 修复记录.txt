@@ -17,6 +17,36 @@
 
 
 --------------------------------------------------------------------------------
+R-51 前端组件整合第四批（4A 波）：管理端筛选字段行归一 FormField + 公告页接 useSubmit
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：一致性收口  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿
+来源：第四批（用户选定「一致性收口 3 波」）。波 4A 收口管理端两处口径不一，
+4B（学生端提示盒 + 话题拉取收敛）/ 4C（shared 接口微调 + 低价值小件）另开。
+
+一、筛选字段行归一到既有 FormField（9 处）
+  - UserManageView 6 处（状态 / 角色 / 信用分下界 / 信用分上界 / 注册时间起 / 注册时间止）、
+    ReviewQueueView 3 处（举报理由 / 目标类型 / 排序）此前手写
+    `<label class="flex flex-col gap-1"><span class="ql-label">…</span>…</label>`，未复用项目已有的
+    shared/FormField（label + 控制项 + error/hint）。
+  - 改用 FormField：信用分上/下界的校验文案由内联 `<span class="ql-error">` 改为 FormField 的
+    :error（顺带补上 role="alert"，与全站表单字段口径一致）。
+  - 刻意不新建 FilterField：FormField 已覆盖同一职责，再抽一个近乎重复的组件属过度抽象。
+
+二、公告管理页接 useSubmit
+  - AnnouncementManageView 的 handleCreate / handlePublish / handleRevoke 原各自维护
+    `submitting = ref(false)` + try/catch/finally，改用 shared/useSubmit 的 `{ submitting, run }`：
+    成功才关弹窗、失败保持打开，错误仍只由拦截器提示（AGENTS.md 第七章）。
+    三个 handler 各去掉一段重复的 try/catch/finally。
+
+验证（真跑，全绿）
+- pnpm lint / typecheck：管理端通过。
+- vitest：qinglan-admin 46 文件 282 例全绿（既有筛选与公告页断言未改、原样通过）。
+- pnpm build：管理端产物成功；components.d.ts 无变化（FormField 早已注册）。
+- 视觉变化点：FormField 的 label 用 `block`，而手写版多了一层 `gap-1`（4px）；ql-label 自带
+  mb-1.5（6px），故标签与控件的间距由 10px 收到 6px，与全站表单字段一致——这正是本波「收口」
+  的目标。建议浏览器实测筛选条换行时核对。
+
+--------------------------------------------------------------------------------
 R-50 前端组件整合第三批（3C 波）：弹窗外壳收敛（改名）+ 死代码清理
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：组件化重构 + 死代码清理  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿

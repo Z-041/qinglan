@@ -6,6 +6,7 @@ import CreditAdjustDialog from '@/components/admin/CreditAdjustDialog.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
 import UserTable from '@/components/admin/UserTable.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import FormField from '@shared/components/base/FormField.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { exportAdminUsers } from '@/api/admin'
@@ -141,26 +142,26 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
     </PageHeader>
 
     <form class="ql-card flex flex-wrap items-end gap-3 p-4" @submit.prevent="search">
-      <label class="flex flex-col gap-1">
-        <span class="ql-label">状态</span>
+      <FormField label="状态">
         <select v-model="filters.status" class="ql-field">
           <option value="">不限</option>
           <option v-for="status in STATUSES" :key="status" :value="status">
             {{ statusLabel(status) }}
           </option>
         </select>
-      </label>
+      </FormField>
 
-      <label class="flex flex-col gap-1">
-        <span class="ql-label">角色</span>
+      <FormField label="角色">
         <select v-model="filters.role" class="ql-field">
           <option value="">不限</option>
           <option v-for="role in ROLES" :key="role" :value="role">{{ roleLabel(role) }}</option>
         </select>
-      </label>
+      </FormField>
 
-      <label class="flex flex-col gap-1">
-        <span class="ql-label">信用分下界</span>
+      <FormField
+        label="信用分下界"
+        :error="creditBoundInvalid(filters.minCredit) ? '须为 0-100 的整数' : ''"
+      >
         <input
           :value="filters.minCredit"
           type="number"
@@ -170,11 +171,12 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
           placeholder="含"
           @input="setCreditFilter('minCredit', $event)"
         />
-        <span v-if="creditBoundInvalid(filters.minCredit)" class="ql-error">须为 0-100 的整数</span>
-      </label>
+      </FormField>
 
-      <label class="flex flex-col gap-1">
-        <span class="ql-label">信用分上界</span>
+      <FormField
+        label="信用分上界"
+        :error="creditBoundInvalid(filters.maxCredit) ? '须为 0-100 的整数' : ''"
+      >
         <input
           :value="filters.maxCredit"
           type="number"
@@ -184,18 +186,15 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
           placeholder="含"
           @input="setCreditFilter('maxCredit', $event)"
         />
-        <span v-if="creditBoundInvalid(filters.maxCredit)" class="ql-error">须为 0-100 的整数</span>
-      </label>
+      </FormField>
 
-      <label class="flex flex-col gap-1">
-        <span class="ql-label">注册时间起</span>
+      <FormField label="注册时间起">
         <input v-model="filters.createdFrom" type="datetime-local" class="ql-field" />
-      </label>
+      </FormField>
 
-      <label class="flex flex-col gap-1">
-        <span class="ql-label">注册时间止</span>
+      <FormField label="注册时间止">
         <input v-model="filters.createdTo" type="datetime-local" class="ql-field" />
-      </label>
+      </FormField>
 
       <div class="flex gap-2">
         <BaseButton
