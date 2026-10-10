@@ -42,8 +42,7 @@ const ariaLabel = computed(() => props.label || props.title)
     :open="props.open"
     :label="ariaLabel"
     panel-class="max-w-sm"
-    :close-on-backdrop="!props.submitting"
-    :close-on-esc="!props.submitting"
+    :dismissible="!props.submitting"
     @close="emit('close')"
   >
     <p class="text-sm font-semibold text-ink">{{ props.title }}</p>

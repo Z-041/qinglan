@@ -33,4 +33,18 @@ describe('LikeButton', () => {
     const md = mount(LikeButton, { props: { liked: false, count: 0, label: '点赞' } })
     expect(md.find('svg').classes()).toContain('size-4')
   })
+
+  it('不传 label 时由 liked 派生可访问名（调用方无需再抄「点赞/取消点赞」分支）', () => {
+    expect(
+      mount(LikeButton, { props: { liked: false, count: 1 } }).get('button').attributes('aria-label'),
+    ).toBe('点赞')
+    expect(
+      mount(LikeButton, { props: { liked: true, count: 1 } }).get('button').attributes('aria-label'),
+    ).toBe('取消点赞')
+  })
+
+  it('传 subject 时把对象拼进可访问名（评论场景）', () => {
+    const wrapper = mount(LikeButton, { props: { liked: false, count: 1, subject: '梧桐#3' } })
+    expect(wrapper.get('button').attributes('aria-label')).toBe('点赞 梧桐#3 的评论')
+  })
 })

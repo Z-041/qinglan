@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, type Ref } from 'vue'
 
 import { refreshImageUrls, uploadImage } from '@/api/upload'
 import { pushToast } from '@shared/composables/useToast'
@@ -58,7 +58,24 @@ export function useImageUpload() {
     return added
   }
 
-  return { uploading, addFiles, refresh }
+  /**
+   * 上传新文件并入目标列表，并按上限截断——「最多 N 张」这条规则只此一处，调用方不再各自 slice。
+   *
+   * <p>关键：**await 回来后再读一次目标列表**再合并。若在 await 前取快照，上传期间用户删掉的图
+   * 会被合并结果「复活」、连选两次还会丢掉前一次的结果（PublishView 的既有 spec 正盯着这点）。</p>
+   */
+  async function addTo(target: Ref<string[]>, files: File[]): Promise<void> {
+    const added = await addFiles(files, target.value)
+    if (!added.length) {
+      return
+    }
+    const list = target.value
+    const merged = [...list, ...added.filter((url) => !list.includes(url))]
+    // 上传途中用户删图会让 addFiles 里按当时长度算的 remaining 偏大，这里按最终列表再兜一次上限
+    target.value = merged.slice(0, MAX_IMAGES_PER_POST)
+  }
+
+  return { uploading, addFiles, addTo, refresh }
 }
 
 /**

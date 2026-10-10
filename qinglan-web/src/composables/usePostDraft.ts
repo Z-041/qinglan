@@ -85,17 +85,15 @@ export function usePostDraft(fields: {
     }
   }
 
-  // 有未决草稿时暂停自动保存：用户须先「恢复」或「丢弃」，否则新输入会覆盖旧草稿
-  watch(
-    [fields.topicId, fields.content, fields.contact, fields.images],
-    () => {
-      if (pending.value) {
-        return
-      }
-      save()
-    },
-    { deep: true },
-  )
+  // 有未决草稿时暂停自动保存：用户须先「恢复」或「丢弃」，否则新输入会覆盖旧草稿。
+  // 不加 deep：四个源都是 ref，且 images 恒为整体替换（ImagePicker / 发布页均如此），
+  // 替换 .value 即触发；deep 只会多走一遍无意义的嵌套比对。
+  watch([fields.topicId, fields.content, fields.contact, fields.images], () => {
+    if (pending.value) {
+      return
+    }
+    save()
+  })
 
   function restore(): void {
     const draft = pending.value

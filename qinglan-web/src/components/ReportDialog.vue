@@ -43,7 +43,7 @@ const detail = ref('')
 /**
  * 关闭的唯一入口：提交中一律不关（遮罩、头部关闭、取消三个出口口径一致），
  * 避免请求在途时把弹窗撤掉、用户既看不到结果也不知道提交去了哪里。
- * ModalShell 的遮罩 / ESC 出口由 close-on-backdrop / close-on-esc 在模板里同步该判定。
+ * ModalShell 的遮罩 / ESC 出口由 dismissible 在模板里同步该判定。
  */
 function requestClose(): void {
   if (props.submitting) {
@@ -76,8 +76,7 @@ function handleSubmit(): void {
   <ModalShell
     :open="props.open"
     label="举报"
-    :close-on-backdrop="!props.submitting"
-    :close-on-esc="!props.submitting"
+    :dismissible="!props.submitting"
     @close="requestClose"
   >
     <div class="flex items-start justify-between gap-3">

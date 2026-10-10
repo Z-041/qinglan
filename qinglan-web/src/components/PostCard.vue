@@ -32,12 +32,7 @@ const emit = defineEmits<{ 'toggle-like': [] }>()
     </RouterLink>
 
     <div class="flex items-center gap-4 px-4 pb-3 max-lg:px-3">
-      <LikeButton
-        :liked="post.liked"
-        :count="post.likeCount"
-        :label="post.liked ? '取消点赞' : '点赞'"
-        @toggle="emit('toggle-like')"
-      />
+      <LikeButton :liked="post.liked" :count="post.likeCount" @toggle="emit('toggle-like')" />
 
       <span class="flex items-center gap-1 text-xs text-muted">
         <BaseIcon name="comment" class="size-4" />

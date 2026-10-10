@@ -46,7 +46,7 @@ const emit = defineEmits<{
         size="sm"
         :liked="props.comment.liked"
         :count="props.comment.likeCount"
-        :label="`${props.comment.liked ? '取消点赞' : '点赞'} ${props.comment.anonymousCode} 的评论`"
+        :subject="props.comment.anonymousCode"
         @toggle="emit('toggle-like', props.comment.id)"
       />
 

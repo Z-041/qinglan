@@ -29,18 +29,18 @@ describe('ModalShell', () => {
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
 
-  it('close-on-backdrop=false 时点遮罩不关闭；ESC 同理受 close-on-esc 控制', async () => {
-    const wrapper = mountShell({ closeOnBackdrop: false })
-    await wrapper.get('[role="dialog"]').trigger('click')
-    expect(wrapper.emitted('close')).toBeUndefined()
-
+  it('默认可关闭：ESC 抛 close', async () => {
+    const wrapper = mountShell()
     await wrapper.get('[role="dialog"]').trigger('keydown.escape')
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
 
-  it('ESC 受控：close-on-esc=false 时不关闭', async () => {
-    const wrapper = mountShell({ closeOnEsc: false })
+  it('dismissible=false 时点遮罩与 ESC 都不关闭（提交在途等场景）', async () => {
+    const wrapper = mountShell({ dismissible: false })
+
+    await wrapper.get('[role="dialog"]').trigger('click')
     await wrapper.get('[role="dialog"]').trigger('keydown.escape')
+
     expect(wrapper.emitted('close')).toBeUndefined()
   })
 

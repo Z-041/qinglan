@@ -17,6 +17,51 @@
 
 
 --------------------------------------------------------------------------------
+R-56 前端组件整合第五批（5C 波）：学生端弹层焦点陷阱 + 点赞可访问名 + 图片并入收口
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：组件/接口优化  状态：已交付；学生端 lint/typecheck/vitest/build 真跑全绿
+来源：第五批 5C，收尾波。
+
+一、交付
+  1. useFocusTrap.ts（web/composables）：弹层焦点陷阱——激活时收焦点、Tab / Shift + Tab 在容器内
+     循环、失活时把焦点还给打开前的元素；无可聚焦元素（强读弹窗倒计时中关闭按钮 disabled）时聚焦
+     容器自身。ESC 语义各弹层不同，仍由调用方自理，本组合不拦截。
+     - AnnouncementModal 原来自写了一套（约 50 行），改为复用；ModalShell 原来只有「收焦点」、
+     无 trap，接入后举报弹窗 / 删除确认也获得真正的键盘可用性（此前 Tab 会跑到背景页面）。
+  2. ModalShell：`closeOnBackdrop` / `closeOnEsc` 合成 `dismissible`——两个 prop 在所有真实调用点
+     恒等共变（都是「提交在途则不可关」），合成后不会出现「能点遮罩关、ESC 却关不掉」这类自相矛盾。
+     ConfirmDialog / ReportDialog 随之改传一个 prop；ModalShell.spec 的两条「分别受控」用例合并为
+     「默认可关 / dismissible=false 时遮罩与 ESC 都不关」。
+  3. LikeButton：可访问名由 `liked` 派生（「点赞 / 取消点赞」），可选 `subject`（评论者代号）拼成
+     「点赞 梧桐#3 的评论」；`label` 保留为覆盖项。PostCard / PostDetailCard 删掉各自复制的
+     `liked ? '取消点赞' : '点赞'` 三元，CommentItem 改传 `:subject`。
+  4. useImageUpload 增 `addTo`：把「上传 + 并入当时列表 + 按上限截断」收进 composable，「最多 9 张」
+     这条规则不再在视图里各写一份 slice。**await 回来后再读一次目标列表**再合并——在 await 前取快照
+     会让上传期间删掉的图复活，PublishView 的既有 spec 正盯着这点。
+  5. PostImageGrid：variant / 图片数派生的两处样式提为 computed，不在 v-for 的每张图上重复求值。
+  6. usePostDraft：去掉 watch 的 `deep`——四个源都是 ref，且 images 恒为整体替换（ImagePicker /
+     发布页均替换 .value），deep 只是徒增嵌套比对。零行为变化。
+
+二、评估后不做（逐条给理由）
+  1. **useHistoryGuard 不抽**：返回键守卫只有 AnnouncementModal 一个消费者，抽出不消除重复，
+     按「不为一次性操作造抽象」不划算（与其焦点陷阱不同，焦点陷阱有两处消费者）。
+  2. **usePostDraft 防抖不做**：正文上限 2000 字，每键一次 JSON 序列化 + localStorage 写入实测开销
+     可忽略；加防抖会引入「防抖窗口内关闭标签页丢最后几字」的窗口，并要改动 3 条既有 spec 的时序，
+     收益不抵（本波只做零风险的去掉 deep）。
+  3. **useAnnouncement 收窄导出不做**：它导出的 17 项里确有仅内部 / 测试使用的字段，但该 composable
+     是复杂的有状态单例，收窄要同步改其 spec 的多条用例，属「整理导出面」而非缺陷；留作后续。
+  4. **PublishView 的草稿恢复编排不下沉**：它由「回填字段 → 换图 → 按 missing 提示 → 失败保留原值」
+     四步组成，且与 usePostDraft / useImageUpload 两个已有 composable 协同，再包一层只是转发。
+
+验证（真跑，全绿）
+- pnpm lint / typecheck：学生端通过。
+- vitest：qinglan-web 36 文件 208 例全绿（较 5B 落点 206 例 +2，为 LikeButton 新增的两条派生断言；
+  ModalShell.spec 的关闭语义用例随 prop 合并同步，PublishView.spec「上传期间删图不复活」原样通过）。
+- pnpm build：学生端产物成功。
+- 过程修正：`addTo` 初版签名收 `string[]`（调用前取快照），导致 PublishView 的「上传期间删图不复活」
+  用例红；改为收 `Ref<string[]>`、在 await 后再读一次列表——正是该 spec 早已覆盖的语义。
+
+--------------------------------------------------------------------------------
 R-55 前端组件整合第五批（5B 波）：管理端 composable 归一（轮询 / 筛选游标 / 确认框）
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：composable 归一  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿

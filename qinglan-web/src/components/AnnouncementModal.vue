@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import AnnouncementReader from '@shared/components/AnnouncementReader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import { useAnnouncement } from '@/composables/useAnnouncement'
+import { useFocusTrap } from '@/composables/useFocusTrap'
 
 /**
  * 全局公告弹窗（强制阅读的体验层，设计方案 5.3）。
@@ -34,55 +35,13 @@ const closeLabel = computed(() =>
 
 const dialogRef = ref<HTMLElement | null>(null)
 
-// 轻量 focus trap：不引第三方库，只在本文件内循环 Tab
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+// 焦点陷阱（收焦点 / Tab 循环 / 关闭时归还焦点）抽在 useFocusTrap；本组件只保留 ESC 的语义
+useFocusTrap(dialogRef, () => current.value !== null)
 
-function focusableElements(): HTMLElement[] {
-  const root = dialogRef.value
-  if (!root) {
-    return []
-  }
-  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-}
-
-function moveFocusToDialog(): void {
-  const [first] = focusableElements()
-  if (first) {
-    first.focus()
-  } else {
-    // 无可聚焦元素时（如关闭按钮尚 disabled）聚焦弹窗容器自身，保证焦点不留在背景
-    dialogRef.value?.focus()
-  }
-}
-
+/** 强制阅读：ESC 不关闭——拦掉默认行为，避免误触把弹窗关掉 */
 function handleKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
-    // 强制阅读：ESC 不关闭
     event.preventDefault()
-    return
-  }
-  if (event.key !== 'Tab') {
-    return
-  }
-  const items = focusableElements()
-  const first = items[0]
-  const last = items[items.length - 1]
-  if (!first || !last) {
-    event.preventDefault()
-    dialogRef.value?.focus()
-    return
-  }
-  const active = document.activeElement
-  const inside = active ? (dialogRef.value?.contains(active) ?? false) : false
-  if (event.shiftKey) {
-    if (!inside || active === first) {
-      event.preventDefault()
-      last.focus()
-    }
-  } else if (!inside || active === last) {
-    event.preventDefault()
-    first.focus()
   }
 }
 
@@ -121,13 +80,11 @@ function handleForceClose(): void {
 
 watch(
   current,
-  async (announcement) => {
+  (announcement) => {
     if (announcement) {
       document.addEventListener('keydown', handleKeydown, true)
       window.addEventListener('popstate', handlePopState)
       pushGuardEntry()
-      await nextTick()
-      moveFocusToDialog()
     } else {
       document.removeEventListener('keydown', handleKeydown, true)
       window.removeEventListener('popstate', handlePopState)

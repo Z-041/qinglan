@@ -101,7 +101,6 @@ const reportStatusText = computed(() => {
       <LikeButton
         :liked="props.post.liked"
         :count="props.post.likeCount"
-        :label="props.post.liked ? '取消点赞' : '点赞'"
         @toggle="emit('toggle-like')"
       />
       <span class="text-xs text-muted">评论 {{ props.post.commentCount }}</span>

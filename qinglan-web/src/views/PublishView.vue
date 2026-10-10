@@ -18,7 +18,7 @@ import { pushToast } from '@shared/composables/useToast'
 
 const router = useRouter()
 
-const { uploading: uploadingImages, addFiles, refresh: refreshDraftImages } = useImageUpload()
+const { uploading: uploadingImages, addTo, refresh: refreshDraftImages } = useImageUpload()
 
 const {
   topics,
@@ -57,17 +57,11 @@ onMounted(() => {
 })
 
 /**
- * 只把**本次新增**的地址按「当时的**列表**」合并进来。
+ * 只把**本次新增**的地址按「当时的**列表**」合并进来（上限截断也在 addTo 内）。
  * 不能在 await 前读快照再整份赋值：上传期间用户删掉的图会复活、连选两次会丢掉前一次的结果。
- * 上限也在此刻按当时的列表再兜一次（上传途中删图会让 useImageUpload 里算的 remaining 偏大）。
  */
 async function handleSelectImages(files: File[]): Promise<void> {
-  const added = await addFiles(files, images.value)
-  if (!added.length) {
-    return
-  }
-  const merged = [...images.value, ...added.filter((url) => !images.value.includes(url))]
-  images.value = merged.slice(0, MAX_IMAGES_PER_POST)
+  await addTo(images, files)
 }
 
 /**
