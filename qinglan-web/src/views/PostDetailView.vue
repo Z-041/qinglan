@@ -4,11 +4,14 @@ import { useRoute } from 'vue-router'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
+import BaseIcon from '@shared/components/base/BaseIcon.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
+import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
+import StatePanel from '@shared/components/StatePanel.vue'
 import CommentItem from '@/components/CommentItem.vue'
 import ReportDialog from '@/components/ReportDialog.vue'
+import RelativeTime from '@shared/components/RelativeTime.vue'
 import { usePostDetail } from '@/composables/usePostDetail'
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import { useReport } from '@/composables/useReport'
 import { useToast } from '@shared/composables/useToast'
 import { useUserLabels } from '@shared/composables/useUserLabels'
@@ -166,20 +169,14 @@ async function handleAppeal(): Promise<void> {
       ← 返回首页
     </RouterLink>
 
-    <p v-if="loading" class="mt-6 text-center text-sm text-muted">加载中…</p>
-
     <!-- 失败态只在「确实没有内容可显示」时出现：若已有正文、只是重新加载失败，
-         继续显示已有内容（错误已由拦截器 toast），不要用错误屏把内容盖掉。
-         下面的文案是状态说明，不是请求错误信息本身，两者不重复。 -->
-    <div
-      v-else-if="failed && !post"
-      class="mt-6 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+         继续显示已有内容（错误已由拦截器 toast）。文案是状态说明，由 StatePanel 统一呈现 -->
+    <StatePanel
+      :state="loading ? 'loading' : failed && !post ? 'failed' : 'ready'"
+      failed-title="内容没能加载出来"
+      @retry="load()"
     >
-      <p class="text-sm font-medium text-ink">内容没能加载出来</p>
-      <BaseButton class="mt-4" variant="ghost" size="sm" @click="load()">重试</BaseButton>
-    </div>
-
-    <template v-else-if="post">
+      <template v-if="post">
       <!-- 帖子无标题字段，h1 仅用于建立标题层级（下方「评论」是 h2），视觉隐藏 -->
       <h1 class="sr-only">帖子详情</h1>
       <div class="mt-3 grid grid-cols-[minmax(0,1fr)_320px] gap-10 max-lg:(grid-cols-1 gap-6)">
@@ -191,13 +188,7 @@ async function handleAppeal(): Promise<void> {
                 我
               </span>
               <span class="truncate text-xs text-muted">{{ post.anonymousCode }}</span>
-              <time
-                class="ml-auto shrink-0 text-xs text-muted"
-                :datetime="post.createdAt"
-                :title="formatAbsoluteTime(post.createdAt)"
-              >
-                {{ formatRelativeTime(post.createdAt) }}
-              </time>
+              <RelativeTime class="ml-auto shrink-0 text-xs text-muted" :iso="post.createdAt" />
             </div>
 
             <p class="mt-3 text-[17px] leading-[1.75] break-words whitespace-pre-wrap text-ink">
@@ -289,19 +280,7 @@ async function handleAppeal(): Promise<void> {
                 :aria-label="post.liked ? '取消点赞' : '点赞'"
                 @click="toggleLike()"
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  :fill="post.liked ? 'currentColor' : 'none'"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  class="size-4"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M12 20.3 4.8 13a4.6 4.6 0 0 1 6.5-6.5l.7.7.7-.7A4.6 4.6 0 0 1 19.2 13Z"
-                    stroke-linejoin="round"
-                  />
-                </svg>
+                <BaseIcon name="heart" class="size-4" :filled="post.liked" />
                 <span>{{ post.likeCount }}</span>
               </button>
               <span class="text-xs text-muted">评论 {{ post.commentCount }}</span>
@@ -338,11 +317,12 @@ async function handleAppeal(): Promise<void> {
             <p v-else class="mt-3 text-xs text-muted">还没有评论，说点什么吧</p>
 
             <!-- 一级评论游标分页：还有下一页时才出现，点一次追加一批；回复随所属一级评论整页带出 -->
-            <div v-if="comments.length && hasMore" class="mt-4 flex justify-center">
-              <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMoreComments">
-                加载更多
-              </BaseButton>
-            </div>
+            <LoadMoreButton
+              v-if="comments.length"
+              :has-more="hasMore"
+              :loading="loadingMore"
+              @load="loadMoreComments"
+            />
 
             <form v-if="userStore.isAuthenticated" class="mt-4" @submit.prevent="handleComment">
               <div v-if="replyTo" class="mb-2 flex items-center gap-2 text-xs text-muted">
@@ -437,6 +417,7 @@ async function handleAppeal(): Promise<void> {
           </div>
         </div>
       </div>
-    </template>
+      </template>
+    </StatePanel>
   </section>
 </template>

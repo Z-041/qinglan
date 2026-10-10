@@ -17,6 +17,68 @@
 
 
 --------------------------------------------------------------------------------
+R-42 前端组件整合第一批：公告弹窗加宽修复 + 六个共享件抽取（55 文件）
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：组件化重构  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿
+来源：用户先报「公告显示的视图很小，内容再多也只是居中一个小框」。排查发现根因不在宽高
+数值，而在 shared/AnnouncementReader 一件组件干了两件事（卡片外壳 max-w-lg 钉死 512px +
+正文呈现），且被管理端 el-dialog 二次包裹形成「卡里卡」。随后用户要求「检查前端所有组件，
+哪些能复用、哪些该重写，没有就新建，别在收尾爆问题」。先完成三包 53 个组件/页面的全量
+只读审计（三路并行、主笔抽样核实），经用户选定「分批稳妥」方案；本条目是第一批——
+shared 地基件 + 公告修复，第二批（理由弹窗壳 / DataTable 9 表 / 工作台骨架 / 学生端
+LikeButton·ConfirmDialog·PostDetailView 拆分等）另开。
+
+A. 公告问题修复（原始诉求）
+  - AnnouncementReader 剥掉全部卡片 chrome（max-w-lg / max-h / border / rounded / shadow），
+    根节点改为 h-full min-h-0 的纯呈现骨架，尺寸 100% 由外壳决定；标题 id 改 useId() 唯一化。
+  - 学生端 AnnouncementModal 自己加卡片壳：max-w-[720px] + max-h-[85vh]，短内容贴合、
+    长文展宽到 720、超高在正文区内滚动；aria-labelledby 改 :aria-label（标题 id 已动态化）。
+  - 管理端预览 el-dialog 同步 720px，消除卡里卡，内部 max-h-[68vh] flex 链。
+  - 新建 shared/useReadCountdown：deadline 式倒计时 + canClose 三条件纯逻辑（不挂
+    onBeforeUnmount 以支持模块级单例），useAnnouncement 与预览弹窗各自删除一份逐字复制的
+    倒计时/门控代码（预览端原 stop/tick/start/canClose 与学生端同名同构约 40 行）。
+
+B. 六个新建共享件（均附 spec，消费点全部迁完，不留半成品）
+  - useReadCountdown.ts（6 测试）：见 A。
+  - base/BaseIcon.vue + BaseSpinner.vue（5 测试）：heart/comment/bell/plus 四个内联图标，
+    currentColor 着色、class 控尺寸、aria-hidden；迁爱心×3（PostCard/CommentItem/
+    PostDetailView）、评论气泡、铃铛×2、plus、两处转圈（BaseButton/ImagePicker）。
+  - base/CountBadge.vue（4 测试）：99+ 封顶、count<=0 不渲染、sm/md 两档沿用两处原规格、
+    不含定位类（两铃铛原定位不同，定位留给调用方）；NotificationBell/TodoBell 接入。
+  - RelativeTime.vue（3 测试）：统一 <time datetime+title> 语义标记，relative/absolute-short
+    两变体；双端 13 处迁移，顺带修掉 NotificationsView 退化成 <p :title> 丢 datetime 的漂移。
+  - LoadMoreButton.vue（5 测试）：plain/table 两外观 + hint/disabled（收编 Review/User 两页
+    的筛选脏态提示）；12 处「加载更多」全部迁移（web 4 + admin 8）。
+  - StatePanel.vue（6 测试）：loading/failed/empty/ready 四态 + retry 事件 + empty-action
+    插槽 + 可覆盖顶边距；web 5 处虚线盒与看板失败屏迁移，间距 mt-4/mt-5/mt-6 漂移收敛。
+
+C. 顺手清理
+  - BaseInput 删除零消费死 API：enter emit 与 type='password'；补 5 处 FormField error 与
+    控件红框的断裂联动（ArbitrationDialog 的 BaseTextarea、LoginView 学号 BaseInput、
+    Ban/Credit/AnnouncementForm 四个原生 input 补 !border-danger + aria-invalid）。
+  - 裸 toLocaleString 生产代码清零：UserTable 封禁至与 AnnouncementTable 生效区间改走锁定
+    zh-CN 的 formatter（未来时刻不再随浏览器语言漂移）。
+  - ToastHost role 按类型分：error=alert、info=status（原 info 也 assertive 打断读屏）；
+    useToast 队列加 5 条上限，批量失败时挤旧留新。
+
+第二批候选（本次不做，避免半成品铺开）：理由输入弹窗壳（6 自绘 +4 prompt+2 confirm）、
+DataTable 配置表（9 张自绘 table）、QueueWorkbench 骨架（3 工作台页接线）、PageHeader（10 页）、
+StatCard、LikeButton/useLikeToggle、学生端 ModalShell/ConfirmDialog、PostImageGrid、
+PostDetailView 442 行拆分、2 处手写分页接回 useCursorList、BaseButton xs/链接形态。
+
+验证（真跑，全绿）
+  - pnpm -r lint / typecheck：三包通过。
+  - vitest：shared 19 文件 98 例、qinglan-web 23 文件 157 例、qinglan-admin 40 文件
+    252 例，共 507 例全绿。旧表格 spec 以裸 toLocaleString 定位 title 的 5 条断言改为按
+    time[datetime] 定位（定位意图不变，不是放水）。
+  - pnpm -r build：两端产物成功。
+  - 过程踩坑：vitest 用 esbuild 转译会擦除类型注解，QueueTable.spec 漏删 DOMWrapper 类型
+    import 时测试全绿、vue-tsc build 才报 TS2304——再次说明四道门禁缺一不可，类型错误只有
+    typecheck/build 能抓到。
+  - 纯前端改动，未启动浏览器；视觉变化点（弹窗 512→720、间距收敛、info toast 不再 assertive）
+    建议下次浏览器实测时顺带核对。
+
+--------------------------------------------------------------------------------
 R-41 规格符合性专项审查（以《青栏项目设计方案》为基线，三路并行对账）
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：规格符合性审查  状态：已交付；后端 662 例 + 前端三包四道门禁真跑全绿
@@ -2797,3 +2859,18 @@ T-47  管理端工作台两处与改造方案字面的轻微差异（R-41）
     各选项，而不是替产品选一个实现。大范围对账可让并行子代理分路取证，但涉及行为闭环 / 权限
     语义的高价值结论（R-41 的 T-43）主笔必须回源码复核二手结论——子代理能找到线索，闭环判断
     与权限连带影响要自己走完。
+
+55. 抽公共组件的正序是「全量只读盘点 → 每个候选附 ≥2 处真实消费点证据 → 方案分批获批 →
+    新建件带 spec 并一次性迁完消费点」，不能凭印象抽、更不能边写边发现新重复。R-42 先审计
+    三包 53 个组件才动手：爱心 SVG 三处逐字相同、加载更多 12 处、三态 14+ 处、倒计时两份
+    逐字复制——这些重复靠「读一个文件时的感觉」永远数不全。两个具体教训：①「组件太小不
+    值得改」往往就是根因——公告框问题不是宽度数值，是 Reader 把卡片外壳与正文呈现耦合，
+    直接调宽度只会制造卡里卡；公共组件要剥到「尺寸 100% 由外壳决定」才算边界干净。
+    ②机械迁移会改变隐性契约：title 从 td 移到内部 time 后，按 td[title] 定位的 5 条旧测试
+    全红——抽组件时必须同步搜索「被迁移 DOM 属性的所有断言」；断言改成新结构时定位意图
+    不能变（R-42 改为 time[datetime] 定位，而非简单删断言）。
+
+56. vitest 绿不等于类型对：esbuild 转译会擦除仅用于类型注解的 import/名称，测试运行时不报错，
+    只有 vue-tsc（typecheck/build）能抓到 TS2304 一类问题。R-42 收尾时 QueueTable.spec
+    漏删的 DOMWrapper 类型 import 正是测试全绿、build 爆红。改完测试后四道门禁（lint /
+    typecheck / vitest / build）仍要全跑，「测试过了」不能替代类型检查。

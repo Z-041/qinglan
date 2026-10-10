@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
+import BaseIcon from '@shared/components/base/BaseIcon.vue'
+import BaseSpinner from '@shared/components/base/BaseSpinner.vue'
+
 const props = withDefaults(defineProps<{ max?: number; uploading?: boolean }>(), {
   max: 9,
   uploading: false,
@@ -51,22 +54,8 @@ function remove(url: string): void {
       :disabled="props.uploading"
       @click="fileInput?.click()"
     >
-      <span
-        v-if="props.uploading"
-        class="size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
-        aria-hidden="true"
-      />
-      <svg
-        v-else
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        class="size-5"
-        aria-hidden="true"
-      >
-        <path d="M12 6v12M6 12h12" stroke-linecap="round" />
-      </svg>
+      <BaseSpinner v-if="props.uploading" />
+      <BaseIcon v-else name="plus" class="size-5" />
       <span>{{ props.uploading ? '上传中' : '添加图片' }}</span>
     </button>
 

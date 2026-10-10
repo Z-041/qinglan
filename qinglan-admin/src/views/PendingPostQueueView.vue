@@ -5,6 +5,7 @@ import PendingPostTable from '@/components/admin/PendingPostTable.vue'
 import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
 import ReviewContextPanel from '@/components/admin/ReviewContextPanel.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { useDispositionFinisher } from '@/composables/useDispositionFinisher'
 import { usePendingPostQueue } from '@/composables/usePendingPostQueue'
 import { usePermissions } from '@/composables/usePermissions'
@@ -202,9 +203,7 @@ async function handleReject(): Promise<void> {
         @handle="handleSelect"
       />
 
-      <div v-if="hasMore" class="border-t border-line px-3 py-3 text-center">
-        <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">加载更多</BaseButton>
-      </div>
+      <LoadMoreButton variant="table" :has-more="hasMore" :loading="loadingMore" @load="loadMore" />
     </section>
 
     <ReviewContextPanel

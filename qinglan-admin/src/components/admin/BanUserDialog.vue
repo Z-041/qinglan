@@ -55,7 +55,15 @@ function handleSubmit(): void {
         label="封禁天数"
         :error="daysValid ? '' : `请输入 ${MIN_DAYS} - ${MAX_DAYS} 之间的整数`"
       >
-        <input v-model="days" type="number" :min="MIN_DAYS" :max="MAX_DAYS" class="ql-field" />
+        <input
+          v-model="days"
+          type="number"
+          :min="MIN_DAYS"
+          :max="MAX_DAYS"
+          class="ql-field"
+          :class="!daysValid ? '!border-danger' : ''"
+          :aria-invalid="!daysValid"
+        />
       </FormField>
 
       <FormField label="封禁理由" hint="会写入审计日志">

@@ -156,39 +156,46 @@ onBeforeUnmount(() => {
       class="fixed inset-0 z-announcement flex overscroll-contain items-center justify-center bg-black/40 p-4"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="announcement-title"
+      :aria-label="current.title"
       tabindex="-1"
     >
-      <AnnouncementReader
-        :title="current.title"
-        :content="current.content"
-        :min-read-seconds="current.minReadSeconds"
-        :remaining-seconds="remainingSeconds"
-        :require-scroll-to-end="current.requireScrollToEnd"
-        :require-confirm="current.requireConfirm"
-        :confirmed="confirmed"
-        @update:confirmed="confirmed = $event"
-        @scrolled-to-end="noteScrolledToEnd"
+      <!-- 卡片壳在弹窗侧：宽度上限 720px（与正文阅读宽一致），短内容贴合、长文展宽，
+           超高在 Reader 正文区内滚动；chrome 不再由 shared Reader 自带 -->
+      <div
+        class="flex max-h-[85vh] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-line shadow-xl"
       >
-        <!--
-          标记已读失败时切出「重试 / 关闭」两个出口：只给一个按钮、失败后又关不掉，会把用户
-          永久锁在弹窗里（公告被撤回 → 服务端恒返 404 时必然发生）。这里不渲染任何错误文案
-          ——请求错误统一由 http 拦截器 toast（AGENTS.md 第七章），弹窗只负责给出路。
-        -->
-        <template #footer>
-          <div class="flex shrink-0 items-center gap-2">
-            <template v-if="readFailed">
-              <BaseButton variant="ghost" :disabled="submitting" @click="handleForceClose">
-                关闭
+        <AnnouncementReader
+          class="min-h-0 flex-1"
+          :title="current.title"
+          :content="current.content"
+          :min-read-seconds="current.minReadSeconds"
+          :remaining-seconds="remainingSeconds"
+          :require-scroll-to-end="current.requireScrollToEnd"
+          :require-confirm="current.requireConfirm"
+          :confirmed="confirmed"
+          @update:confirmed="confirmed = $event"
+          @scrolled-to-end="noteScrolledToEnd"
+        >
+          <!--
+            标记已读失败时切出「重试 / 关闭」两个出口：只给一个按钮、失败后又关不掉，会把用户
+            永久锁在弹窗里（公告被撤回 → 服务端恒返 404 时必然发生）。这里不渲染任何错误文案
+            ——请求错误统一由 http 拦截器 toast（AGENTS.md 第七章），弹窗只负责给出路。
+          -->
+          <template #footer>
+            <div class="flex shrink-0 items-center gap-2">
+              <template v-if="readFailed">
+                <BaseButton variant="ghost" :disabled="submitting" @click="handleForceClose">
+                  关闭
+                </BaseButton>
+                <BaseButton :loading="submitting" @click="handleClose">重试</BaseButton>
+              </template>
+              <BaseButton v-else :disabled="!canClose" :loading="submitting" @click="handleClose">
+                {{ closeLabel }}
               </BaseButton>
-              <BaseButton :loading="submitting" @click="handleClose">重试</BaseButton>
-            </template>
-            <BaseButton v-else :disabled="!canClose" :loading="submitting" @click="handleClose">
-              {{ closeLabel }}
-            </BaseButton>
-          </div>
-        </template>
-      </AnnouncementReader>
+            </div>
+          </template>
+        </AnnouncementReader>
+      </div>
     </div>
   </Teleport>
 </template>

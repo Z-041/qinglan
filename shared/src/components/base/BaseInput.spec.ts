@@ -18,18 +18,11 @@ describe('BaseInput', () => {
     expect(wrapper.get('input').element.value).toBe('abc')
   })
 
-  it('invalid 时追加危险边框并标记 aria-invalid', () => {
-    const wrapper = mount(BaseInput, { props: { invalid: true } })
-    const input = wrapper.get('input')
+  it('invalid 时追加危险边框并标记 aria-invalid，默认不标记', () => {
+    const invalid = mount(BaseInput, { props: { invalid: true } }).get('input')
+    expect(invalid.classes()).toContain('!border-danger')
+    expect(invalid.attributes('aria-invalid')).toBe('true')
 
-    expect(input.classes()).toContain('!border-danger')
-    expect(input.attributes('aria-invalid')).toBe('true')
-  })
-
-  it('回车时抛出 enter 事件', async () => {
-    const wrapper = mount(BaseInput)
-
-    await wrapper.get('input').trigger('keyup.enter')
-    expect(wrapper.emitted('enter')).toHaveLength(1)
+    expect(mount(BaseInput).get('input').attributes('aria-invalid')).toBe('false')
   })
 })

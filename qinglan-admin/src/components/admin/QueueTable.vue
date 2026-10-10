@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import RelativeTime from '@shared/components/RelativeTime.vue'
 import { isReportOverdue } from '@/composables/useReviewQueue'
 import { proposalActionLabel, proposalStatusLabel } from '@/types/proposal'
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminQueueItem, AdminQueueProposalProgress } from '@/types/review'
 
@@ -86,9 +86,8 @@ function hasOpenProposal(item: AdminQueueItem): boolean {
         <td
           class="px-3 py-3"
           :class="isReportOverdue(row.firstReportedAt) ? 'font-medium text-danger-deep' : ''"
-          :title="formatAbsoluteTime(row.firstReportedAt)"
         >
-          {{ formatRelativeTime(row.firstReportedAt) }}
+          <RelativeTime :iso="row.firstReportedAt" />
         </td>
         <td class="px-3 py-3">
           <span

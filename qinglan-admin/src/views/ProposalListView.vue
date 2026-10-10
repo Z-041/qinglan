@@ -2,7 +2,8 @@
 import { onMounted } from 'vue'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
+import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
+import RelativeTime from '@shared/components/RelativeTime.vue'
 import { pushToast } from '@shared/composables/useToast'
 import { useProposalList } from '@/composables/useProposalList'
 import {
@@ -85,8 +86,8 @@ async function handleVote(row: ProposalSummary, decision: VoteDecision): Promise
             <td class="px-3 py-3 tabular-nums">
               {{ row.agreeCount }}/{{ row.needed }} 同意（已投 {{ row.votedCount }} 票）
             </td>
-            <td class="px-3 py-3" :title="formatAbsoluteTime(row.createdAt)">
-              {{ formatRelativeTime(row.createdAt) }}
+            <td class="px-3 py-3">
+              <RelativeTime :iso="row.createdAt" />
             </td>
             <td class="px-3 py-3">
               <span v-if="row.myDecision" class="text-xs text-muted">{{ decisionLabel(row.myDecision) }}</span>
@@ -107,9 +108,7 @@ async function handleVote(row: ProposalSummary, decision: VoteDecision): Promise
         </tbody>
       </table>
 
-      <div v-if="hasMore" class="border-t border-line px-3 py-3 text-center">
-        <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">加载更多</BaseButton>
-      </div>
+      <LoadMoreButton variant="table" :has-more="hasMore" :loading="loadingMore" @load="loadMore" />
     </section>
   </div>
 </template>

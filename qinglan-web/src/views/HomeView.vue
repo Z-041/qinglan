@@ -3,6 +3,8 @@ import { onMounted, ref, watch } from 'vue'
 
 import { fetchTopics } from '@/api/topic'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
+import StatePanel from '@shared/components/StatePanel.vue'
 import HomeSidebar from '@/components/HomeSidebar.vue'
 import PostCard from '@/components/PostCard.vue'
 import TopicFilter from '@/components/TopicFilter.vue'
@@ -102,49 +104,41 @@ watch(topicId, () => {
           </button>
         </div>
 
-        <p v-if="loading" class="py-8 text-center text-sm text-muted">加载中…</p>
-
-        <!-- 加载失败与「真的没有内容」必须分成两屏：否则一次网络故障会被说成
-             「这里还没有内容」并引导用户去发帖。这里的文案是**状态说明**，
-             具体的请求错误信息仍只由 http 拦截器的 toast 给出（AGENTS.md 第七章），不重复渲染。 -->
-        <div
-          v-else-if="failed"
-          class="mt-4 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+        <!-- 加载失败与「真的没有内容」由 StatePanel 分成两屏；请求错误信息只由 http
+             拦截器的 toast 给出（AGENTS.md 第七章），这里不重复渲染 -->
+        <StatePanel
+          :state="loading ? 'loading' : failed ? 'failed' : posts.length === 0 ? 'empty' : 'ready'"
+          top-space-class="mt-4"
+          failed-title="内容没能加载出来"
+          empty-title="这里还没有内容"
+          empty-description="成为第一个发帖的人"
+          @retry="refresh()"
         >
-          <p class="text-sm font-medium text-ink">内容没能加载出来</p>
-          <BaseButton class="mt-4" variant="ghost" size="sm" @click="refresh()">重试</BaseButton>
-        </div>
+          <template #empty-action>
+            <RouterLink
+              v-if="userStore.isAuthenticated"
+              class="ql-btn ql-btn-sm bg-primary-deep text-white hover:bg-primary-strong"
+              to="/publish"
+            >
+              去发布
+            </RouterLink>
+          </template>
 
-        <div
-          v-else-if="!posts.length"
-          class="mt-4 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
-        >
-          <p class="text-sm font-medium text-ink">这里还没有内容</p>
-          <p class="mt-1 text-xs text-muted">成为第一个发帖的人</p>
-          <RouterLink
-            v-if="userStore.isAuthenticated"
-            class="ql-btn ql-btn-sm mt-4 bg-primary-deep text-white hover:bg-primary-strong"
-            to="/publish"
-          >
-            去发布
-          </RouterLink>
-        </div>
-
-        <!-- 分割线列表：每条一行（话题 + 摘要 + 配图 + 互动数据），不再分头条大卡与紧凑行 -->
-        <template v-else>
+          <!-- 分割线列表：每条一行（话题 + 摘要 + 配图 + 互动数据），不再分头条大卡与紧凑行 -->
           <PostCard
             v-for="post in posts"
             :key="post.id"
             :post="post"
             @toggle-like="toggleLike(post)"
           />
-        </template>
 
-        <div v-if="!loading && posts.length && hasMore" class="mt-4 flex justify-center">
-          <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">
-            加载更多
-          </BaseButton>
-        </div>
+          <LoadMoreButton
+            v-if="!loading && posts.length"
+            :has-more="hasMore"
+            :loading="loadingMore"
+            @load="loadMore"
+          />
+        </StatePanel>
       </div>
 
       <HomeSidebar v-model="topicId" :topics="topics" :authenticated="userStore.isAuthenticated" />

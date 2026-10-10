@@ -57,7 +57,13 @@ function handleSubmit(decision: ArbitrationDecision): void {
       :error="showError ? '请填写裁决理由' : undefined"
       hint="必填，会写入提案结论与审计日志"
     >
-      <BaseTextarea v-model="reason" :rows="3" :maxlength="MAX_REASON_LENGTH" placeholder="说明裁决依据" />
+      <BaseTextarea
+        v-model="reason"
+        :rows="3"
+        :maxlength="MAX_REASON_LENGTH"
+        :invalid="showError && !canSubmit"
+        placeholder="说明裁决依据"
+      />
     </FormField>
 
     <template #footer>

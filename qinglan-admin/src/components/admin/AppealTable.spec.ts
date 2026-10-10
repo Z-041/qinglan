@@ -36,15 +36,14 @@ describe('AppealTable', () => {
     expect(mountTable([]).text()).toContain('暂无待复审申诉')
   })
 
-  it('申诉时间渲染相对时间，绝对时间落在 title 上', () => {
+  it('申诉时间由 RelativeTime 渲染：time[datetime] + 绝对 title + 相对正文', () => {
     const appealedAt = new Date().toISOString()
     const wrapper = mountTable([appeal({ appealedAt })])
 
-    const cell = wrapper
-      .findAll('td')
-      .find((element) => element.attributes('title') === new Date(appealedAt).toLocaleString())
-
-    expect(cell?.text()).toBe('刚刚')
+    const time = wrapper.findAll('time').find((element) => element.attributes('datetime') === appealedAt)
+    expect(time).toBeTruthy()
+    expect(time?.attributes('title')).toMatch(/2026/)
+    expect(time?.text()).toBe('刚刚')
   })
 
   it('表头固定：thead 带 sticky + 不透明底色', () => {

@@ -30,6 +30,21 @@ describe('useToast', () => {
     expect(toasts).toHaveLength(0)
   })
 
+  it('提示数超上限时挤掉最旧的，始终只保留最新的 MAX_TOASTS 条', () => {
+    for (let i = 1; i <= 7; i += 1) {
+      pushToast(`第 ${i} 条`)
+    }
+
+    expect(toasts).toHaveLength(5)
+    expect(toasts.map((toast) => toast.message)).toEqual([
+      '第 3 条',
+      '第 4 条',
+      '第 5 条',
+      '第 6 条',
+      '第 7 条',
+    ])
+  })
+
   it('手动关闭立即移除，且旧提示的定时器不会误删后续提示', () => {
     pushToast('第一条')
     dismissToast(toasts[0].id)

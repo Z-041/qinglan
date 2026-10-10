@@ -10,6 +10,7 @@ import {
 import AnnouncementFormDialog from '@/components/admin/AnnouncementFormDialog.vue'
 import AnnouncementTable from '@/components/admin/AnnouncementTable.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { usePermissions } from '@/composables/usePermissions'
 import type { AdminAnnouncementItem, CreateAnnouncementPayload } from '@/types/admin'
 
@@ -184,11 +185,7 @@ async function handleRevoke(row: AdminAnnouncementItem): Promise<void> {
         @revoke="handleRevoke"
       />
 
-      <div v-if="hasMore" class="border-t border-line px-3 py-3 text-center">
-        <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">
-          加载更多
-        </BaseButton>
-      </div>
+      <LoadMoreButton variant="table" :has-more="hasMore" :loading="loadingMore" @load="loadMore" />
     </section>
 
     <AnnouncementFormDialog

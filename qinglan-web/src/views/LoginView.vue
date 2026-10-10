@@ -214,6 +214,7 @@ function changeEmail(): void {
             name="studentId"
             placeholder="请输入学号…"
             :spellcheck="false"
+            :invalid="Boolean(studentId) && !studentIdValid"
             required
           />
         </FormField>

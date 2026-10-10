@@ -170,7 +170,14 @@ function handleSubmit(): void {
           :hint="periodValid ? '留空表示长期有效' : ''"
           :error="periodValid ? '' : '结束时间必须晚于开始时间'"
         >
-          <input :value="endAt" type="datetime-local" class="ql-field" @input="onEndAtInput" />
+          <input
+            :value="endAt"
+            type="datetime-local"
+            class="ql-field"
+            :class="!periodValid && endAt.trim() !== '' && startAt.trim() !== '' ? '!border-danger' : ''"
+            :aria-invalid="!periodValid && endAt.trim() !== '' && startAt.trim() !== ''"
+            @input="onEndAtInput"
+          />
         </FormField>
       </div>
 
@@ -185,6 +192,8 @@ function handleSubmit(): void {
           :min="MIN_READ_SECONDS"
           :max="MAX_READ_SECONDS"
           class="ql-field"
+          :class="minReadSeconds.trim() !== '' && !minReadValid ? '!border-danger' : ''"
+          :aria-invalid="minReadSeconds.trim() !== '' && !minReadValid"
           placeholder="留空使用后端默认"
           @input="onMinReadSecondsInput"
         />

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import BaseSpinner from './BaseSpinner.vue'
+
 type Variant = 'primary' | 'ghost' | 'danger'
 type Size = 'md' | 'sm'
 
@@ -48,11 +50,7 @@ const classes = computed(() => [
     :disabled="disabled || loading"
     @click="emit('click', $event)"
   >
-    <span
-      v-if="loading"
-      class="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
-      aria-hidden="true"
-    />
+    <BaseSpinner v-if="loading" size-class="size-3.5" />
     <slot />
   </button>
 </template>

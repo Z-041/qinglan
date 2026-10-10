@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
-import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
+import StatePanel from '@shared/components/StatePanel.vue'
 import { useAuth } from '@shared/composables/useAuth'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
@@ -54,21 +54,16 @@ onMounted(() => {
   <section class="ql-shell py-8 max-lg:py-5">
     <h1 class="text-lg font-semibold text-ink">我的</h1>
 
-    <p v-if="loading" class="mt-6 text-sm text-muted">加载中…</p>
-
-    <!-- 失败态只在确实拿不到档案时出现，文案是状态说明；请求错误信息本身仍只由拦截器 toast -->
-    <div
-      v-else-if="failed && !userStore.profile"
-      class="mt-6 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+    <!-- 失败态只在确实拿不到档案时出现；已有档案时重载失败继续显示旧内容（错误已由拦截器 toast） -->
+    <StatePanel
+      :state="loading ? 'loading' : failed && !userStore.profile ? 'failed' : 'ready'"
+      failed-title="资料没能加载出来"
+      @retry="loadProfile()"
     >
-      <p class="text-sm font-medium text-ink">资料没能加载出来</p>
-      <BaseButton class="mt-4" variant="ghost" size="sm" @click="loadProfile()">重试</BaseButton>
-    </div>
-
-    <div
-      v-else-if="userStore.profile"
-      class="mt-4 grid grid-cols-[minmax(0,1fr)_320px] gap-10 max-lg:(grid-cols-1 gap-6)"
-    >
+      <div
+        v-if="userStore.profile"
+        class="mt-4 grid grid-cols-[minmax(0,1fr)_320px] gap-10 max-lg:(grid-cols-1 gap-6)"
+      >
       <div class="min-w-0 self-start">
         <BaseCard :padded="false">
           <!-- 去装饰：原来是渐变横幅 + 白色圆形光斑，属「AI 味」视觉；改为纯色块 -->
@@ -133,6 +128,7 @@ onMounted(() => {
           </p>
         </div>
       </aside>
-    </div>
+      </div>
+    </StatePanel>
   </section>
 </template>

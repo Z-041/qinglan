@@ -8,6 +8,7 @@ import QueueTable from '@/components/admin/QueueTable.vue'
 import ReviewActionBar from '@/components/admin/ReviewActionBar.vue'
 import ReviewContextPanel from '@/components/admin/ReviewContextPanel.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { REVIEW_ACTION_FLOW } from '@/composables/reviewActionFlow'
 import { availableReviewActions, blockedByOpenProposal, REVIEW_ACTION_META } from '@/composables/reviewActionSet'
@@ -427,20 +428,14 @@ async function handleDismiss(reason: string): Promise<void> {
         @handle="handleSelect"
       />
 
-      <div v-if="hasMore" class="border-t border-line px-3 py-3 text-center">
-        <p v-if="filtersDirty" class="mb-2 text-xs text-muted">
-          筛选条件已修改，正在重新加载，请稍候再继续加载
-        </p>
-        <BaseButton
-          variant="ghost"
-          size="sm"
-          :disabled="filtersDirty"
-          :loading="loadingMore"
-          @click="loadMore"
-        >
-          加载更多
-        </BaseButton>
-      </div>
+      <LoadMoreButton
+        variant="table"
+        :has-more="hasMore"
+        :loading="loadingMore"
+        :disabled="filtersDirty"
+        :hint="filtersDirty ? '筛选条件已修改，正在重新加载，请稍候再继续加载' : ''"
+        @load="loadMore"
+      />
     </section>
 
     <ReviewContextPanel

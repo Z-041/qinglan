@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
+import RelativeTime from '@shared/components/RelativeTime.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminPendingPostItem } from '@/types/review'
 
@@ -60,8 +60,8 @@ const { targetStatusLabel } = useUserLabels()
           <span v-if="row.reportCount > 0" class="font-medium text-danger-deep">{{ row.reportCount }}</span>
           <span v-else class="text-muted">0</span>
         </td>
-        <td class="px-3 py-3" :title="formatAbsoluteTime(row.submittedAt)">
-          {{ formatRelativeTime(row.submittedAt) }}
+        <td class="px-3 py-3">
+          <RelativeTime :iso="row.submittedAt" />
         </td>
         <td class="px-3 py-3">
           <button

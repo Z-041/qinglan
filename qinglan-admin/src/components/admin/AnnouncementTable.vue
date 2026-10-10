@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
+import RelativeTime from '@shared/components/RelativeTime.vue'
+import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
 import type { AdminAnnouncementItem, AnnouncementLevel, AnnouncementStatus } from '@/types/admin'
 
 const props = withDefaults(
@@ -46,17 +47,9 @@ function statusLabel(status: AnnouncementStatus): string {
   return STATUS_LABELS[status] ?? '未知'
 }
 
-/** 生效区间是「窗口」而非单一时刻，用绝对时间；发布时间改为相对时间（阶段 B） */
+/** 生效区间是「窗口」而非单一时刻，用绝对时间（锁定 zh-CN，不随浏览器语言漂移） */
 function dateText(value: string | null): string {
-  return value ? new Date(value).toLocaleString() : '—'
-}
-
-function publishedText(item: AdminAnnouncementItem): string {
-  return item.publishedAt ? formatRelativeTime(item.publishedAt) : '—'
-}
-
-function publishedTitle(item: AdminAnnouncementItem): string {
-  return item.publishedAt ? formatAbsoluteTime(item.publishedAt) : ''
+  return value ? formatAbsoluteTime(value) : '—'
 }
 
 function periodText(item: AdminAnnouncementItem): string {
@@ -95,8 +88,9 @@ function boolText(value: boolean): string {
         <td class="px-3 py-3 tabular-nums">{{ row.minReadSeconds }}</td>
         <td class="px-3 py-3">{{ boolText(row.requireScrollToEnd) }}</td>
         <td class="px-3 py-3">{{ boolText(row.requireConfirm) }}</td>
-        <td class="whitespace-nowrap px-3 py-3" :title="publishedTitle(row)">
-          {{ publishedText(row) }}
+        <td class="whitespace-nowrap px-3 py-3">
+          <RelativeTime v-if="row.publishedAt" :iso="row.publishedAt" />
+          <span v-else>—</span>
         </td>
         <td class="px-3 py-3">
           <div class="flex gap-2">

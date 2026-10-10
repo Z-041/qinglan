@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
+import RelativeTime from '@shared/components/RelativeTime.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { auditActionLabel } from '@/types/admin'
 import type { AdminReviewContext, AdminReviewHistory } from '@/types/review'
@@ -102,9 +102,7 @@ const activeTab = ref('context')
               <!-- 只展示 ID / 状态 / 时间，绝不展示学号邮箱或匿名代号 -->
               <span class="text-ink">帖子 #{{ post.id }}</span>
               <span class="text-muted">{{ targetStatusLabel(post.status) }}</span>
-              <span class="text-muted" :title="formatAbsoluteTime(post.createdAt)">
-                {{ formatRelativeTime(post.createdAt) }}
-              </span>
+              <RelativeTime class="text-muted" :iso="post.createdAt" />
             </li>
           </ul>
           <p v-else class="text-sm text-muted">暂无近期动态</p>
@@ -123,9 +121,7 @@ const activeTab = ref('context')
             >
               <div class="flex items-center justify-between gap-4">
                 <span class="text-ink">{{ auditActionLabel(item.action) }}</span>
-                <span class="text-muted" :title="formatAbsoluteTime(item.createdAt)">
-                  {{ formatRelativeTime(item.createdAt) }}
-                </span>
+                <RelativeTime class="text-muted" :iso="item.createdAt" />
               </div>
               <p class="text-xs text-muted">
                 <!-- 0 是系统自动处置的哨兵值；操作人只以 ID 出现 -->

@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { exportAuditLogs, fetchAuditLogs } from '@/api/admin'
 import AuditLogView from '@/views/AuditLogView.vue'
 import type { AdminAuditLogItem } from '@/types/admin'
-import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
 
 vi.mock('@/api/admin', () => ({ fetchAuditLogs: vi.fn(), exportAuditLogs: vi.fn() }))
 
@@ -36,12 +35,11 @@ describe('AuditLogView', () => {
     const wrapper = mount(AuditLogView)
     await flushPromises()
 
-    const cell = wrapper
-      .findAll('td')
-      .find((element) => element.attributes('title') === formatAbsoluteTime(createdAt))
-    expect(cell).toBeDefined()
-    // 短格式为 `YYYY-MM-DD HH:mm`——title 是完整绝对时间，正文压掉秒便于扫读
-    expect(cell?.text()).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
+    // absolute-short：正文为 `YYYY-MM-DD HH:mm`，完整时刻在 title，datetime 为原始 ISO
+    const time = wrapper.find(`time[datetime="${createdAt}"]`)
+    expect(time.exists()).toBe(true)
+    expect(time.attributes('title')).toMatch(/2026/)
+    expect(time.text()).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
   })
 
   it('表头固定：thead 带 sticky + 不透明底色', async () => {

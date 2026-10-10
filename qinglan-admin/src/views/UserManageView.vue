@@ -5,6 +5,7 @@ import BanUserDialog from '@/components/admin/BanUserDialog.vue'
 import CreditAdjustDialog from '@/components/admin/CreditAdjustDialog.vue'
 import UserTable from '@/components/admin/UserTable.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { exportAdminUsers } from '@/api/admin'
 import { useCsvExport } from '@/composables/useCsvExport'
@@ -223,20 +224,14 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
         @credit="openCredit"
       />
 
-      <div v-if="hasMore" class="border-t border-line px-3 py-3 text-center">
-        <p v-if="filtersDirty" class="mb-2 text-xs text-muted">
-          筛选条件已修改，请先点击「查询」再继续加载
-        </p>
-        <BaseButton
-          variant="ghost"
-          size="sm"
-          :disabled="filtersDirty"
-          :loading="loadingMore"
-          @click="loadMore"
-        >
-          加载更多
-        </BaseButton>
-      </div>
+      <LoadMoreButton
+        variant="table"
+        :has-more="hasMore"
+        :loading="loadingMore"
+        :disabled="filtersDirty"
+        :hint="filtersDirty ? '筛选条件已修改，请先点击「查询」再继续加载' : ''"
+        @load="loadMore"
+      />
     </section>
 
     <BanUserDialog

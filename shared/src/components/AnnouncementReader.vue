@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, useId, watch } from 'vue'
 
 /**
  * 强制阅读弹窗的**纯呈现**部分（进度条 / 标题 / 正文滚动区 / 滚动到底判定 / 勾选「我已了解」）。
@@ -23,6 +23,9 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ 'update:confirmed': [boolean]; 'scrolled-to-end': [] }>()
+
+/** 标题 id 唯一化：同一页面可能同时存在学生弹窗与管理端预览两个 Reader，硬编码 id 会冲突 */
+const titleId = `announcement-title-${useId()}`
 
 /** 顶部进度条宽度：随倒计时推进 */
 const progressWidth = computed(() => {
@@ -84,9 +87,12 @@ watch(
 </script>
 
 <template>
-  <div
-    class="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-xl"
-  >
+  <!--
+    纯呈现骨架：不自带宽度上限 / 边框 / 阴影 / 圆角——尺寸与卡片 chrome 由调用方的外壳决定
+    （学生端弹窗自己是卡片壳；管理端预览的外壳是 el-dialog），避免「卡里卡」与宽度被钉死。
+    高度链 h-full + min-h-0：由外壳给 max-h，正文滚动区才能在框内滚动而不是把框撑高。
+  -->
+  <div class="flex h-full min-h-0 w-full flex-col bg-surface">
     <!-- 顶部进度条：随倒计时推进 -->
     <div class="h-1 w-full bg-primary-tint">
       <div
@@ -95,7 +101,7 @@ watch(
       />
     </div>
 
-    <h2 id="announcement-title" class="px-5 pt-4 text-base font-semibold text-ink">
+    <h2 :id="titleId" class="px-5 pt-4 text-base font-semibold text-ink">
       {{ props.title }}
     </h2>
 

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import AnnouncementReader from '@shared/components/AnnouncementReader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import { useReadCountdown } from '@shared/composables/useReadCountdown'
 
 /**
  * 公告「学生视角强读预览」（阶段 D）。
@@ -26,40 +27,22 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>()
 
-const remainingSeconds = ref(0)
-const scrolledToEnd = ref(false)
-const confirmed = ref(false)
 /** 每次打开自增，作为 Reader 的 key 强制重挂载，清掉其内部「已滚到底」状态 */
 const sessionKey = ref(0)
 
-let countdownTimer: ReturnType<typeof setInterval> | null = null
-let deadlineAt = 0
+/**
+ * 倒计时与三条件门控复用学生端同一份纯逻辑（shared/useReadCountdown），
+ * 只保留「预览不落库」这层差异。
+ */
+const gate = useReadCountdown({
+  requireScrollToEnd: () => props.requireScrollToEnd,
+  requireConfirm: () => props.requireConfirm,
 
-function stopCountdown(): void {
-  if (countdownTimer !== null) {
-    clearInterval(countdownTimer)
-    countdownTimer = null
-  }
-}
-
-function tickCountdown(): void {
-  const left = Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1000))
-  remainingSeconds.value = left
-  if (left === 0) {
-    stopCountdown()
-  }
-}
+})
 
 function start(): void {
-  stopCountdown()
-  scrolledToEnd.value = false
-  confirmed.value = false
   sessionKey.value += 1
-  deadlineAt = Date.now() + Math.max(0, Math.floor(props.minReadSeconds)) * 1000
-  tickCountdown()
-  if (remainingSeconds.value > 0) {
-    countdownTimer = setInterval(tickCountdown, 1000)
-  }
+  gate.start(Math.max(0, Math.floor(props.minReadSeconds)))
 }
 
 watch(
@@ -68,30 +51,17 @@ watch(
     if (open) {
       start()
     } else {
-      stopCountdown()
+      gate.stop()
     }
   },
   { immediate: true },
 )
 
-onBeforeUnmount(stopCountdown)
-
 /** 与学生端一致：时长满、必要时已滚到底、必要时已勾选，三者都满足才可关闭 */
-const canClose = computed(() => {
-  if (remainingSeconds.value > 0) {
-    return false
-  }
-  if (props.requireScrollToEnd && !scrolledToEnd.value) {
-    return false
-  }
-  if (props.requireConfirm && !confirmed.value) {
-    return false
-  }
-  return true
-})
+const canClose = gate.canClose
 
 const closeLabel = computed(() =>
-  canClose.value ? '我知道了' : `${remainingSeconds.value}s 后可关闭`,
+  canClose.value ? '我知道了' : `${gate.remainingSeconds.value}s 后可关闭`,
 )
 </script>
 
@@ -99,7 +69,7 @@ const closeLabel = computed(() =>
   <el-dialog
     :model-value="props.open"
     title="学生视角强读预览"
-    width="560px"
+    width="720px"
     @update:model-value="emit('close')"
   >
     <p class="mb-3 text-xs text-muted">
@@ -107,23 +77,28 @@ const closeLabel = computed(() =>
       预览不会发布，也不改变发布流程。
     </p>
 
-    <AnnouncementReader
-      :key="sessionKey"
-      :title="props.title"
-      :content="props.content"
-      :min-read-seconds="props.minReadSeconds"
-      :remaining-seconds="remainingSeconds"
-      :require-scroll-to-end="props.requireScrollToEnd"
-      :require-confirm="props.requireConfirm"
-      :confirmed="confirmed"
-      @update:confirmed="confirmed = $event"
-      @scrolled-to-end="scrolledToEnd = true"
-    >
-      <template #footer>
-        <BaseButton variant="ghost" :disabled="!canClose" @click="emit('close')">
-          {{ closeLabel }}
-        </BaseButton>
-      </template>
-    </AnnouncementReader>
+    <!-- 与学生端弹窗同一高度口径：限高 + flex 链，长文在 Reader 正文区内滚动；
+         Reader 已无卡片 chrome，el-dialog 自身就是唯一面板，不再「卡里卡」 -->
+    <div class="flex max-h-[68vh] flex-col">
+      <AnnouncementReader
+        :key="sessionKey"
+        class="min-h-0 flex-1"
+        :title="props.title"
+        :content="props.content"
+        :min-read-seconds="props.minReadSeconds"
+        :remaining-seconds="gate.remainingSeconds.value"
+        :require-scroll-to-end="props.requireScrollToEnd"
+        :require-confirm="props.requireConfirm"
+        :confirmed="gate.confirmed.value"
+        @update:confirmed="gate.setConfirmed"
+        @scrolled-to-end="gate.noteScrolledToEnd"
+      >
+        <template #footer>
+          <BaseButton variant="ghost" :disabled="!canClose" @click="emit('close')">
+            {{ closeLabel }}
+          </BaseButton>
+        </template>
+      </AnnouncementReader>
+    </div>
   </el-dialog>
 </template>

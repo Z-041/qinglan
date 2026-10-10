@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import CountBadge from '@shared/components/base/CountBadge.vue'
+import BaseIcon from '@shared/components/base/BaseIcon.vue'
 import type { TodoGroup } from '@/composables/useTodoCounts'
 
 const props = defineProps<{
@@ -25,27 +27,9 @@ const total = computed(() => props.groups.reduce((sum, group) => sum + group.cou
         class="relative flex cursor-pointer items-center rounded-lg px-2 py-1.5 text-muted transition hover:bg-primary-tint hover:text-ink"
         :aria-label="total > 0 ? `待办提醒，${total} 项待处理` : '待办提醒，暂无待办'"
       >
-        <!-- 铃铛图标用 currentColor，不引入图标库、不硬编码色值 -->
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="h-5 w-5"
-          aria-hidden="true"
-        >
-          <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-        </svg>
-        <span
-          v-if="total > 0"
-          aria-hidden="true"
-          class="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-danger px-1 text-center text-[11px] font-medium leading-[18px] text-white"
-        >
-          {{ total > 99 ? '99+' : total }}
-        </span>
+        <!-- 铃铛图标与角标统一走 shared BaseIcon / CountBadge（currentColor 着色，不硬编码色值） -->
+        <BaseIcon name="bell" class="size-5" />
+        <CountBadge class="-right-1 -top-1 absolute" size="md" :count="total" />
       </button>
     </template>
 

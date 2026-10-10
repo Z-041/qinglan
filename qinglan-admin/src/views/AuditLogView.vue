@@ -3,7 +3,8 @@ import { onMounted, ref } from 'vue'
 
 import { exportAuditLogs, fetchAuditLogs } from '@/api/admin'
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import { formatAbsoluteTime, formatShortDateTime } from '@shared/composables/useRelativeTime'
+import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
+import RelativeTime from '@shared/components/RelativeTime.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useCsvExport } from '@/composables/useCsvExport'
 import {
@@ -176,8 +177,8 @@ onMounted(() => {
         </thead>
         <tbody>
           <tr v-for="row in items" :key="row.id" class="border-b border-line last:border-0">
-            <td class="px-3 py-3 whitespace-nowrap" :title="formatAbsoluteTime(row.createdAt)">
-              {{ formatShortDateTime(row.createdAt) }}
+            <td class="px-3 py-3 whitespace-nowrap">
+              <RelativeTime variant="absolute-short" :iso="row.createdAt" />
             </td>
             <td class="px-3 py-3">{{ actionLabel(row.action) }}</td>
             <td class="px-3 py-3">{{ TARGET_TYPE_LABELS[row.targetType] }} #{{ row.targetId }}</td>
@@ -197,9 +198,7 @@ onMounted(() => {
         </tbody>
       </table>
 
-      <div v-if="hasMore" class="border-t border-line px-3 py-3 text-center">
-        <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">加载更多</BaseButton>
-      </div>
+      <LoadMoreButton variant="table" :has-more="hasMore" :loading="loadingMore" @load="loadMore" />
     </section>
   </div>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
+import RelativeTime from '@shared/components/RelativeTime.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminAppealItem } from '@/types/review'
 
@@ -53,8 +53,8 @@ function takenDownText(reason: string | null): string {
           {{ takenDownText(row.takenDownReason) }}
         </td>
         <td class="max-w-[320px] truncate px-3 py-3" :title="row.appealReason">{{ row.appealReason }}</td>
-        <td class="px-3 py-3" :title="formatAbsoluteTime(row.appealedAt)">
-          {{ formatRelativeTime(row.appealedAt) }}
+        <td class="px-3 py-3">
+          <RelativeTime :iso="row.appealedAt" />
         </td>
         <td class="px-3 py-3">
           <button

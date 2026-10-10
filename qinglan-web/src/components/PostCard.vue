@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
+import BaseIcon from '@shared/components/base/BaseIcon.vue'
+import RelativeTime from '@shared/components/RelativeTime.vue'
 import type { PostSummary } from '@/types/post'
 
 /**
@@ -20,13 +21,7 @@ const emit = defineEmits<{ 'toggle-like': [] }>()
         <span class="ql-tag shrink-0 bg-primary-soft text-primary-deep">{{ post.topicName }}</span>
         <span v-if="post.mine" class="ql-tag shrink-0 bg-primary-tint text-primary-deep">我</span>
         <span class="truncate text-xs text-muted">{{ post.anonymousCode }}</span>
-        <time
-          class="ml-auto shrink-0 text-xs text-muted"
-          :datetime="post.createdAt"
-          :title="formatAbsoluteTime(post.createdAt)"
-        >
-          {{ formatRelativeTime(post.createdAt) }}
-        </time>
+        <RelativeTime class="ml-auto shrink-0 text-xs text-muted" :iso="post.createdAt" />
       </div>
 
       <p class="mt-2 line-clamp-2 text-sm leading-relaxed break-words text-ink">{{ post.content }}</p>
@@ -52,33 +47,12 @@ const emit = defineEmits<{ 'toggle-like': [] }>()
         :aria-label="post.liked ? '取消点赞' : '点赞'"
         @click="emit('toggle-like')"
       >
-        <svg
-          viewBox="0 0 24 24"
-          :fill="post.liked ? 'currentColor' : 'none'"
-          stroke="currentColor"
-          stroke-width="1.8"
-          class="size-4"
-          aria-hidden="true"
-        >
-          <path
-            d="M12 20.3 4.8 13a4.6 4.6 0 0 1 6.5-6.5l.7.7.7-.7A4.6 4.6 0 0 1 19.2 13Z"
-            stroke-linejoin="round"
-          />
-        </svg>
+        <BaseIcon name="heart" class="size-4" :filled="post.liked" />
         <span>{{ post.likeCount }}</span>
       </button>
 
       <span class="flex items-center gap-1 text-xs text-muted">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          class="size-4"
-          aria-hidden="true"
-        >
-          <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-5.4A8 8 0 1 1 21 12Z" stroke-linejoin="round" />
-        </svg>
+        <BaseIcon name="comment" class="size-4" />
         <span>{{ post.commentCount }}</span>
       </span>
     </div>

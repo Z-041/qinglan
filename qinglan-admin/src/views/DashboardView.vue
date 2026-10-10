@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import EChart from '@/components/admin/EChart.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
+import StatePanel from '@shared/components/StatePanel.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useDashboard } from '@/composables/useDashboard'
 import {
@@ -102,19 +103,14 @@ onMounted(() => {
       <BaseButton variant="ghost" size="sm" :loading="loading" @click="load">刷新</BaseButton>
     </div>
 
-    <p v-if="loading && !stats" class="text-sm text-muted">加载中…</p>
-
-    <!-- 失败与「真的没有数据」必须分成两屏：否则一次网络故障会被说成「暂无数据」。
-         文案是状态说明，具体错误信息仍只由 http 拦截器的 toast 给出（AGENTS.md 第七章）。 -->
-    <div
-      v-else-if="failed && !stats"
-      class="rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+    <!-- 失败与「真的没有数据」必须分成两屏；文案是状态说明，请求错误信息仍只由
+         http 拦截器的 toast 给出（AGENTS.md 第七章）。本块在 flex gap 容器内，去重顶边距 -->
+    <StatePanel
+      :state="loading && !stats ? 'loading' : failed && !stats ? 'failed' : 'ready'"
+      top-space-class="mt-0"
+      failed-title="看板数据没能加载出来"
+      @retry="load()"
     >
-      <p class="text-sm font-medium text-ink">看板数据没能加载出来</p>
-      <BaseButton class="mt-4" variant="ghost" size="sm" @click="load()">重试</BaseButton>
-    </div>
-
-    <template v-else>
       <div class="grid grid-cols-3 gap-5">
         <BaseCard v-for="section in sections" :key="section.title">
           <h2 class="text-sm font-medium text-muted">{{ section.title }}</h2>
@@ -184,6 +180,6 @@ onMounted(() => {
           <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
         </BaseCard>
       </div>
-    </template>
+    </StatePanel>
   </div>
 </template>

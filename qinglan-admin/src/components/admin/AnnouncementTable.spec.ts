@@ -35,15 +35,14 @@ describe('AnnouncementTable', () => {
     expect(mount(AnnouncementTable, { props: { items: [] } }).text()).toContain('还没有公告')
   })
 
-  it('发布时间渲染相对时间，绝对时间落在 title 上', () => {
+  it('发布时间由 RelativeTime 渲染：time[datetime] + 绝对 title + 相对正文', () => {
     const publishedAt = new Date().toISOString()
     const wrapper = mount(AnnouncementTable, { props: { items: [announcement({ publishedAt })] } })
 
-    const cell = wrapper
-      .findAll('td')
-      .find((element) => element.attributes('title') === new Date(publishedAt).toLocaleString())
-
-    expect(cell?.text()).toBe('刚刚')
+    const time = wrapper.findAll('time').find((element) => element.attributes('datetime') === publishedAt)
+    expect(time).toBeTruthy()
+    expect(time?.attributes('title')).toMatch(/2026/)
+    expect(time?.text()).toBe('刚刚')
   })
 
   it('表头固定：thead 带 sticky + 不透明底色', () => {

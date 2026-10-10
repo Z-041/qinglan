@@ -5,6 +5,7 @@ import AppealReviewDialog from '@/components/admin/AppealReviewDialog.vue'
 import AppealTable from '@/components/admin/AppealTable.vue'
 import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { useAppealQueue } from '@/composables/useAppealQueue'
 import { useDispositionFinisher } from '@/composables/useDispositionFinisher'
 import { usePermissions } from '@/composables/usePermissions'
@@ -153,9 +154,7 @@ async function handleSubmit(approved: boolean, reason: string): Promise<void> {
         @review="openReview($event, true)"
       />
 
-      <div v-if="hasMore" class="border-t border-line px-3 py-3 text-center">
-        <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">加载更多</BaseButton>
-      </div>
+      <LoadMoreButton variant="table" :has-more="hasMore" :loading="loadingMore" @load="loadMore" />
     </section>
 
     <AppealReviewDialog

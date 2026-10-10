@@ -13,7 +13,7 @@ const { toasts, dismissToast } = useToast()
         v-for="toast in toasts"
         :key="toast.id"
         type="button"
-        role="alert"
+        :role="toast.type === 'error' ? 'alert' : 'status'"
         class="pointer-events-auto max-w-sm cursor-pointer rounded-lg px-4 py-2.5 text-sm shadow-lg max-sm:max-w-[92vw]"
         :class="toast.type === 'error' ? 'bg-danger-soft text-danger-deep' : 'bg-surface text-ink'"
         @click="dismissToast(toast.id)"

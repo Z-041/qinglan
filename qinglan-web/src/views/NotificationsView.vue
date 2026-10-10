@@ -4,7 +4,9 @@ import { onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
+import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
+import RelativeTime from '@shared/components/RelativeTime.vue'
+import StatePanel from '@shared/components/StatePanel.vue'
 import { useNotifications } from '@/composables/useNotifications'
 import { useNotificationStore } from '@/stores/notification'
 
@@ -30,26 +32,14 @@ onMounted(() => {
       </BaseButton>
     </div>
 
-    <p v-if="loading" class="py-8 text-center text-sm text-muted">加载中…</p>
-
-    <!-- 加载失败与「真的没有消息」必须分成两屏：否则一次网络故障会被说成「还没有消息」。
-         这里的文案是**状态说明**，具体错误信息仍只由 http 拦截器的 toast 给出。 -->
-    <div
-      v-else-if="failed"
-      class="mt-5 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+    <StatePanel
+      :state="loading ? 'loading' : failed ? 'failed' : items.length === 0 ? 'empty' : 'ready'"
+      top-space-class="mt-5"
+      failed-title="消息没能加载出来"
+      empty-title="还没有消息"
+      @retry="load()"
     >
-      <p class="text-sm font-medium text-ink">消息没能加载出来</p>
-      <BaseButton class="mt-4" variant="ghost" size="sm" @click="load()">重试</BaseButton>
-    </div>
-
-    <div
-      v-else-if="!items.length"
-      class="mt-5 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
-    >
-      <p class="text-sm font-medium text-ink">还没有消息</p>
-    </div>
-
-    <ul v-else class="ql-card mt-5 divide-y divide-line overflow-hidden">
+      <ul class="ql-card mt-5 divide-y divide-line overflow-hidden">
       <li v-for="item in items" :key="item.id">
         <!-- 有 link 时整条是导航链接；无 link 时退化为 button——必须是真 button 而非 div@click，
              否则键盘用户无法聚焦、无法回车标记已读。
@@ -71,18 +61,18 @@ onMounted(() => {
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium text-ink">{{ item.title }}</p>
             <p v-if="item.body" class="mt-1 text-xs leading-relaxed text-muted">{{ item.body }}</p>
-            <p class="mt-1 text-xs text-muted" :title="formatAbsoluteTime(item.createdAt)">
-              {{ formatRelativeTime(item.createdAt) }}
-            </p>
+            <RelativeTime class="mt-1 block text-xs text-muted" :iso="item.createdAt" />
           </div>
         </component>
       </li>
-    </ul>
+      </ul>
 
-    <div v-if="!loading && items.length && hasMore" class="mt-4 flex justify-center">
-      <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">
-        加载更多
-      </BaseButton>
-    </div>
+      <LoadMoreButton
+        v-if="!loading && items.length"
+        :has-more="hasMore"
+        :loading="loadingMore"
+        @load="loadMore"
+      />
+    </StatePanel>
   </div>
 </template>

@@ -73,6 +73,8 @@ function handleSubmit(): void {
           :min="MIN_DELTA"
           :max="MAX_DELTA"
           class="ql-field"
+          :class="!deltaValid && delta.trim() !== '' ? '!border-danger' : ''"
+          :aria-invalid="!deltaValid && delta.trim() !== ''"
           @input="onDeltaInput"
         />
       </FormField>

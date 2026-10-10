@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 
 import PendingPostTable from '@/components/admin/PendingPostTable.vue'
 import type { AdminPendingPostItem } from '@/types/review'
-import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
 
 function pendingPost(overrides: Partial<AdminPendingPostItem> = {}): AdminPendingPostItem {
   return {
@@ -49,11 +48,8 @@ describe('PendingPostTable', () => {
 
     expect(text).toContain('测试正文')
     expect(text).toContain('审核中')
-    // 提交时间改为相对时间渲染，绝对时间落在 title 上（相对文案随当前时刻变化，不断言其字面）
-    const timeCell = wrapper
-      .findAll('td')
-      .find((cell) => cell.attributes('title') === formatAbsoluteTime(submittedAt))
-    expect(timeCell).toBeDefined()
+    // 提交时间由 RelativeTime 渲染：time[datetime] + 绝对 title（相对文案随当前时刻变化，不断言字面）
+    expect(wrapper.find(`time[datetime="${submittedAt}"]`).exists()).toBe(true)
   })
 
   it('表头固定：thead 带 sticky + 不透明底色', () => {

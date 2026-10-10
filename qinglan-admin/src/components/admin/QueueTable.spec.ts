@@ -3,7 +3,19 @@ import { describe, expect, it } from 'vitest'
 
 import QueueTable from '@/components/admin/QueueTable.vue'
 import type { AdminQueueItem } from '@/types/review'
-import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
+
+/**
+ * 按 datetime 找到时间列的 RelativeTime，再回到所在 td：title 现在落在内部 time 上而非 td，
+ * 超时标红类仍挂在 td。
+ */
+function timeCell(wrapper: VueWrapper<InstanceType<typeof QueueTable>>, iso: string): HTMLTableCellElement | undefined {
+  return (
+    wrapper
+      .findAll('time')
+      .find((element) => element.attributes('datetime') === iso)
+      ?.element.closest('td') ?? undefined
+  )
+}
 
 function item(overrides: Partial<AdminQueueItem> = {}): AdminQueueItem {
   return {
@@ -87,37 +99,30 @@ describe('QueueTable', () => {
     const firstReportedAt = '2000-01-01T00:00:00Z'
     const wrapper = mount(QueueTable, { props: { items: [item({ firstReportedAt })] } })
 
-    // 时间列改为相对时间后，按绝对时间（title）定位单元格，而不是写死 td[4]：
-    // 列序一旦增删，写死的下标会指向别的列，断言就失去意义了
-    const cell = wrapper
-      .findAll('td')
-      .find((element) => element.attributes('title') === formatAbsoluteTime(firstReportedAt))
+    // 按 time[datetime] 定位时间列而非写死 td 下标：列序一旦增删，下标会指向别的列
+    const cell = timeCell(wrapper, firstReportedAt)
 
     expect(cell).toBeDefined()
-    expect(cell?.classes()).toContain('text-danger-deep')
+    expect(cell?.classList.contains('text-danger-deep')).toBe(true)
   })
 
   it('首报在 24 小时内的行不标红', () => {
     const firstReportedAt = new Date().toISOString()
     const wrapper = mount(QueueTable, { props: { items: [item({ firstReportedAt })] } })
 
-    const cell = wrapper
-      .findAll('td')
-      .find((element) => element.attributes('title') === formatAbsoluteTime(firstReportedAt))
+    const cell = timeCell(wrapper, firstReportedAt)
 
     expect(cell).toBeDefined()
-    expect(cell?.classes()).not.toContain('text-danger-deep')
+    expect(cell?.classList.contains('text-danger-deep')).toBe(false)
   })
 
   it('时间列渲染相对时间，绝对时间放在 title 悬停可见', () => {
     const firstReportedAt = new Date().toISOString()
     const wrapper = mount(QueueTable, { props: { items: [item({ firstReportedAt })] } })
 
-    const cell = wrapper
-      .findAll('td')
-      .find((element) => element.attributes('title') === formatAbsoluteTime(firstReportedAt))
+    const cell = timeCell(wrapper, firstReportedAt)
 
-    expect(cell?.text()).toBe('刚刚')
+    expect(cell?.textContent).toBe('刚刚')
   })
 
   it('表头固定：thead 带 sticky + 不透明底色', () => {

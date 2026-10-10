@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
+import RelativeTime from '@shared/components/RelativeTime.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminUserItem } from '@/types/admin'
 
@@ -12,10 +12,6 @@ const emit = defineEmits<{
 }>()
 
 const { roleLabel, statusLabel } = useUserLabels()
-
-function dateText(value: string | null): string {
-  return value ? new Date(value).toLocaleString() : '—'
-}
 </script>
 
 <template>
@@ -35,8 +31,8 @@ function dateText(value: string | null): string {
     <tbody>
       <!-- key 用 id 只为稳定复用 DOM，该数字不渲染到界面上 -->
       <tr v-for="row in props.items" :key="row.id" class="border-b border-line last:border-0">
-        <td class="px-3 py-3" :title="formatAbsoluteTime(row.createdAt)">
-          {{ formatRelativeTime(row.createdAt) }}
+        <td class="px-3 py-3">
+          <RelativeTime :iso="row.createdAt" />
         </td>
         <td class="px-3 py-3">{{ roleLabel(row.role) }}</td>
         <td class="px-3 py-3" :class="row.status === 'ACTIVE' ? '' : 'font-medium text-danger-deep'">
@@ -44,7 +40,10 @@ function dateText(value: string | null): string {
         </td>
         <td class="px-3 py-3 tabular-nums">{{ row.creditScore }}</td>
         <!-- 封禁至指向未来时刻，用绝对时间；相对时间会把未来归为「刚刚」，反而误导 -->
-        <td class="px-3 py-3">{{ dateText(row.bannedUntil) }}</td>
+        <td class="px-3 py-3">
+          <RelativeTime v-if="row.bannedUntil" variant="absolute-short" :iso="row.bannedUntil" />
+          <span v-else>—</span>
+        </td>
         <td class="px-3 py-3">
           <div class="flex gap-2">
             <button

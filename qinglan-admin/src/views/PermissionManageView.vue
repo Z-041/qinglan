@@ -4,7 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import { changeUserRole, fetchCommittee } from '@/api/admin'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
+import RelativeTime from '@shared/components/RelativeTime.vue'
 import { pushToast } from '@shared/composables/useToast'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useSubmit } from '@shared/composables/useSubmit'
@@ -158,8 +158,8 @@ async function revoke(member: UserProfile): Promise<void> {
             <td class="px-3 py-3">{{ roleLabel(member.role) }}</td>
             <td class="px-3 py-3">{{ statusLabel(member.status) }}</td>
             <td class="px-3 py-3">{{ member.creditScore }}</td>
-            <td class="px-3 py-3" :title="formatAbsoluteTime(member.createdAt)">
-              {{ formatRelativeTime(member.createdAt) }}
+            <td class="px-3 py-3">
+              <RelativeTime :iso="member.createdAt" />
             </td>
             <td class="px-3 py-3">
               <!-- 超管不可被收回：后端也会拒（唯一超管是后台的最后一道保险） -->

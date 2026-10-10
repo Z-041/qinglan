@@ -3,7 +3,8 @@ import { onMounted, ref } from 'vue'
 
 import ArbitrationDialog from '@/components/admin/ArbitrationDialog.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
+import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
+import RelativeTime from '@shared/components/RelativeTime.vue'
 import { pushToast } from '@shared/composables/useToast'
 import { useArbitration } from '@/composables/useArbitration'
 import {
@@ -72,7 +73,7 @@ async function handleArbitrate(payload: ArbitratePayload): Promise<void> {
               <ul v-if="row.votes.length" class="flex flex-col gap-1">
                 <li v-for="vote in row.votes" :key="vote.voterId" class="text-xs text-muted">
                   投票人 #{{ vote.voterId }} · {{ decisionLabel(vote.decision) }} ·
-                  <span :title="formatAbsoluteTime(vote.createdAt)">{{ formatRelativeTime(vote.createdAt) }}</span>
+                  <RelativeTime class="text-muted" :iso="vote.createdAt" />
                 </li>
               </ul>
               <span v-else class="text-xs text-muted">暂无投票</span>
@@ -89,9 +90,7 @@ async function handleArbitrate(payload: ArbitratePayload): Promise<void> {
         </tbody>
       </table>
 
-      <div v-if="hasMore" class="border-t border-line px-3 py-3 text-center">
-        <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">加载更多</BaseButton>
-      </div>
+      <LoadMoreButton variant="table" :has-more="hasMore" :loading="loadingMore" @load="loadMore" />
     </section>
 
     <ArbitrationDialog

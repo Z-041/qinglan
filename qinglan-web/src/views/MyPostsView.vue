@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 
-import BaseButton from '@shared/components/base/BaseButton.vue'
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
+import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
+import RelativeTime from '@shared/components/RelativeTime.vue'
+import StatePanel from '@shared/components/StatePanel.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useMyPosts } from '@/composables/useMyPosts'
 import type { MyPostItem, PostStatus } from '@/types/post'
@@ -43,31 +44,21 @@ onMounted(() => {
       </RouterLink>
     </div>
 
-    <p v-if="loading" class="mt-6 text-center text-sm text-muted">加载中…</p>
-
-    <!-- 加载失败与「真的没有帖子」分成两屏：文案是状态说明，请求错误信息仍只由 http 拦截器 toast -->
-    <div
-      v-else-if="failed"
-      class="mt-6 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
+    <StatePanel
+      :state="loading ? 'loading' : failed ? 'failed' : items.length === 0 ? 'empty' : 'ready'"
+      failed-title="帖子没能加载出来"
+      empty-title="你还没有发布过帖子"
+      @retry="load()"
     >
-      <p class="text-sm font-medium text-ink">帖子没能加载出来</p>
-      <BaseButton class="mt-4" variant="ghost" size="sm" @click="load()">重试</BaseButton>
-    </div>
+      <template #empty-action>
+        <RouterLink
+          class="ql-btn ql-btn-sm bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
+          to="/publish"
+        >
+          去发布
+        </RouterLink>
+      </template>
 
-    <div
-      v-else-if="!items.length"
-      class="mt-6 rounded-xl border border-dashed border-line-strong px-5 py-10 text-center"
-    >
-      <p class="text-sm font-medium text-ink">你还没有发布过帖子</p>
-      <RouterLink
-        class="ql-btn ql-btn-sm mt-4 bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
-        to="/publish"
-      >
-        去发布
-      </RouterLink>
-    </div>
-
-    <template v-else>
       <ul class="mt-5 divide-y divide-line">
         <li v-for="item in items" :key="item.id" class="ql-row">
           <RouterLink :to="`/posts/${item.id}`" class="block px-4 pt-3.5 pb-3 max-lg:px-3">
@@ -80,13 +71,7 @@ onMounted(() => {
               </span>
               <span class="ql-tag shrink-0 bg-primary-soft text-primary-deep">{{ item.topicName }}</span>
               <span class="truncate text-xs text-muted">{{ item.anonymousCode }}</span>
-              <time
-                class="ml-auto shrink-0 text-xs text-muted"
-                :datetime="item.createdAt"
-                :title="formatAbsoluteTime(item.createdAt)"
-              >
-                {{ formatRelativeTime(item.createdAt) }}
-              </time>
+              <RelativeTime class="ml-auto shrink-0 text-xs text-muted" :iso="item.createdAt" />
             </div>
 
             <p class="mt-2 line-clamp-2 text-sm leading-relaxed break-words text-ink">
@@ -120,11 +105,7 @@ onMounted(() => {
         </li>
       </ul>
 
-      <div v-if="hasMore" class="mt-4 flex justify-center">
-        <BaseButton variant="ghost" size="sm" :loading="loadingMore" @click="loadMore">
-          加载更多
-        </BaseButton>
-      </div>
-    </template>
+      <LoadMoreButton :has-more="hasMore" :loading="loadingMore" @load="loadMore" />
+    </StatePanel>
   </section>
 </template>

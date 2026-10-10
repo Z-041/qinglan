@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 
 import { fetchPendingAnnouncement, markAnnouncementRead } from '@/api/announcement'
 import { ApiError, readStoredValue, writeStoredValue } from '@shared/api/http'
+import { useReadCountdown } from '@shared/composables/useReadCountdown'
 import type { PendingAnnouncement } from '@/types/announcement'
 
 /** 游客设备标识在 localStorage 中的键名（计划 D4） */
@@ -18,19 +19,22 @@ const MAX_LOAD_ATTEMPTS = 2
  * （与 useToast 同一手法——状态在模块作用域、导出 `useAnnouncement()` 取用）。
  */
 const current = ref<PendingAnnouncement | null>(null)
-const remainingSeconds = ref(0)
-const scrolledToEnd = ref(false)
-const confirmed = ref(false)
 const submitting = ref(false)
 /** 标记已读的连续失败次数；> 0 时界面要给出「重试 / 关闭」而不是把用户锁死 */
 const readFailureCount = ref(0)
 
+/**
+ * 强制阅读门控（倒计时 + 滚动 + 勾选三条件）。纯逻辑在 shared 的 useReadCountdown，
+ * 管理端发布前预览共用同一份；本单例只追加拉取 / 标记已读 / 428 等业务尾巴。
+ */
+const gate = useReadCountdown({
+  requireScrollToEnd: () => current.value?.requireScrollToEnd ?? false,
+  requireConfirm: () => current.value?.requireConfirm ?? false,
+})
+const { remainingSeconds, confirmed, canClose } = gate
+
 /** 弹窗展示时刻，用于计算真实停留时长（不变量 #6）——绝不等于「打开即已读」 */
 let shownAt = 0
-/** 倒计时目标时刻。按「目标时刻 − 现在」算，而不是每秒减一：标签页被浏览器挂起时
- *  setInterval 会被节流，减一写法会让界面显示还要等更久，与服务端收到的真实时长口径不一致 */
-let deadlineAt = 0
-let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 /** 存储不可用时的兜底：本次会话内保持同一个 id，避免每次调用都换一个（那会让已读记录永远对不上） */
 let memoryDeviceId: string | null = null
@@ -56,61 +60,13 @@ export function deviceId(): string {
   return memoryDeviceId
 }
 
-/**
- * 三个强制条件（设计方案 5.2 的 AND）：倒计时满、必要时已滚到底、必要时已勾选。
- * 关闭按钮与 `markRead()` 都由它把关。
- */
-const canClose = computed(() => {
-  const announcement = current.value
-  if (!announcement) {
-    return false
-  }
-  if (remainingSeconds.value > 0) {
-    return false
-  }
-  if (announcement.requireScrollToEnd && !scrolledToEnd.value) {
-    return false
-  }
-  if (announcement.requireConfirm && !confirmed.value) {
-    return false
-  }
-  return true
-})
-
 /** 标记已读失败过——界面据此切出「重试 / 关闭」两个出口 */
 const readFailed = computed(() => readFailureCount.value > 0)
 
-function stopCountdown(): void {
-  if (countdownTimer !== null) {
-    clearInterval(countdownTimer)
-    countdownTimer = null
-  }
-}
-
-function tickCountdown(): void {
-  const left = Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1000))
-  remainingSeconds.value = left
-  if (left === 0) {
-    stopCountdown()
-  }
-}
-
-function startCountdown(seconds: number): void {
-  stopCountdown()
-  deadlineAt = Date.now() + Math.max(0, Math.floor(seconds)) * 1000
-  tickCountdown()
-  if (remainingSeconds.value > 0) {
-    countdownTimer = setInterval(tickCountdown, 1000)
-  }
-}
-
 /** 复位全部状态。弹窗的显隐只由 `current` 决定（原 `visible` 与它恒等，已移除避免两份真相） */
 function reset(): void {
-  stopCountdown()
+  gate.reset()
   current.value = null
-  remainingSeconds.value = 0
-  scrolledToEnd.value = false
-  confirmed.value = false
   submitting.value = false
   readFailureCount.value = 0
 }
@@ -118,12 +74,10 @@ function reset(): void {
 /** 展示一条公告并开始倒计时；**一次只展示一条，绝不堆叠**（设计方案 5.5） */
 function present(announcement: PendingAnnouncement): void {
   current.value = announcement
-  scrolledToEnd.value = false
-  confirmed.value = false
   submitting.value = false
   readFailureCount.value = 0
   shownAt = Date.now()
-  startCountdown(announcement.minReadSeconds)
+  gate.start(announcement.minReadSeconds)
 }
 
 /**
@@ -187,16 +141,6 @@ export function openFromPrecondition(announcement: PendingAnnouncement): void {
   present(announcement)
 }
 
-/** 弹窗在正文滚动到底时调用 */
-function noteScrolledToEnd(): void {
-  scrolledToEnd.value = true
-}
-
-/** 勾选「我已了解」 */
-function confirmUnderstood(): void {
-  confirmed.value = true
-}
-
 type MarkReadOutcome = 'not-ready' | 'ok' | 'fatal' | 'retryable'
 
 /**
@@ -218,7 +162,7 @@ async function markRead(): Promise<MarkReadOutcome> {
     await markAnnouncementRead(announcement.id, {
       deviceId: deviceId(),
       durationMs: Date.now() - shownAt,
-      scrolledToEnd: scrolledToEnd.value,
+      scrolledToEnd: gate.scrolledToEnd.value,
       confirmed: confirmed.value,
     })
     readFailureCount.value = 0
@@ -286,7 +230,7 @@ export function useAnnouncement() {
   return {
     current,
     remainingSeconds,
-    scrolledToEnd,
+    scrolledToEnd: gate.scrolledToEnd,
     confirmed,
     submitting,
     canClose,
@@ -294,8 +238,7 @@ export function useAnnouncement() {
     loadNext,
     refreshPending,
     openFromPrecondition,
-    noteScrolledToEnd,
-    confirmUnderstood,
+    noteScrolledToEnd: gate.noteScrolledToEnd,
     markRead,
     closeAndContinue,
     forceClose,

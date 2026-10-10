@@ -1,11 +1,12 @@
 <script setup lang="ts">
 withDefaults(
   defineProps<{
-    type?: 'text' | 'email' | 'password'
+    type?: 'text' | 'email'
     placeholder?: string
     autocomplete?: string
     inputmode?: 'text' | 'numeric' | 'email'
     maxlength?: number
+    /** 校验失败态：红框 + aria-invalid；通常与外层 FormField 的 error 同步传入 */
     invalid?: boolean
     /** 表单字段名：浏览器自动填充 / 密码管理器 / 表单语义都依赖它 */
     name?: string
@@ -18,8 +19,6 @@ withDefaults(
 )
 
 const model = defineModel<string>({ default: '' })
-
-defineEmits<{ enter: [] }>()
 </script>
 
 <template>
@@ -36,6 +35,5 @@ defineEmits<{ enter: [] }>()
     class="ql-field"
     :class="invalid ? '!border-danger' : ''"
     :aria-invalid="invalid"
-    @keyup.enter="$emit('enter')"
   />
 </template>

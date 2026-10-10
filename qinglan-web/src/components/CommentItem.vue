@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { formatAbsoluteTime, formatRelativeTime } from '@shared/composables/useRelativeTime'
+import BaseIcon from '@shared/components/base/BaseIcon.vue'
+import RelativeTime from '@shared/components/RelativeTime.vue'
 import type { Comment } from '@/types/comment'
 
 const props = withDefaults(
@@ -29,13 +30,10 @@ const emit = defineEmits<{
     <div class="flex items-center gap-2">
       <span class="truncate text-xs font-medium text-primary-deep">{{ props.comment.anonymousCode }}</span>
       <span v-if="props.comment.mine" class="ql-tag shrink-0 bg-primary-tint text-primary-deep">我</span>
-      <time
+      <RelativeTime
         class="ml-auto shrink-0 text-xs text-muted"
-        :datetime="props.comment.createdAt"
-        :title="formatAbsoluteTime(props.comment.createdAt)"
-      >
-        {{ formatRelativeTime(props.comment.createdAt) }}
-      </time>
+        :iso="props.comment.createdAt"
+      />
     </div>
 
     <p class="mt-1.5 text-sm leading-relaxed break-words whitespace-pre-wrap text-ink">
@@ -51,19 +49,7 @@ const emit = defineEmits<{
         :aria-label="`${props.comment.liked ? '取消点赞' : '点赞'} ${props.comment.anonymousCode} 的评论`"
         @click="emit('toggle-like', props.comment.id)"
       >
-        <svg
-          viewBox="0 0 24 24"
-          :fill="props.comment.liked ? 'currentColor' : 'none'"
-          stroke="currentColor"
-          stroke-width="1.8"
-          class="size-3.5"
-          aria-hidden="true"
-        >
-          <path
-            d="M12 20.3 4.8 13a4.6 4.6 0 0 1 6.5-6.5l.7.7.7-.7A4.6 4.6 0 0 1 19.2 13Z"
-            stroke-linejoin="round"
-          />
-        </svg>
+        <BaseIcon name="heart" class="size-3.5" :filled="props.comment.liked" />
         <span>{{ props.comment.likeCount }}</span>
       </button>
 
