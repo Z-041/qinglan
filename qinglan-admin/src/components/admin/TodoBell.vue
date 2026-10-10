@@ -44,7 +44,7 @@ const total = computed(() => props.groups.reduce((sum, group) => sum + group.cou
           <span>{{ group.label }}</span>
           <span
             class="ql-badge"
-            :class="group.count > 0 ? 'bg-primary-soft text-primary-deep' : 'bg-canvas text-muted'"
+            :class="group.count > 0 ? 'bg-primary-tint text-primary-deep' : 'bg-canvas text-muted'"
           >
             {{ group.count }}
           </span>

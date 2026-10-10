@@ -126,7 +126,6 @@ function handleSubmit(): void {
   <DialogShell
     :open="props.open"
     title="新建公告"
-    width="520px"
     :enter-to-confirm="false"
     @close="emit('close')"
   >
@@ -175,6 +174,7 @@ function handleSubmit(): void {
             v-model="endAt"
             type="datetime"
             class="w-full"
+            :class="{ 'ql-field-error': !periodValid }"
             value-format="YYYY-MM-DD[T]HH:mm:ss"
             placeholder="留空表示长期有效"
           />
@@ -186,7 +186,12 @@ function handleSubmit(): void {
         :hint="minReadValid ? `留空使用后端默认；填写须为 ${MIN_READ_SECONDS}–${MAX_READ_SECONDS} 的整数` : ''"
         :error="minReadValid ? '' : `请输入 ${MIN_READ_SECONDS}–${MAX_READ_SECONDS} 的整数`"
       >
-        <el-input v-model="minReadSeconds" inputmode="numeric" placeholder="留空使用后端默认" />
+        <el-input
+          v-model="minReadSeconds"
+          :class="{ 'ql-field-error': !minReadValid }"
+          inputmode="numeric"
+          placeholder="留空使用后端默认"
+        />
       </FormField>
 
       <!-- 分组用 fieldset/legend（与申诉复审弹窗同口径），不用裸 span 当组标题 -->

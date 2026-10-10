@@ -137,6 +137,7 @@ async function handleSubmit(approved: boolean, reason: string): Promise<void> {
         :items="items"
         :loading="loading"
         :failed="failed"
+        @retry="refresh"
         :active-key="activeKey"
         :can-review="can('APPEAL_REVIEW')"
         @review="openReview($event, true)"

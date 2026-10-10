@@ -61,6 +61,7 @@ function handleSubmit(decision: ArbitrationDecision): void {
       <el-input
         v-model="reason"
         type="textarea"
+        :class="{ 'ql-field-error': showError && !canSubmit }"
         :rows="3"
         :maxlength="MAX_REASON_LENGTH"
         placeholder="说明裁决依据"

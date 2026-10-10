@@ -125,6 +125,7 @@ onMounted(() => {
         :colspan="5"
         :loading="loading"
         :failed="failed"
+        @retry="refresh"
         empty-text="暂无审计记录"
       >
         <!-- 审计时间保留绝对时间（合规语义），压成短格式；完整时刻悬停可见 -->

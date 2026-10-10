@@ -403,6 +403,7 @@ async function handleDismiss(reason: string): Promise<void> {
         :items="items"
         :loading="loading"
         :failed="failed"
+        @retry="refresh"
         :active-key="activeKey"
         @select="handleSelect"
       />

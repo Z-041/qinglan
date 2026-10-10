@@ -18,3 +18,15 @@ html:root {
   --el-color-primary-dark-2: color-mix(in srgb, var(--ql-primary) 80%, #000);
   --el-border-radius-base: 8px;
 }
+
+/*
+ * 表单控件的错误态。
+ *
+ * Element Plus 的 el-input / el-select / el-date-picker 都没有 status 入参，校验不过时只能靠外层
+ * class 覆盖其内部类——这里是本应用唯一能改到 EP 内部类名的地方（组件内写不了 scoped 覆盖），
+ * 色值取全站语义色 var(--ql-danger)。`!important` 是为了压过按需注入的 EP 样式（它们运行时注入，
+ * 源序在我们之后）。
+ */
+.ql-field-error :is(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner) {
+  box-shadow: 0 0 0 1px var(--ql-danger) inset !important;
+}

@@ -46,7 +46,7 @@ function handleSubmit(): void {
   <DialogShell
     :open="props.open"
     title="封禁用户"
-    width="440px"
+    :enter-to-confirm="false"
     confirm-text="确认封禁"
     confirm-variant="danger"
     :submitting="props.submitting"
@@ -59,7 +59,7 @@ function handleSubmit(): void {
         label="封禁天数"
         :error="daysValid ? '' : `请输入 ${MIN_DAYS} - ${MAX_DAYS} 之间的整数`"
       >
-        <el-input v-model="days" inputmode="numeric" />
+        <el-input v-model="days" :class="{ 'ql-field-error': !daysValid }" inputmode="numeric" />
       </FormField>
 
       <FormField label="封禁理由" hint="会写入审计日志">

@@ -76,6 +76,7 @@ async function handleVote(row: ProposalSummary, decision: VoteDecision): Promise
         :colspan="6"
         :loading="loading"
         :failed="failed"
+        @retry="refresh"
         empty-text="暂无提案"
       >
         <template #head>

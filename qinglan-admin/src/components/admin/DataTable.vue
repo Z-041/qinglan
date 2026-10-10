@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import BaseButton from '@shared/components/base/BaseButton.vue'
+
 /**
- * 管理端表格统一外壳：固定表头 + 空 / 加载 / 失败占位行。
+ * 管理端表格统一外壳：固定表头 + 空 / 加载 / 失败占位行（失败态带内联「重试」，与 StatePanel 同取向）。
  *
  * 9 张表（5 个表组件 + 4 处页面内联表）此前各自复制同一套 `<table>` 外壳、吸顶表头类与
  * 「加载中 / 加载失败 / 暂无…」三态占位行，colspan 还要手工维护。此处只收敛这三处外壳，
@@ -23,6 +25,9 @@ withDefaults(
   }>(),
   { loading: false, failed: false, emptyText: '暂无数据' },
 )
+
+/** 失败态的内联「重试」按钮；调用方（或其外层表组件的根就是本组件，会把监听透传下来）接它 */
+const emit = defineEmits<{ retry: [] }>()
 </script>
 
 <template>
@@ -36,7 +41,12 @@ withDefaults(
       <slot />
       <tr v-if="!items.length">
         <td :colspan="colspan" class="px-3 py-10 text-center text-sm text-muted">
-          {{ loading ? '加载中…' : failed ? '加载失败，请点击「刷新」重试' : emptyText }}
+          <template v-if="loading">加载中…</template>
+          <template v-else-if="failed">
+            加载失败
+            <BaseButton class="ml-1" variant="ghost" size="sm" @click="emit('retry')">重试</BaseButton>
+          </template>
+          <template v-else>{{ emptyText }}</template>
         </td>
       </tr>
     </tbody>

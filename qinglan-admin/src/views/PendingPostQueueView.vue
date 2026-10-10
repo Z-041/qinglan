@@ -177,6 +177,7 @@ async function handleReject(): Promise<void> {
         :items="items"
         :loading="loading"
         :failed="failed"
+        @retry="refresh"
         :active-key="activeKey"
         @select="handleSelect"
       />

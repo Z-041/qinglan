@@ -105,6 +105,7 @@ async function handleRevoke(row: AdminAnnouncementItem): Promise<void> {
         :items="items"
         :loading="loading"
         :failed="failed"
+        @retry="refresh"
         :can-operate="canOperate"
         :submitting="submitting"
         @publish="handlePublish"

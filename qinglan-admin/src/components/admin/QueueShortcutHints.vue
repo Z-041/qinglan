@@ -13,7 +13,7 @@ defineProps<{ bindings: readonly ShortcutHint[] }>()
     <span>快捷键（先点击列表）：</span>
     <span v-for="binding in bindings" :key="binding.key" class="inline-flex items-center gap-1">
       <kbd
-        class="rounded border border-line bg-primary-tint px-1.5 py-0.5 font-mono text-[11px] text-primary-deep"
+        class="rounded border border-line bg-primary-tint px-1.5 py-0.5 font-mono text-xs text-primary-deep"
       >
         {{ binding.key }}
       </kbd>

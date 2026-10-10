@@ -17,6 +17,44 @@
 
 
 --------------------------------------------------------------------------------
+R-60 管理端布局与样式收口：校验红框 / 卡片间距 / 弹窗宽度 / 表格失败态
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：样式与布局收口  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿
+来源：R-59 把管理端表单控件统一到 Element Plus 后，用户要求继续解决布局与样式问题（四项全选）。
+
+一、补回表单校验红框（R-59 的副作用）
+  EP 的 el-input / el-select / el-date-picker 都没有 status 入参，`!border-danger` 这类原子类也
+  覆盖不到其内部类，R-59 后校验只剩错误文案、红框丢了。补法：element-plus-vars.css 增
+  `.ql-field-error :is(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner)`
+  （box-shadow 用全站语义色 var(--ql-danger)；`!important` 用于压过运行时注入、源序在后的 EP 样式），
+  各校验字段按条件挂 `ql-field-error`：用户管理信用分上/下界、公告表单生效结束与最短阅读秒数、
+  封禁天数、调分分值、裁决理由（后者原是 `:invalid` 属性，EP 下无效）。
+
+二、卡片内边距与 token
+  - ChartCard 与权限管理页的表单卡改用 `<BaseCard :padded="false" class="p-4">`，与页面其它
+    `ql-card … p-4` 一致（BaseCard 默认 p-6 保留给学生端，不动 shared）。
+  - TodoBell 分组徽标底色 `bg-primary-soft` → `bg-primary-tint`，与 QueueTable / ReviewContextPanel
+    的 `ql-badge` 同档。
+  - QueueShortcutHints 的 `<kbd>` 字号 `text-[11px]` → `text-xs`（并入字阶）。
+  - 其余硬编码尺寸（CountBadge 的 10/11px 角标、TodoBell popover 宽 210、强读预览 max-h-[68vh]、
+    EChart 默认 280px）经复核属**一次性的微排版**、各有其用途，不做无把握的 token 化。
+
+三、弹窗宽度档位收敛
+  原先 4 档（440 / 480 / 520 / 720）→ **2 档**：常规表单用 DialogShell 默认 **480px**（封禁 /
+  调分 / 新建公告去掉各自的 width），宽内容场景保留 **720px**（强读预览）。
+
+四、表格失败态补内联「重试」
+  DataTable 失败占位行由「加载失败，请点击「刷新」重试」改为「加载失败 + 重试按钮」，新增
+  `retry` 事件；9 处调用方接上（4 处页面内联 DataTable 直接绑定；5 个表组件因**根节点就是
+  DataTable**，监听经属性透传直达，无需在组件里再声明 emit）。列宽档位已在 R-59 收敛，本次未再动。
+
+验证（真跑，管理端）
+- pnpm lint / typecheck：通过。
+- vitest：qinglan-admin 49 文件 292 例全绿（既有断言未改）。
+- pnpm build：产物成功。
+- 纯 admin 改动（shared / web 未动），故按包跑四道门禁。
+
+--------------------------------------------------------------------------------
 R-59 管理端口径统一：表单控件全面 Element Plus + 表格样式下沉 + 筛选栏对齐
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：口径统一 / 组件对齐  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿

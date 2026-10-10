@@ -56,6 +56,7 @@ async function handleArbitrate(payload: ArbitratePayload): Promise<void> {
         :colspan="5"
         :loading="loading"
         :failed="failed"
+        @retry="refresh"
         empty-text="暂无待裁决提案"
       >
         <template #head>

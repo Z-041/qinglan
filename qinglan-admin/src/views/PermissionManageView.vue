@@ -92,7 +92,7 @@ async function revoke(member: UserProfile): Promise<void> {
       超级管理员唯一且不可被下放或收回。
     </p>
 
-    <BaseCard>
+    <BaseCard :padded="false" class="p-4">
       <h2 class="text-sm font-medium text-muted">下放管理权限</h2>
       <p class="mt-1 text-xs text-muted">
         <!-- 不变量 #3：后台看不到学号与邮箱，因此只能按用户 ID 操作 -->
@@ -137,6 +137,7 @@ async function revoke(member: UserProfile): Promise<void> {
         :colspan="6"
         :loading="loading"
         :failed="failed"
+        @retry="load"
         empty-text="暂无成员"
       >
         <template #head>

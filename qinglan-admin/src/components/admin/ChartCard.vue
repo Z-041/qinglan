@@ -16,7 +16,7 @@ defineProps<{
 </script>
 
 <template>
-  <BaseCard>
+  <BaseCard :padded="false" class="p-4">
     <div class="flex items-center justify-between">
       <h2 class="text-sm font-medium text-muted">{{ title }}</h2>
       <slot name="action" />

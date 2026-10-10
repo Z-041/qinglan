@@ -152,14 +152,26 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
         label="信用分下界"
         :error="creditBoundInvalid(filters.minCredit) ? '须为 0-100 的整数' : ''"
       >
-        <el-input v-model="filters.minCredit" class="w-[110px]" placeholder="含" inputmode="numeric" />
+        <el-input
+          v-model="filters.minCredit"
+          class="w-[110px]"
+          :class="{ 'ql-field-error': creditBoundInvalid(filters.minCredit) }"
+          placeholder="含"
+          inputmode="numeric"
+        />
       </FormField>
 
       <FormField
         label="信用分上界"
         :error="creditBoundInvalid(filters.maxCredit) ? '须为 0-100 的整数' : ''"
       >
-        <el-input v-model="filters.maxCredit" class="w-[110px]" placeholder="含" inputmode="numeric" />
+        <el-input
+          v-model="filters.maxCredit"
+          class="w-[110px]"
+          :class="{ 'ql-field-error': creditBoundInvalid(filters.maxCredit) }"
+          placeholder="含"
+          inputmode="numeric"
+        />
       </FormField>
 
       <FormField label="注册时间起">
@@ -202,6 +214,7 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
         :items="items"
         :loading="loading"
         :failed="failed"
+        @retry="refresh"
         @ban="openBan"
         @unban="handleUnban"
         @credit="openCredit"

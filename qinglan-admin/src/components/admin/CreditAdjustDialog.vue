@@ -48,7 +48,7 @@ function handleSubmit(): void {
   <DialogShell
     :open="props.open"
     title="调整信用分"
-    width="440px"
+    :enter-to-confirm="false"
     confirm-text="确认调整"
     :submitting="props.submitting"
     :confirm-disabled="!canSubmit"
@@ -61,7 +61,11 @@ function handleSubmit(): void {
         :hint="`正数加分、负数扣分，单次范围 ${MIN_DELTA} ~ ${MAX_DELTA}`"
         :error="deltaValid || !delta.trim() ? '' : '请输入范围内非 0 的整数'"
       >
-        <el-input v-model="delta" inputmode="numeric" />
+        <el-input
+          v-model="delta"
+          :class="{ 'ql-field-error': !deltaValid && delta.trim() !== '' }"
+          inputmode="numeric"
+        />
       </FormField>
 
       <FormField label="调整理由" hint="会写入审计日志">
