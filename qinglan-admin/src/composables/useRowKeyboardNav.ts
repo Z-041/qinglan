@@ -26,10 +26,6 @@ export function useRowKeyboardNav<T>(items: () => readonly T[], keyOf: (item: T)
     focused.value = true
   }
 
-  function blur(): void {
-    focused.value = false
-  }
-
   /**
    * 焦点移出列表时解除焦点态。焦点只在列表内部换元素（例如点到行内按钮）不算离开，
    * 否则点一下「处置」按钮就会把快捷键关掉。
@@ -109,12 +105,9 @@ export function useRowKeyboardNav<T>(items: () => readonly T[], keyOf: (item: T)
     activeKey,
     focused,
     focus,
-    blur,
     handleFocusOut,
     setActive,
     clamp,
-    moveUp,
-    moveDown,
     reset,
     handleArrowKeys,
   }

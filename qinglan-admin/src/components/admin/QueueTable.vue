@@ -15,7 +15,7 @@ const props = defineProps<{
   activeKey?: string | null
 }>()
 
-const emit = defineEmits<{ handle: [item: AdminQueueItem] }>()
+const emit = defineEmits<{ select: [item: AdminQueueItem] }>()
 
 const { targetTypeLabel, targetStatusLabel, reportReasonLabel } = useUserLabels()
 
@@ -123,7 +123,7 @@ function hasOpenProposal(item: AdminQueueItem): boolean {
         <span v-else class="text-xs text-muted">—</span>
       </td>
       <td class="px-3 py-3">
-        <BaseButton variant="ghost" size="xs" @click="emit('handle', row)">
+        <BaseButton variant="ghost" size="xs" @click="emit('select', row)">
           处置
         </BaseButton>
         <span v-if="hasOpenProposal(row)" class="ml-2 text-xs text-muted">表决中</span>

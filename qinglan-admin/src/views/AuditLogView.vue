@@ -9,6 +9,7 @@ import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import { useCursorList } from '@shared/composables/useCursorList'
 import { useUserLabels } from '@shared/composables/useUserLabels'
+import { toInstantOrNull } from '@/composables/datetime'
 import { useCsvExport } from '@/composables/useCsvExport'
 import {
   AUDIT_ACTION_LABELS as ACTION_LABELS,
@@ -27,19 +28,14 @@ function actionLabel(action: string): string {
   return ACTION_LABELS[action] ?? action
 }
 
-function toInstant(value: string): string | null {
-  // datetime-local 是本地时间，转成 UTC 的 ISO 串交给后端（与公告表单同口径）
-  return value ? new Date(value).toISOString() : null
-}
-
 /** 按**当前筛选条件**导出（与列表同口径）；超限等错误由拦截器提示，这里不重复 */
 function exportCsv(): void {
   void download(
     () =>
       exportAuditLogs({
         action: actionFilter.value || null,
-        from: toInstant(fromFilter.value),
-        to: toInstant(toFilter.value),
+        from: toInstantOrNull(fromFilter.value),
+        to: toInstantOrNull(toFilter.value),
       }),
     'audit-logs',
   )
@@ -55,8 +51,8 @@ const { items, loading, loadingMore, hasMore, failed, refresh, loadMore } =
       fetchAuditLogs({
         cursor,
         action: actionFilter.value || null,
-        from: toInstant(fromFilter.value),
-        to: toInstant(toFilter.value),
+        from: toInstantOrNull(fromFilter.value),
+        to: toInstantOrNull(toFilter.value),
       }),
   })
 

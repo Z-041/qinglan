@@ -4,6 +4,7 @@ import { useCursorList } from '@shared/composables/useCursorList'
 import { useSubmit } from '@shared/composables/useSubmit'
 
 import { adjustCredit, banUser, fetchAdminUsers, unbanUser } from '@/api/admin'
+import { toInstantOrNull } from '@/composables/datetime'
 import type {
   AdminUserItem,
   AdminUserQuery,
@@ -33,16 +34,6 @@ function toNumberOrNull(value: string): number | null {
   }
   const parsed = Number(trimmed)
   return Number.isInteger(parsed) ? parsed : null
-}
-
-/** datetime-local 是本地时间且不带时区，后端要的是 Instant，故转成 ISO-8601 UTC */
-function toInstantOrNull(value: string): string | null {
-  const trimmed = value.trim()
-  if (!trimmed) {
-    return null
-  }
-  const parsed = new Date(trimmed)
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
 }
 
 /** 表单状态 → 请求参数。规范化只此一处，视图不做转换 */

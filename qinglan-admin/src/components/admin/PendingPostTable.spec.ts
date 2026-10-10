@@ -104,6 +104,6 @@ describe('PendingPostTable', () => {
 
     await buttonByText(wrapper, '审核').trigger('click')
 
-    expect(wrapper.emitted('handle')).toEqual([[row]])
+    expect(wrapper.emitted('select')).toEqual([[row]])
   })
 })

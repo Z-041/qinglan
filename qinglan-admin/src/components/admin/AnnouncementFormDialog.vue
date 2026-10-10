@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 
 import AnnouncementPreviewDialog from '@/components/admin/AnnouncementPreviewDialog.vue'
 import DialogShell from '@/components/admin/DialogShell.vue'
+import { toInstantOrNull } from '@/composables/datetime'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseInput from '@shared/components/base/BaseInput.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
@@ -116,21 +117,18 @@ const previewMinReadSeconds = computed(() =>
     : DEFAULT_MIN_READ_SECONDS,
 )
 
-/** datetime-local 是本地时间且不带时区，后端要的是 Instant，转 ISO-8601 UTC */
-function toInstant(value: string): string {
-  return new Date(value).toISOString()
-}
-
 function handleSubmit(): void {
-  if (!canSubmit.value) {
+  // 开始时间是必填（canSubmit 已保证非空），这里再兜一次非法日期，避免把坏值发给后端
+  const startAtInstant = toInstantOrNull(startAt.value)
+  if (!canSubmit.value || startAtInstant === null) {
     return
   }
   emit('submit', {
     title: title.value.trim(),
     content: content.value.trim(),
     level: level.value,
-    startAt: toInstant(startAt.value),
-    endAt: endAt.value.trim() ? toInstant(endAt.value) : null,
+    startAt: startAtInstant,
+    endAt: toInstantOrNull(endAt.value),
     minReadSeconds: minReadSeconds.value.trim() === '' ? null : minReadValue.value,
     requireScrollToEnd: requireScrollToEnd.value,
     requireConfirm: requireConfirm.value,

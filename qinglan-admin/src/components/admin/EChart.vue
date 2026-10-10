@@ -66,7 +66,9 @@ onMounted(() => {
   }
 })
 
-watch(() => props.option, render, { deep: true })
+// option 来自视图的 computed，每次重算都是新引用，浅监听即可触发；
+// deep 会递归遍历整棵 EChartsOption（含 series/data），纯属浪费，故不加 deep
+watch(() => props.option, render)
 
 onBeforeUnmount(() => {
   observer?.disconnect()

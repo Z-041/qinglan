@@ -178,7 +178,7 @@ async function handleReject(): Promise<void> {
         :loading="loading"
         :failed="failed"
         :active-key="activeKey"
-        @handle="handleSelect"
+        @select="handleSelect"
       />
     </WorkbenchList>
 
@@ -198,7 +198,7 @@ async function handleReject(): Promise<void> {
         <BaseButton variant="primary" size="sm" :disabled="submitting" :loading="submitting" @click="handleApprove">
           通过
         </BaseButton>
-        <BaseButton variant="ghost" size="sm" :disabled="submitting" @click="handleReject">
+        <BaseButton variant="ghost" size="sm" :disabled="submitting" :loading="submitting" @click="handleReject">
           驳回
         </BaseButton>
       </div>

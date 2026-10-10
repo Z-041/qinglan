@@ -13,7 +13,7 @@ const props = defineProps<{
   activeKey?: string | null
 }>()
 
-const emit = defineEmits<{ handle: [item: AdminPendingPostItem] }>()
+const emit = defineEmits<{ select: [item: AdminPendingPostItem] }>()
 
 const { targetStatusLabel } = useUserLabels()
 </script>
@@ -70,7 +70,7 @@ const { targetStatusLabel } = useUserLabels()
         <RelativeTime :iso="row.submittedAt" />
       </td>
       <td class="px-3 py-3">
-        <BaseButton variant="ghost" size="xs" @click="emit('handle', row)">
+        <BaseButton variant="ghost" size="xs" @click="emit('select', row)">
           审核
         </BaseButton>
       </td>

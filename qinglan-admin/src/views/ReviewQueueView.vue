@@ -397,7 +397,7 @@ async function handleDismiss(reason: string): Promise<void> {
         :loading="loading"
         :failed="failed"
         :active-key="activeKey"
-        @handle="handleSelect"
+        @select="handleSelect"
       />
     </WorkbenchList>
 

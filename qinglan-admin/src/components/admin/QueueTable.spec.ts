@@ -139,7 +139,7 @@ describe('QueueTable', () => {
 
     await buttonByText(wrapper, '处置').trigger('click')
 
-    expect(wrapper.emitted('handle')).toEqual([[row]])
+    expect(wrapper.emitted('select')).toEqual([[row]])
   })
 
   it('有进行中提案时行内显示进度与「我是否已投」，避免撞 409 后无处可去', () => {

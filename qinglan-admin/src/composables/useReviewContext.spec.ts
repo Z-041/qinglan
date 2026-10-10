@@ -104,19 +104,6 @@ describe('useReviewContext', () => {
     expect(panel.context.value).toBeNull()
   })
 
-  it('reload 用当前 target 重拉；未打开时不发请求', async () => {
-    mockedFetchAdminReviewContext.mockResolvedValue(context())
-
-    const panel = useReviewContext()
-    await panel.reload()
-    expect(mockedFetchAdminReviewContext).not.toHaveBeenCalled()
-
-    await panel.open({ targetType: 'POST', targetId: 5 })
-    await panel.reload()
-
-    expect(mockedFetchAdminReviewContext).toHaveBeenCalledTimes(2)
-  })
-
   it('快速点选不同目标时晚到的旧响应不得写回面板（否则会看 A 的数据处置 B）', async () => {
     const first = deferredContext()
     const second = deferredContext()

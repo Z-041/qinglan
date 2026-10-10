@@ -95,13 +95,6 @@ export function useReviewContext() {
     historyLoading.value = false
   }
 
-  /** 处置完成后刷新面板（信用分、举报数、处置流水等会变） */
-  async function reload(): Promise<void> {
-    if (target.value) {
-      await open(target.value)
-    }
-  }
-
   return {
     target,
     context,
@@ -112,6 +105,5 @@ export function useReviewContext() {
     historyFailed,
     open,
     close,
-    reload,
   }
 }

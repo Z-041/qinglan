@@ -17,6 +17,44 @@
 
 
 --------------------------------------------------------------------------------
+R-54 前端组件整合第五批（5A 波）：管理端契约与性能收口
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：组件/接口优化  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿
+来源：第五批（用户选定「三波全做」）。四批之后深度复扫发现本批不再有「逐字重复」，剩余是
+API 设计与实现层面的优化；5A 收口管理端的契约与性能。5B / 5C 另开。
+
+一、交付（4 项）
+  1. EChart 去掉 `deep: true`：option 来自视图 computed，每次重算都是新引用，浅监听即可触发；
+     deep 会递归遍历整棵 EChartsOption（含 series / data），纯属浪费。零行为变化。
+  2. 表格 emit 名统一 `handle` → `select`（QueueTable / PendingPostTable + 两个消费视图 +
+     各自 spec）：与周边表格的 `review` / `publish` / `ban` 等动词口径一致；`select` 也更准
+     （点击是「选中该行到侧栏处置」）。
+  3. 删除未用 API：
+     - useReviewContext.reload（仅 spec 引用，生产视图靠 selectActive→open 重开面板）；连带删其 spec 用例。
+     - useRowKeyboardNav 的 blur（全仓零引用）、moveUp / moveDown（仅内部 handleArrowKeys 用，
+       不必外露）；内部函数保留，仅从 return 收窄。
+  4. 抽 composables/datetime.ts 的 toInstantOrNull：审计日志 / 用户筛选 / 公告表单三处各写一份
+     datetime-local → ISO(UTC)；其中审计日志那版不 trim 且非法日期会 **抛 RangeError**，统一为
+     健壮版（trim + NaN 判定 → null）顺带修掉该隐患。公告表单的必填开始时间改为先取 Instant
+     再判空，避免把坏值发给后端。
+
+二、评估后不做（1 项，改判）
+  - PageHeader 的 `refreshing?: boolean` 隐式三态（undefined=不渲染按钮，false=渲染不可点按钮）
+    原列为本波项，复核后**不做**：其「不传即无刷新按钮」是被测试的**有意能力**
+    （PageHeader.spec.ts:12-15、40-46 两例），显式化要么删掉该能力、要么新增一个 prop；当前
+    prop 注释已写明语义，改动收益不抵。留待真正需要「无刷新按钮页头」时一并设计。
+
+三、行内提交态（小修）
+  - PendingPostQueueView 的「通过 / 驳回」两按钮原先一个带 loading、一个只 disabled；补齐驳回的
+    `:loading`，与同排按钮一致（多目标动作如提案的同意 / 不同意仍只禁用，不做无差别转圈）。
+
+验证（真跑，全绿）
+- pnpm lint / typecheck：管理端通过。
+- vitest：qinglan-admin 46 文件 281 例全绿（较 4C 的 282 少 1 例，为删除 reload 的专用用例；
+  其余既有断言未改，仅 emit 名的 spec 随重命名同步）。
+- pnpm build：管理端产物成功。
+
+--------------------------------------------------------------------------------
 R-53 前端组件整合第四批（4C 波）：shared 接口收紧 + 收尾漂移扫描（多项评估后不做）
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：一致性收口  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿
