@@ -4,6 +4,7 @@ import { ref, watch } from 'vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import ModalShell from '@/components/ModalShell.vue'
+import TextButton from '@/components/TextButton.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { ReportReason } from '@shared/types/review-common'
 
@@ -84,14 +85,9 @@ function handleSubmit(): void {
         <h2 class="text-sm font-semibold text-ink">举报{{ props.label }}</h2>
         <p class="mt-0.5 text-xs text-muted">举报人身份不会展示给被举报人</p>
       </div>
-      <button
-        type="button"
-        class="shrink-0 cursor-pointer text-xs text-muted transition hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:text-muted"
-        :disabled="props.submitting"
-        @click="requestClose"
-      >
+      <TextButton tone="ink" class="shrink-0" :disabled="props.submitting" @click="requestClose">
         关闭
-      </button>
+      </TextButton>
     </div>
 
     <fieldset class="mt-3">

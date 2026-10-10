@@ -17,6 +17,52 @@
 
 
 --------------------------------------------------------------------------------
+R-48 前端组件整合第三批（3A 波）：学生端两列布局 / 侧栏卡 / 文案按钮三件
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：组件化重构  状态：已交付；学生端 lint/typecheck/vitest/build 真跑全绿
+来源：第三批，用户选定「确定性 7 件、分 3 波（推荐）」。本波 3A 做学生端三件确定性最高的
+重复结构；管理端的图表卡与理由提示（3B）、弹窗外壳收敛与死代码清理（3C）另开。
+选范围前先做了一轮全量复扫（学生端 25 个 .vue、管理端 35 个 .vue、shared 13 个 .vue，逐文件
+核对行号），确认无违规——无组件发请求、无展示组件取 Pinia store、无硬编码色值、无 v-html、
+无 >300 行的学生端文件，第三批机会仅剩「尚未抽象的重复结构」。
+
+一、交付（3 件，均带 spec，消费点一次性迁完）
+  1. TwoColumnLayout.vue（2 测试）：学生端「主列（弹性）+ 固定 320px 侧栏 + sticky + 窄屏
+     （<lg）整块隐藏」网格。首页 / 详情 / 发布 / 我的四处逐字相同，收敛到一处，避免某一页
+     断点或 sticky 写歪把正文挤掉。顶部间距各页节奏不同（mt-3/4/5），经 class 属性透传。
+     **本组件独占页面唯一的 <aside>**，侧栏内容走 #aside 插槽。
+  2. SidebarCard.vue（2 测试）：「ql-card p-4 + 标题」信息卡。8 张卡片（四个侧栏 + 我的页的
+     入口卡）外壳与标题样式逐字相同，抽到一处，避免改标题字号时漏掉某页。正文间距各卡不同
+     （mt-1/2/3），留在调用方插槽内自控，不强行统一。
+  3. TextButton.vue（4 测试）：文案型行内动作按钮（评论的回复 / 举报 / 删除、详情的举报、
+     弹窗的关闭），tone 决定 hover 色（primary / danger / ink），disabled 统一置灰。与
+     BaseButton 分工不同——BaseButton 是有形按钮（边框 / 底色 / 尺寸档），本件是行内文字动作。
+
+二、连带调整
+  - HomeSidebar 由「自带 <aside> 外壳」改为多根片段（只出 SidebarCard），外壳交给
+    TwoColumnLayout。否则侧栏出现**嵌套 aside**，且 ProfileView / PublishView 的
+    「页面里 aside 恰好一个」断言会失守。这是本波唯一的结构性连带改动。
+  - 迁移：HomeView / PostDetailView / PublishView / ProfileView 四处布局；
+    HomeSidebar / PostDetailView / PublishView / ProfileView 共 8 张侧栏卡；
+    CommentItem×3、PostDetailCard×1、ReportDialog×1 共 5 处文案按钮。
+
+三、刻意不做（沿用 R-47 的判断，避免过度抽象）
+  - 三种话题选择 UI（首页 chips / 侧栏竖排 / 发布页单选卡片）不合并：交互与语义不同
+    （筛选 vs 单选必填）。
+  - Tag 组件不抽：ql-tag 已是 UnoCSS 快捷类，抽组件只统一配色映射，收益低。
+  - 「话题加载失败 + 重试」仅 2 处，未达 AGENTS.md「超过 3 处才抽」门槛。
+
+验证（真跑，全绿）
+- pnpm lint / typecheck：学生端通过（shared / admin 本波未改动）。
+- vitest：qinglan-web **34 文件 200 例全绿**（波前 31 文件 192 例，+3 文件 +8 例为三件新 spec）。
+  **四处页面与三组组件的既有 spec 未改任何断言、原样通过**——两处「findAll('aside') 恰好 1 个」
+  （ProfileView:33 / PublishView:54）、举报按钮按文案定位与 disabled 断言（PostDetailView.spec
+  举报状态组 / ReportDialog.spec 关闭按钮组）、删除评论二次确认流程均命中。
+- pnpm build：学生端产物成功。
+- 视觉变化点：无（DOM 结构等价，仅去掉一层冗余包装 div；两栏断点与 sticky 与迁移前逐字相同）。
+  建议下次浏览器实测长列表滚动时顺带核对侧栏 sticky 与窄屏隐藏。
+
+--------------------------------------------------------------------------------
 R-47 前端组件整合第二批（2B-3b 波）：工作台列表骨架 + 两项「评估后不做」结论
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：组件化重构  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿
@@ -3079,3 +3125,11 @@ T-47  管理端工作台两处与改造方案字面的轻微差异（R-41）
     只有 vue-tsc（typecheck/build）能抓到 TS2304 一类问题。R-42 收尾时 QueueTable.spec
     漏删的 DOMWrapper 类型 import 正是测试全绿、build 爆红。改完测试后四道门禁（lint /
     typecheck / vitest / build）仍要全跑，「测试过了」不能替代类型检查。
+
+57. 抽「布局 / 外壳」组件时，先定「谁持有语义容器」，并查宿主对 DOM 数量 / 语义的断言。R-48 抽
+    TwoColumnLayout 时撞上过：ProfileView.spec 与 PublishView.spec 都断言 findAll('aside') 恰好
+    1 个，而学生端侧栏组件（HomeSidebar）本身根节点就是 <aside>——若把它塞进布局的侧栏插槽，
+    就会形成嵌套 aside，断言直接红。定法是：语义容器（<aside>/<main>）由布局组件独占，被嵌
+    组件改为多根片段。做法上，抽件前把「宿主会断言的 DOM 数量与语义」grep 一遍
+    （本项目即 findAll('aside') / findAll('section')），比事后改断言安全得多——这类断言恰恰是
+    防止结构漂移的保护，不该为了迁就重构而放宽。

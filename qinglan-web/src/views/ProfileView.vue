@@ -4,6 +4,8 @@ import { computed, onMounted, ref } from 'vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
 import StatePanel from '@shared/components/StatePanel.vue'
+import SidebarCard from '@/components/SidebarCard.vue'
+import TwoColumnLayout from '@/components/TwoColumnLayout.vue'
 import { useAuth } from '@shared/composables/useAuth'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
@@ -61,11 +63,7 @@ onMounted(() => {
       failed-title="资料没能加载出来"
       @retry="loadProfile()"
     >
-      <div
-        v-if="userStore.profile"
-        class="mt-4 grid grid-cols-[minmax(0,1fr)_320px] gap-10 max-lg:(grid-cols-1 gap-6)"
-      >
-      <div class="min-w-0 self-start">
+      <TwoColumnLayout v-if="userStore.profile" class="mt-4">
         <BaseCard :padded="false">
           <!-- 去装饰：原来是渐变横幅 + 白色圆形光斑，属「AI 味」视觉；改为纯色块 -->
           <div class="h-20 rounded-t-xl bg-primary-soft" />
@@ -99,8 +97,7 @@ onMounted(() => {
           </div>
         </BaseCard>
 
-        <div class="ql-card mt-4 p-4">
-          <p class="text-sm font-semibold text-ink">我的帖子</p>
+        <SidebarCard class="mt-4" title="我的帖子">
           <p class="mt-1 text-xs leading-relaxed text-muted">
             查看自己发布的帖子，覆盖待审、已通过、已驳回与已下架全部状态；驳回与下架会展示原因。
           </p>
@@ -108,18 +105,16 @@ onMounted(() => {
             <BaseButton as="RouterLink" size="sm" to="/my-posts">查看我的帖子</BaseButton>
             <BaseButton as="RouterLink" variant="ghost" size="sm" to="/publish">去发布</BaseButton>
           </div>
-        </div>
-      </div>
+        </SidebarCard>
 
-      <aside class="sticky top-24 flex flex-col gap-4 self-start max-lg:hidden">
-        <div class="ql-card p-4">
-          <p class="text-sm font-semibold text-ink">关于信用分</p>
-          <p class="mt-2 text-xs leading-relaxed text-muted">
-            信用分低于 60 无法发帖。违规内容被核实后会扣分，正常发帖与互动不扣分。
-          </p>
-        </div>
-      </aside>
-      </div>
+        <template #aside>
+          <SidebarCard title="关于信用分">
+            <p class="mt-2 text-xs leading-relaxed text-muted">
+              信用分低于 60 无法发帖。违规内容被核实后会扣分，正常发帖与互动不扣分。
+            </p>
+          </SidebarCard>
+        </template>
+      </TwoColumnLayout>
     </StatePanel>
   </section>
 </template>

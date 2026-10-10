@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import LikeButton from '@/components/LikeButton.vue'
+import TextButton from '@/components/TextButton.vue'
 import type { Comment } from '@/types/comment'
 
 const props = withDefaults(
@@ -49,35 +50,31 @@ const emit = defineEmits<{
         @toggle="emit('toggle-like', props.comment.id)"
       />
 
-      <button
+      <TextButton
         v-if="props.depth === 0"
-        type="button"
-        class="cursor-pointer text-xs text-muted transition hover:text-primary-deep"
         :aria-label="`回复 ${props.comment.anonymousCode} 的评论`"
         @click="emit('reply', props.comment)"
       >
         回复
-      </button>
+      </TextButton>
 
-      <button
+      <TextButton
         v-if="props.reportable && !props.comment.mine"
-        type="button"
-        class="cursor-pointer text-xs text-muted transition hover:text-danger"
+        tone="danger"
         :aria-label="`举报 ${props.comment.anonymousCode} 的评论`"
         @click="emit('report', props.comment)"
       >
         举报
-      </button>
+      </TextButton>
 
-      <button
+      <TextButton
         v-if="props.comment.mine"
-        type="button"
-        class="cursor-pointer text-xs text-muted transition hover:text-danger"
+        tone="danger"
         aria-label="删除我的评论"
         @click="emit('delete', props.comment.id)"
       >
         删除
-      </button>
+      </TextButton>
     </div>
 
     <ul v-if="props.comment.replies.length" class="mt-1 divide-y divide-line border-l-2 border-line pl-3">

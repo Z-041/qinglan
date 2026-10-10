@@ -8,6 +8,8 @@ import BaseInput from '@shared/components/base/BaseInput.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
+import SidebarCard from '@/components/SidebarCard.vue'
+import TwoColumnLayout from '@/components/TwoColumnLayout.vue'
 import { MAX_IMAGES_PER_POST, useImageUpload } from '@/composables/useImageUpload'
 import { usePostDraft } from '@/composables/usePostDraft'
 import { usePublish } from '@/composables/usePublish'
@@ -124,9 +126,8 @@ async function handleSubmit(): Promise<void> {
       <BaseButton variant="ghost" size="sm" @click="discardDraft">丢弃</BaseButton>
     </div>
 
-    <div class="mt-4 grid grid-cols-[minmax(0,1fr)_320px] gap-10 max-lg:(grid-cols-1 gap-6)">
-      <div class="min-w-0 self-start">
-        <BaseCard>
+    <TwoColumnLayout class="mt-4">
+      <BaseCard>
           <div>
             <span class="ql-label">选择话题</span>
             <!-- 卡片式单选：每张卡展示话题规则与是否需要联系方式 -->
@@ -215,22 +216,19 @@ async function handleSubmit(): Promise<void> {
           >
             发布
           </BaseButton>
-        </BaseCard>
-      </div>
+      </BaseCard>
 
-      <aside class="sticky top-24 flex flex-col gap-4 self-start max-lg:hidden">
-        <div class="ql-card p-4">
-          <p class="text-sm font-semibold text-ink">话题规则</p>
+      <template #aside>
+        <SidebarCard title="话题规则">
           <p class="mt-2 text-xs leading-relaxed text-muted">
             {{ selectedTopic ? selectedTopic.rules : '选择一个话题后显示该话题的规则' }}
           </p>
-        </div>
+        </SidebarCard>
 
-        <div class="ql-card p-4">
-          <p class="text-sm font-semibold text-ink">发布须知</p>
+        <SidebarCard title="发布须知">
           <p class="mt-2 text-xs leading-relaxed text-muted">{{ PUBLISH_NOTICE }}</p>
-        </div>
-      </aside>
-    </div>
+        </SidebarCard>
+      </template>
+    </TwoColumnLayout>
   </section>
 </template>

@@ -6,6 +6,7 @@ import AppealPanel from '@/components/AppealPanel.vue'
 import LikeButton from '@/components/LikeButton.vue'
 import PostImageGrid from '@/components/PostImageGrid.vue'
 import PostMetaRow from '@/components/PostMetaRow.vue'
+import TextButton from '@/components/TextButton.vue'
 import type { PostDetail } from '@/types/post'
 import type { MyReportState, ReportStatus } from '@/types/report'
 
@@ -112,14 +113,9 @@ const reportStatusText = computed(() => {
       <!-- 已举报时入口置灰并展示处理进度，提前挡掉重复举报（防线仍是后端 409） -->
       <div v-if="props.authenticated && !props.post.mine" class="ml-auto flex items-center gap-2">
         <span v-if="reported" class="text-xs text-muted">举报{{ reportStatusText }}</span>
-        <button
-          type="button"
-          class="cursor-pointer text-xs text-muted transition hover:text-danger disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:text-muted"
-          :disabled="reported"
-          @click="emit('report')"
-        >
+        <TextButton tone="danger" :disabled="reported" @click="emit('report')">
           {{ reported ? '已举报' : '举报' }}
-        </button>
+        </TextButton>
       </div>
     </div>
   </BaseCard>

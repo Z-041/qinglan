@@ -11,6 +11,8 @@ import CommentItem from '@/components/CommentItem.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import PostDetailCard from '@/components/PostDetailCard.vue'
 import ReportDialog from '@/components/ReportDialog.vue'
+import SidebarCard from '@/components/SidebarCard.vue'
+import TwoColumnLayout from '@/components/TwoColumnLayout.vue'
 import { usePostDetail } from '@/composables/usePostDetail'
 import { useReport } from '@/composables/useReport'
 import { useToast } from '@shared/composables/useToast'
@@ -143,66 +145,62 @@ async function handleAppeal(reason: string): Promise<void> {
       <template v-if="post">
         <!-- 帖子无标题字段，h1 仅用于建立标题层级（下方「评论」是 h2），视觉隐藏 -->
         <h1 class="sr-only">帖子详情</h1>
-        <div class="mt-3 grid grid-cols-[minmax(0,1fr)_320px] gap-10 max-lg:(grid-cols-1 gap-6)">
-          <div class="min-w-0 self-start">
-            <PostDetailCard
-              :post="post"
-              :authenticated="userStore.isAuthenticated"
-              :report-state="reportState"
-              :appealed="appealed"
-              :appeal-submitting="appealSubmitting"
-              @toggle-like="toggleLike()"
-              @report="openPostReport"
-              @appeal="handleAppeal"
+        <TwoColumnLayout class="mt-3">
+          <PostDetailCard
+            :post="post"
+            :authenticated="userStore.isAuthenticated"
+            :report-state="reportState"
+            :appealed="appealed"
+            :appeal-submitting="appealSubmitting"
+            @toggle-like="toggleLike()"
+            @report="openPostReport"
+            @appeal="handleAppeal"
+          />
+
+          <BaseCard class="mt-4">
+            <h2 class="text-sm font-semibold text-ink">评论</h2>
+
+            <ul v-if="comments.length" class="mt-1 divide-y divide-line">
+              <CommentItem
+                v-for="comment in comments"
+                :key="comment.id"
+                :comment="comment"
+                :reportable="reportAllowed"
+                @toggle-like="toggleCommentLike"
+                @reply="startReply"
+                @delete="requestDelete"
+                @report="openCommentReport"
+              />
+            </ul>
+            <p v-else class="mt-3 text-xs text-muted">还没有评论，说点什么吧</p>
+
+            <!-- 一级评论游标分页：还有下一页时才出现，点一次追加一批；回复随所属一级评论整页带出 -->
+            <LoadMoreButton
+              v-if="comments.length"
+              :has-more="hasMore"
+              :loading="loadingMore"
+              @load="loadMoreComments"
             />
 
-            <BaseCard class="mt-4">
-              <h2 class="text-sm font-semibold text-ink">评论</h2>
+            <CommentComposer
+              v-model="commentText"
+              :reply-to="replyTo"
+              :authenticated="userStore.isAuthenticated"
+              :submitting="submitting"
+              @submit="handleComment"
+              @cancel-reply="replyTo = null"
+            />
+          </BaseCard>
 
-              <ul v-if="comments.length" class="mt-1 divide-y divide-line">
-                <CommentItem
-                  v-for="comment in comments"
-                  :key="comment.id"
-                  :comment="comment"
-                  :reportable="reportAllowed"
-                  @toggle-like="toggleCommentLike"
-                  @reply="startReply"
-                  @delete="requestDelete"
-                  @report="openCommentReport"
-                />
-              </ul>
-              <p v-else class="mt-3 text-xs text-muted">还没有评论，说点什么吧</p>
-
-              <!-- 一级评论游标分页：还有下一页时才出现，点一次追加一批；回复随所属一级评论整页带出 -->
-              <LoadMoreButton
-                v-if="comments.length"
-                :has-more="hasMore"
-                :loading="loadingMore"
-                @load="loadMoreComments"
-              />
-
-              <CommentComposer
-                v-model="commentText"
-                :reply-to="replyTo"
-                :authenticated="userStore.isAuthenticated"
-                :submitting="submitting"
-                @submit="handleComment"
-                @cancel-reply="replyTo = null"
-              />
-            </BaseCard>
-          </div>
-
-          <aside class="sticky top-24 flex flex-col gap-4 self-start max-lg:hidden">
-            <div class="ql-card p-4">
-              <p class="text-sm font-semibold text-ink">话题规则</p>
+          <template #aside>
+            <SidebarCard title="话题规则">
               <p class="mt-1 text-xs font-medium text-ink">{{ post.topicName }}</p>
               <p class="mt-2 text-xs leading-relaxed text-muted">{{ post.topicRules }}</p>
-            </div>
+            </SidebarCard>
 
-            <div class="ql-card p-4">
-              <p class="text-sm font-semibold text-ink">
-                {{ userStore.isAuthenticated ? '说说今天校园里的新鲜事' : '认证后即可匿名发帖' }}
-              </p>
+            <SidebarCard
+              :title="userStore.isAuthenticated ? '说说今天校园里的新鲜事' : '认证后即可匿名发帖'"
+            >
               <p class="mt-1 text-xs text-muted">
                 {{
                   userStore.isAuthenticated
@@ -218,9 +216,9 @@ async function handleAppeal(reason: string): Promise<void> {
               >
                 {{ userStore.isAuthenticated ? '发布新帖' : '去认证' }}
               </BaseButton>
-            </div>
-          </aside>
-        </div>
+            </SidebarCard>
+          </template>
+        </TwoColumnLayout>
 
         <ReportDialog
           :open="reportTarget !== null"
