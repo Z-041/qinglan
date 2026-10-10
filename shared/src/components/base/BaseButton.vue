@@ -15,11 +15,21 @@ const props = withDefaults(
     loading?: boolean
     /** 原生 button 的 type，默认 button 以避免在表单内意外触发提交 */
     htmlType?: 'button' | 'submit'
+    /**
+     * 换成链接等其它元素：传元素名或**已全局注册的组件名**（如 'RouterLink'）——字符串由 Vue
+     * 解析，因此调用方无需 import，shared 也不必反向依赖 vue-router。不传则渲染 `<button>`。
+     * 非 button 时不输出 `type` / `disabled`（链接不接受这两个属性），其余 props 落到根元素。
+     */
+    as?: string
   }>(),
   { variant: 'primary', size: 'md', block: false, disabled: false, loading: false, htmlType: 'button' },
 )
 
 const emit = defineEmits<{ click: [event: MouseEvent] }>()
+
+const tag = computed(() => props.as ?? 'button')
+/** 仅原生 button 才带 type / disabled：链接类元素接受它们会造成无效属性与错误语义 */
+const isButton = computed(() => props.as === undefined || props.as === 'button')
 
 const VARIANT_CLASS: Record<Variant, string> = {
   // 填充底用 deep 而非 primary：白字对比度 6.0:1，达标（见 styles/main.css）
@@ -46,14 +56,15 @@ const classes = computed(() => [
 </script>
 
 <template>
-  <button
-    :type="htmlType"
+  <component
+    :is="tag"
+    :type="isButton ? htmlType : undefined"
     class="cursor-pointer"
     :class="classes"
-    :disabled="disabled || loading"
+    :disabled="isButton ? disabled || loading : undefined"
     @click="emit('click', $event)"
   >
     <BaseSpinner v-if="loading" size-class="size-3.5" />
     <slot />
-  </button>
+  </component>
 </template>

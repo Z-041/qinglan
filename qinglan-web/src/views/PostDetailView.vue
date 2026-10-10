@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
@@ -8,7 +8,9 @@ import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import StatePanel from '@shared/components/StatePanel.vue'
 import CommentItem from '@/components/CommentItem.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import LikeButton from '@/components/LikeButton.vue'
+import PostImageGrid from '@/components/PostImageGrid.vue'
 import ReportDialog from '@/components/ReportDialog.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import { usePostDetail } from '@/composables/usePostDetail'
@@ -61,7 +63,6 @@ const appealReason = ref('')
 
 /** 待删除的评论 id。非空即弹出二次确认——不用 window.confirm（原生框阻塞主线程、样式不可控） */
 const pendingDeleteId = ref<number | null>(null)
-const deleteDialogRef = ref<HTMLElement | null>(null)
 
 /**
  * 联系方式可见性完全由服务端裁决（不变量 #2）：`contactVisible` 为真时后端才回填 `contact`，
@@ -130,15 +131,6 @@ function requestDelete(commentId: number): void {
   pendingDeleteId.value = commentId
 }
 
-// 确认框打开时把焦点收进去，ESC 才生效、键盘用户也不会把焦点留在背后页面上
-watch(pendingDeleteId, async (id) => {
-  if (id === null) {
-    return
-  }
-  await nextTick()
-  deleteDialogRef.value?.focus()
-})
-
 async function confirmDelete(): Promise<void> {
   const commentId = pendingDeleteId.value
   if (commentId === null) {
@@ -195,21 +187,7 @@ async function handleAppeal(): Promise<void> {
               {{ post.content }}
             </p>
 
-            <div
-              v-if="post.images.length"
-              class="mt-3 grid gap-1.5"
-              :class="post.images.length === 1 ? 'grid-cols-1' : 'grid-cols-3'"
-            >
-              <img
-                v-for="url in post.images"
-                :key="url"
-                :src="url"
-                alt="帖子配图"
-                loading="lazy"
-                class="w-full rounded-lg border border-line object-cover"
-                :class="post.images.length === 1 ? 'max-h-96' : 'aspect-square'"
-              />
-            </div>
+            <PostImageGrid class="mt-3" variant="detail" :urls="post.images" />
 
             <!--
               下架：他人已看不到本页，只有作者能打开，故这里是作者唯一的申诉入口。
@@ -373,12 +351,14 @@ async function handleAppeal(): Promise<void> {
                   : '发帖、评论与点赞需校园邮箱认证'
               }}
             </p>
-            <RouterLink
-              class="ql-btn ql-btn-sm mt-3 bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
+            <BaseButton
+              as="RouterLink"
+              size="sm"
+              class="mt-3"
               :to="userStore.isAuthenticated ? '/publish' : '/login'"
             >
               {{ userStore.isAuthenticated ? '发布新帖' : '去认证' }}
-            </RouterLink>
+            </BaseButton>
           </div>
         </aside>
       </div>
@@ -391,27 +371,17 @@ async function handleAppeal(): Promise<void> {
         @submit="handleReportSubmit"
       />
 
-      <!-- 删除评论的二次确认：自绘弹层，语义与行为对齐 ReportDialog（遮罩/ESC 关闭，焦点收入层内） -->
-      <div
-        v-if="pendingDeleteId !== null"
-        ref="deleteDialogRef"
-        tabindex="-1"
-        class="fixed inset-0 z-overlay flex overscroll-contain items-center justify-center bg-black/40 p-4 outline-none"
-        role="dialog"
-        aria-modal="true"
-        aria-label="删除评论"
-        @click.self="pendingDeleteId = null"
-        @keydown.escape="pendingDeleteId = null"
-      >
-        <div class="w-full max-w-sm rounded-xl border border-line bg-surface p-4 shadow-xl">
-          <p class="text-sm font-semibold text-ink">确定删除这条评论吗？</p>
-          <p class="mt-1 text-xs text-muted">删除后不可恢复；若是一级评论，其回复会一并删除。</p>
-          <div class="mt-4 flex justify-end gap-2">
-            <BaseButton variant="ghost" size="sm" @click="pendingDeleteId = null">取消</BaseButton>
-            <BaseButton variant="danger" size="sm" @click="confirmDelete">删除</BaseButton>
-          </div>
-        </div>
-      </div>
+      <!-- 删除评论的二次确认：自绘弹层，与 ReportDialog 共用 ModalShell 外壳 -->
+      <ConfirmDialog
+        :open="pendingDeleteId !== null"
+        label="删除评论"
+        title="确定删除这条评论吗？"
+        message="删除后不可恢复；若是一级评论，其回复会一并删除。"
+        confirm-text="删除"
+        danger
+        @close="pendingDeleteId = null"
+        @confirm="confirmDelete"
+      />
       </template>
     </StatePanel>
   </section>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
 import StatePanel from '@shared/components/StatePanel.vue'
 import { useAuth } from '@shared/composables/useAuth'
@@ -104,18 +105,8 @@ onMounted(() => {
             查看自己发布的帖子，覆盖待审、已通过、已驳回与已下架全部状态；驳回与下架会展示原因。
           </p>
           <div class="mt-3 flex flex-wrap gap-2">
-            <RouterLink
-              class="ql-btn ql-btn-sm bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
-              to="/my-posts"
-            >
-              查看我的帖子
-            </RouterLink>
-            <RouterLink
-              class="ql-btn ql-btn-sm border border-line bg-surface text-muted hover:border-primary-soft hover:text-primary-deep"
-              to="/publish"
-            >
-              去发布
-            </RouterLink>
+            <BaseButton as="RouterLink" size="sm" to="/my-posts">查看我的帖子</BaseButton>
+            <BaseButton as="RouterLink" variant="ghost" size="sm" to="/publish">去发布</BaseButton>
           </div>
         </div>
       </div>

@@ -6,6 +6,7 @@ import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
+import { useCursorList } from '@shared/composables/useCursorList'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useCsvExport } from '@/composables/useCsvExport'
 import {
@@ -17,19 +18,9 @@ import type { AdminAuditLogItem } from '@/types/admin'
 const { reviewReasonText } = useUserLabels()
 const { exporting, download } = useCsvExport()
 
-const items = ref<AdminAuditLogItem[]>([])
-const loading = ref(false)
-const loadingMore = ref(false)
-const hasMore = ref(false)
-const failed = ref(false)
-
 const actionFilter = ref('')
 const fromFilter = ref('')
 const toFilter = ref('')
-
-let cursor: string | null = null
-/** 请求序号：筛选条件改动会触发 refresh，与在飞的 loadMore 可能交叉，先发的不一定先到 */
-let requestSeq = 0
 
 function actionLabel(action: string): string {
   return ACTION_LABELS[action] ?? action
@@ -53,64 +44,20 @@ function exportCsv(): void {
   )
 }
 
-function applyPage(page: { items: AdminAuditLogItem[]; nextCursor: string | null }, append: boolean): void {
-  items.value = append ? [...items.value, ...page.items] : page.items
-  cursor = page.nextCursor
-  hasMore.value = page.nextCursor !== null
-}
-
-async function refresh(): Promise<void> {
-  const seq = ++requestSeq
-  loading.value = true
-  failed.value = false
-  items.value = []
-  cursor = null
-  hasMore.value = false
-  try {
-    const page = await fetchAuditLogs({
-      action: actionFilter.value || null,
-      from: toInstant(fromFilter.value),
-      to: toInstant(toFilter.value),
-    })
-    if (seq !== requestSeq) {
-      return
-    }
-    applyPage(page, false)
-  } catch {
-    // 错误已由拦截器提示；这里只把「加载失败」与「暂无记录」分成两屏
-    if (seq === requestSeq) {
-      failed.value = true
-    }
-  } finally {
-    if (seq === requestSeq) {
-      loading.value = false
-    }
-  }
-}
-
-async function loadMore(): Promise<void> {
-  if (!hasMore.value || loading.value || loadingMore.value) {
-    return
-  }
-  const seq = requestSeq
-  loadingMore.value = true
-  try {
-    const page = await fetchAuditLogs({
-      cursor,
-      action: actionFilter.value || null,
-      from: toInstant(fromFilter.value),
-      to: toInstant(toFilter.value),
-    })
-    if (seq !== requestSeq) {
-      return
-    }
-    applyPage(page, true)
-  } catch {
-    // 错误已由拦截器提示
-  } finally {
-    loadingMore.value = false
-  }
-}
+/**
+ * 列表状态机收在 shared useCursorList：筛选条件改动会触发 refresh，与在飞的 loadMore
+ * 可能交叉（先发的不一定先到），序号防竞态由它统一负责；取页函数在闭包内读当前筛选。
+ */
+const { items, loading, loadingMore, hasMore, failed, refresh, loadMore } =
+  useCursorList<AdminAuditLogItem>({
+    fetchPage: (cursor) =>
+      fetchAuditLogs({
+        cursor,
+        action: actionFilter.value || null,
+        from: toInstant(fromFilter.value),
+        to: toInstant(toFilter.value),
+      }),
+  })
 
 onMounted(() => {
   void refresh()

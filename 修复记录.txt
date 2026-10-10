@@ -17,6 +17,45 @@
 
 
 --------------------------------------------------------------------------------
+R-44 前端组件整合第二批（2B-1 波）：链接按钮 / 图片网格 / 分页归一 / 弹层壳
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：组件化重构  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿
+来源：R-43 第二批 2A 之后的 2B。2B 整体仍偏大，再拆三小波：本波 2B-1 做四项确定性高的
+收编；DataTable（9 张自绘表）与 QueueWorkbench（3 工作台页）、PostDetailView 442 行拆分、
+PostMetaRow/AppealPanel/CommentComposer 抽离留 2B-2 / 2B-3（结构性更大，需独立验证）。
+
+1. BaseButton 增 `as` 链接形态：传元素名或**已全局注册的组件名**（如 'RouterLink'），由 Vue
+   解析字符串，故调用方无需 import、shared 也不必反向依赖 vue-router（shared 无该依赖，
+   传组件对象会引入耦合）。非 button 时不输出 type/disabled。8 处手拼 `ql-btn ql-btn-sm
+   bg-primary-deep…` 的 RouterLink 全部收编（HomeView×2、HomeSidebar、AppHeader、
+   MyPostsView、PostDetailView、ProfileView×2），其中 HomeView 两处原本漏了 shadow-sm
+   的漂移随之一并消除；ProfileView 的次要链接从临时样式收敛到 ghost 变体。
+2. 新建 web PostImageGrid（thumb/detail 两口径）：信息流缩略图（4 列小方块）与详情大图
+   （单图原比例限高 / 多图 3 列）本是 3 处逐字重复（PostCard、MyPostsView 与 PostCard
+   连 alt/loading 都相同）加详情页一套变体；外距由调用方 class 传，单根元素故 class 落容器。
+3. 两处手写游标分页接回 shared useCursorList：AnnouncementManageView 与 AuditLogView
+   各自复制了 items/loading/loadingMore/hasMore/failed + cursor + requestSeq + applyPage/
+   refresh/loadMore 全套（连「先清干净再请求」「过期响应丢弃」注释都同源）。改用该
+   composable 后各删约 45 行；取页函数在闭包内读筛选条件（审计页的分页与导出同源）。
+4. 新建 web ModalShell + ConfirmDialog：举报弹窗与删除评论确认各写一份同样的「全屏遮罩 +
+   max-w 面板 + ESC/遮罩关闭 + 打开收焦点」，收成一个壳（z-overlay 分层、窄屏贴底口径）。
+   ReportDialog 与 PostDetailView 的删评论确认均改用；ConfirmDialog 额外支持 title（问句）
+   与 label（可访问名）分离、danger 配色、submitting 期间禁遮罩与 ESC。
+
+刻意不做（2B-2 / 2B-3）：DataTable 配置表、QueueWorkbench 骨架、PostDetailView 拆分、
+学生端 PostMetaRow/AppealPanel/CommentComposer 抽离、ElMessageBox 命令式封装评估。
+
+验证（真跑，全绿）
+- pnpm -r lint / typecheck：三包通过。
+- vitest：shared 19 文件 102 例、qinglan-web 28 文件 178 例、qinglan-admin 42 文件
+  264 例，共 544 例全绿（新增 BaseButton as、PostImageGrid、ModalShell、ConfirmDialog 等
+  共 16 条）。既有的 ReportDialog 7 例、PostDetailView 11 例（含删评论二次确认的
+  role/aria-label/按钮文案断言）在换壳后原样通过，说明行为等价。
+- pnpm -r build：两端产物成功。
+- 视觉微调点（ProfileView 次要链接、PostImageGrid 圆角与间距、删评论确认框窄屏贴底）
+  建议浏览器实测时顺带核对。
+
+--------------------------------------------------------------------------------
 R-43 前端组件整合第二批（2A 波）：PageHeader / 理由弹窗壳 / 行内按钮 / 点赞收编
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：组件化重构  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿

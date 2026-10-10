@@ -40,6 +40,25 @@ describe('BaseButton', () => {
     expect(mount(BaseButton, { props: { variant: 'danger' } }).classes()).toContain('bg-danger')
   })
 
+  it('as 渲染为链接元素：不出 type / disabled，样式与内容照旧', () => {
+    const wrapper = mount(BaseButton, {
+      props: { as: 'a', size: 'sm' },
+      attrs: { href: '/publish' },
+    })
+    const root = wrapper.get('a')
+
+    expect(root.classes()).toContain('ql-btn')
+    expect(root.classes()).toContain('ql-btn-sm')
+    expect(root.attributes('href')).toBe('/publish')
+    // 链接不接受 button 的 type / disabled
+    expect(root.attributes('type')).toBeUndefined()
+    expect(root.attributes('disabled')).toBeUndefined()
+  })
+
+  it('默认仍渲染 button 且带 type', () => {
+    expect(mount(BaseButton).get('button').attributes('type')).toBe('button')
+  })
+
   it('点击时向外抛出 click 事件', async () => {
     const wrapper = mount(BaseButton, { props: { htmlType: 'submit' } })
 

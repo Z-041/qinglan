@@ -76,12 +76,7 @@ watch(topicId, () => {
             <p class="text-sm font-semibold text-ink">认证后即可匿名发帖与互动</p>
             <p class="mt-0.5 text-xs text-muted">游客可以浏览，发帖、评论与点赞需校园邮箱认证。</p>
           </div>
-          <RouterLink
-            class="ql-btn ql-btn-sm bg-primary-deep text-white hover:bg-primary-strong"
-            to="/login"
-          >
-            去认证
-          </RouterLink>
+          <BaseButton as="RouterLink" size="sm" to="/login">去认证</BaseButton>
         </div>
 
         <!-- 排序 Tab：最新 / 热门。切 Tab 保留当前话题、重置到第一页（sort 由 useFeed 下发）。
@@ -115,13 +110,9 @@ watch(topicId, () => {
           @retry="refresh()"
         >
           <template #empty-action>
-            <RouterLink
-              v-if="userStore.isAuthenticated"
-              class="ql-btn ql-btn-sm bg-primary-deep text-white hover:bg-primary-strong"
-              to="/publish"
-            >
+            <BaseButton v-if="userStore.isAuthenticated" as="RouterLink" size="sm" to="/publish">
               去发布
-            </RouterLink>
+            </BaseButton>
           </template>
 
           <!-- 分割线列表：每条一行（话题 + 摘要 + 配图 + 互动数据），不再分头条大卡与紧凑行 -->

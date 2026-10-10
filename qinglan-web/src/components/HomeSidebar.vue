@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import type { Topic } from '@/types/post'
 
 defineProps<{
@@ -19,12 +20,14 @@ const model = defineModel<number | null>({ default: null })
       <p class="mt-1 text-xs text-muted">
         {{ authenticated ? '匿名代号按帖生成，跨帖不可关联' : '发帖、评论与点赞需校园邮箱认证' }}
       </p>
-      <RouterLink
-        class="ql-btn ql-btn-sm mt-3 bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
+      <BaseButton
+        as="RouterLink"
+        size="sm"
+        class="mt-3"
         :to="authenticated ? '/publish' : '/login'"
       >
         {{ authenticated ? '发布新帖' : '去认证' }}
-      </RouterLink>
+      </BaseButton>
     </div>
 
     <div v-if="topics.length" class="ql-card p-4">

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import StatePanel from '@shared/components/StatePanel.vue'
+import PostImageGrid from '@/components/PostImageGrid.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useMyPosts } from '@/composables/useMyPosts'
 import type { MyPostItem, PostStatus } from '@/types/post'
@@ -51,12 +53,7 @@ onMounted(() => {
       @retry="load()"
     >
       <template #empty-action>
-        <RouterLink
-          class="ql-btn ql-btn-sm bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
-          to="/publish"
-        >
-          去发布
-        </RouterLink>
+        <BaseButton as="RouterLink" size="sm" to="/publish">去发布</BaseButton>
       </template>
 
       <ul class="mt-5 divide-y divide-line">
@@ -78,16 +75,7 @@ onMounted(() => {
               {{ item.content }}
             </p>
 
-            <div v-if="item.images.length" class="mt-2 grid grid-cols-4 gap-1.5">
-              <img
-                v-for="url in item.images"
-                :key="url"
-                :src="url"
-                alt="帖子配图"
-                loading="lazy"
-                class="aspect-square w-full rounded border border-line object-cover"
-              />
-            </div>
+            <PostImageGrid class="mt-2" :urls="item.images" />
 
             <!-- 驳回与下架展示原因；其余状态（待审 / 已通过）没有原因可展示 -->
             <p

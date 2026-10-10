@@ -2,6 +2,7 @@
 import BaseIcon from '@shared/components/base/BaseIcon.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import LikeButton from '@/components/LikeButton.vue'
+import PostImageGrid from '@/components/PostImageGrid.vue'
 import type { PostSummary } from '@/types/post'
 
 /**
@@ -27,16 +28,7 @@ const emit = defineEmits<{ 'toggle-like': [] }>()
 
       <p class="mt-2 line-clamp-2 text-sm leading-relaxed break-words text-ink">{{ post.content }}</p>
 
-      <div v-if="post.images.length" class="mt-2 grid grid-cols-4 gap-1.5">
-        <img
-          v-for="url in post.images"
-          :key="url"
-          :src="url"
-          alt="帖子配图"
-          loading="lazy"
-          class="aspect-square w-full rounded border border-line object-cover"
-        />
-      </div>
+      <PostImageGrid class="mt-2" :urls="post.images" />
     </RouterLink>
 
     <div class="flex items-center gap-4 px-4 pb-3 max-lg:px-3">

@@ -12,6 +12,7 @@ import AnnouncementTable from '@/components/admin/AnnouncementTable.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
+import { useCursorList } from '@shared/composables/useCursorList'
 import { usePermissions } from '@/composables/usePermissions'
 import type { AdminAnnouncementItem, CreateAnnouncementPayload } from '@/types/admin'
 
@@ -25,80 +26,18 @@ const { can } = usePermissions()
  */
 const canOperate = computed(() => can('ANNOUNCEMENT_MANAGE'))
 
-const items = ref<AdminAnnouncementItem[]>([])
-const loading = ref(false)
-const loadingMore = ref(false)
-const hasMore = ref(false)
 const submitting = ref(false)
 const formOpen = ref(false)
-/** 首屏是否失败过。用于把「加载失败」与「还没有公告」分成两屏 */
-const failed = ref(false)
-
-/** 不放进 ref：只作为下一次请求的入参，变化不需要触发渲染 */
-let cursor: string | null = null
 
 /**
- * 请求序号。发布/撤回之后的 refresh 与用户点「刷新」可能同时在飞，**先发的不一定先到**：
- * 没有它的话，晚到的旧响应会把新结果覆盖掉，列表与游标随之错位。
+ * 列表状态机（清空再请求、请求序号防竞态、四态）收在 shared useCursorList——
+ * 与其余队列页口径一致。发布/撤回后的 refresh 与用户点「刷新」可能同时在飞，
+ * 先发的不一定先到，序号防竞态由该 composable 统一负责。
  */
-let requestSeq = 0
-
-function applyPage(
-  page: { items: AdminAnnouncementItem[]; nextCursor: string | null },
-  append: boolean,
-): void {
-  items.value = append ? [...items.value, ...page.items] : page.items
-  cursor = page.nextCursor
-  hasMore.value = page.nextCursor !== null
-}
-
-async function refresh(): Promise<void> {
-  const seq = ++requestSeq
-  loading.value = true
-  failed.value = false
-  // 先清干净再请求：否则本次失败时列表与游标会留在上一次的结果集上，
-  // 此后点「加载更多」就会拿「新一次 + 旧游标」去请求
-  items.value = []
-  cursor = null
-  hasMore.value = false
-  try {
-    const page = await fetchAdminAnnouncements(null)
-    // 过期响应必须丢弃，否则旧结果会覆盖新结果
-    if (seq !== requestSeq) {
-      return
-    }
-    applyPage(page, false)
-  } catch {
-    // 错误已由拦截器提示；这里只记状态位，供表格区分「加载失败」与「没有公告」
-    if (seq === requestSeq) {
-      failed.value = true
-    }
-  } finally {
-    if (seq === requestSeq) {
-      loading.value = false
-    }
-  }
-}
-
-async function loadMore(): Promise<void> {
-  if (!hasMore.value || loading.value || loadingMore.value) {
-    return
-  }
-  // 记下发起时的序号：期间若刷新过（requestSeq 会 +1），这次的响应必须丢弃
-  const seq = requestSeq
-  loadingMore.value = true
-  try {
-    const page = await fetchAdminAnnouncements(cursor)
-    if (seq !== requestSeq) {
-      return
-    }
-    applyPage(page, true)
-  } catch {
-    // 错误已由拦截器提示
-  } finally {
-    loadingMore.value = false
-  }
-}
+const { items, loading, loadingMore, hasMore, failed, refresh, loadMore } =
+  useCursorList<AdminAnnouncementItem>({
+    fetchPage: (cursor) => fetchAdminAnnouncements(cursor),
+  })
 
 onMounted(() => {
   void refresh()

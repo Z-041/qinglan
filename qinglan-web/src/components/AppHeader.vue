@@ -59,13 +59,7 @@ const emit = defineEmits<{ 'sign-out': [] }>()
           <NotificationBell :unread-count="props.unreadCount" />
           <BaseButton variant="ghost" size="sm" @click="emit('sign-out')">退出</BaseButton>
         </template>
-        <RouterLink
-          v-else
-          class="ql-btn ql-btn-sm bg-primary-deep text-white shadow-sm hover:bg-primary-strong"
-          to="/login"
-        >
-          去认证
-        </RouterLink>
+        <BaseButton v-else as="RouterLink" size="sm" to="/login">去认证</BaseButton>
       </div>
     </div>
   </header>
