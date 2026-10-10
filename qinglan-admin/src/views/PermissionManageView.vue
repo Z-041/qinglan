@@ -10,6 +10,7 @@ import RelativeTime from '@shared/components/RelativeTime.vue'
 import { pushToast } from '@shared/composables/useToast'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useSubmit } from '@shared/composables/useSubmit'
+import { useReasonPrompt } from '@/composables/useReasonPrompt'
 import {
   ASSIGNABLE_ROLE_OPTIONS,
   isCommitteeRole,
@@ -25,6 +26,8 @@ const members = ref<UserProfile[]>([])
 const loading = ref(false)
 const failed = ref(false)
 const { submitting, run } = useSubmit()
+/** 权限变更必须留下理由：它是审计里唯一能回答「为什么是他」的字段（弹窗封装见 useReasonPrompt） */
+const { promptReason } = useReasonPrompt()
 
 const targetUserId = ref('')
 const targetRole = ref<AssignableRole>('REVIEWER')
@@ -50,24 +53,8 @@ onMounted(() => {
   void load()
 })
 
-/** 权限变更必须留下理由：它是审计里唯一能回答「为什么是他」的字段 */
-async function promptReason(title: string): Promise<string | null> {
-  try {
-    const result = await ElMessageBox.prompt('理由会写入审计日志，事后可追溯', title, {
-      confirmButtonText: '确认',
-      cancelButtonText: '取消',
-      inputPlaceholder: '理由',
-      inputValidator: (value: string) => (value.trim().length > 0 ? true : '理由不能为空'),
-    })
-    return result.value.trim()
-  } catch {
-    // 用户取消不是错误，静默返回
-    return null
-  }
-}
-
 async function submitChange(userId: number, role: AssignableRole, title: string): Promise<boolean> {
-  const reason = await promptReason(title)
+  const reason = await promptReason(title, '理由会写入审计日志，事后可追溯')
   if (reason === null) {
     return false
   }

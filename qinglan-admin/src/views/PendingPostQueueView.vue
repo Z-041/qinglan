@@ -11,6 +11,7 @@ import { usePendingPostQueue } from '@/composables/usePendingPostQueue'
 import { usePermissions } from '@/composables/usePermissions'
 import { useQueuePolling } from '@/composables/useQueuePolling'
 import { useQueueShortcuts, type QueueShortcut } from '@/composables/useQueueShortcuts'
+import { useReasonPrompt } from '@/composables/useReasonPrompt'
 import { useReviewActions } from '@/composables/useReviewActions'
 import { useReviewContext } from '@/composables/useReviewContext'
 import { useRowKeyboardNav } from '@/composables/useRowKeyboardNav'
@@ -39,8 +40,8 @@ const {
 const { submitting, approvePost, rejectPost } = useReviewActions()
 
 const panelOpen = ref(false)
-/** 驳回理由弹窗（ElMessageBox）打开期间计入「处置进行中」，轮询不得替换列表 */
-const reasonPromptOpen = ref(false)
+/** 驳回理由弹窗打开期间计入「处置进行中」，轮询不得替换列表（promptOpen 由 useReasonPrompt 提供） */
+const { promptOpen: reasonPromptOpen, promptReason } = useReasonPrompt()
 
 /** 键盘行焦点：↑/↓ 移动，面板随焦点行自动加载 */
 const {
@@ -145,21 +146,9 @@ async function handleReject(): Promise<void> {
   if (!target.value) {
     return
   }
-  let reason: string
-  reasonPromptOpen.value = true
-  try {
-    const result = await ElMessageBox.prompt('驳回理由会发给作者，并写入审计日志', '驳回帖子', {
-      confirmButtonText: '确认',
-      cancelButtonText: '取消',
-      inputPlaceholder: '理由',
-      inputValidator: (value: string) => (value.trim().length > 0 ? true : '理由不能为空'),
-    })
-    reason = result.value.trim()
-  } catch {
-    // 用户取消不是错误，静默返回
+  const reason = await promptReason('驳回帖子', '驳回理由会发给作者，并写入审计日志')
+  if (reason === null) {
     return
-  } finally {
-    reasonPromptOpen.value = false
   }
   if (await rejectPost(target.value.targetId, { reason })) {
     await finish('已驳回，仅作者可见')

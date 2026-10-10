@@ -18,6 +18,7 @@ declare module 'vue' {
     AppealTable: typeof import('./components/admin/AppealTable.vue')['default']
     ArbitrationDialog: typeof import('./components/admin/ArbitrationDialog.vue')['default']
     BanUserDialog: typeof import('./components/admin/BanUserDialog.vue')['default']
+    ChartCard: typeof import('./components/admin/ChartCard.vue')['default']
     CreditAdjustDialog: typeof import('./components/admin/CreditAdjustDialog.vue')['default']
     DataTable: typeof import('./components/admin/DataTable.vue')['default']
     DismissReportsDialog: typeof import('./components/admin/DismissReportsDialog.vue')['default']

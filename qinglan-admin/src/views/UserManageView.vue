@@ -10,6 +10,7 @@ import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { exportAdminUsers } from '@/api/admin'
 import { useCsvExport } from '@/composables/useCsvExport'
+import { useReasonPrompt } from '@/composables/useReasonPrompt'
 import { toQuery, useUserManage } from '@/composables/useUserManage'
 import type { AdminUserItem } from '@/types/admin'
 import { ALL_ROLES, type UserStatus } from '@shared/types/user'
@@ -32,6 +33,8 @@ const {
 } = useUserManage()
 
 const { roleLabel, statusLabel } = useUserLabels()
+/** 解封必须留下理由（会写入审计日志）；弹窗封装见 useReasonPrompt */
+const { promptReason } = useReasonPrompt()
 
 const STATUSES: UserStatus[] = ['ACTIVE', 'BANNED', 'BLACKLISTED']
 const ROLES = ALL_ROLES
@@ -111,18 +114,12 @@ async function handleCredit(delta: number, reason: string): Promise<void> {
 }
 
 async function handleUnban(row: AdminUserItem): Promise<void> {
-  try {
-    const result = await ElMessageBox.prompt('请填写解封理由，会写入审计日志', '解除封禁', {
-      confirmButtonText: '确认解封',
-      cancelButtonText: '取消',
-      inputPlaceholder: '理由',
-      inputValidator: (value: string) => (value.trim().length > 0 ? true : '理由不能为空'),
-    })
-    if (await unban(row.id, { reason: result.value.trim() })) {
-      await refresh()
-    }
-  } catch {
-    // 用户取消：ElMessageBox 以 reject 表示，不是错误，静默返回
+  const reason = await promptReason('解除封禁', '请填写解封理由，会写入审计日志', '确认解封')
+  if (reason === null) {
+    return
+  }
+  if (await unban(row.id, { reason })) {
+    await refresh()
   }
 }
 </script>

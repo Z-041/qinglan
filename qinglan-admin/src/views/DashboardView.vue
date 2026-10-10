@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
+import ChartCard from '@/components/admin/ChartCard.vue'
 import EChart from '@/components/admin/EChart.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
@@ -120,61 +121,42 @@ onMounted(() => {
       </div>
 
       <div class="grid grid-cols-2 gap-5">
-        <BaseCard>
-          <div class="flex items-center justify-between">
-            <h2 class="text-sm font-medium text-muted">处置趋势</h2>
+        <ChartCard title="处置趋势" :has-data="trendData.length > 0">
+          <template #action>
             <el-radio-group v-model="trendRange" size="small">
               <el-radio-button value="7d">近 7 日</el-radio-button>
               <el-radio-button value="30d">近 30 日</el-radio-button>
             </el-radio-group>
-          </div>
+          </template>
           <!-- 图表容器固定高度（EChart 默认 280px），避免布局跳动 -->
-          <EChart v-if="trendData.length" class="mt-3" :option="trendOption" aria-label="处置趋势图" />
-          <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
-        </BaseCard>
+          <EChart class="mt-3" :option="trendOption" aria-label="处置趋势图" />
+        </ChartCard>
 
-        <BaseCard>
-          <h2 class="text-sm font-medium text-muted">举报按理由分布</h2>
-          <EChart v-if="reasonItems.length" class="mt-3" :option="reasonChartOption" aria-label="举报按理由分布图" />
-          <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
-        </BaseCard>
+        <ChartCard title="举报按理由分布" :has-data="reasonItems.length > 0">
+          <EChart class="mt-3" :option="reasonChartOption" aria-label="举报按理由分布图" />
+        </ChartCard>
 
-        <BaseCard>
-          <h2 class="text-sm font-medium text-muted">处置时效（近 30 天）</h2>
+        <ChartCard title="处置时效（近 30 天）" :has-data="latency.sampleSize > 0">
+          <EChart class="mt-3" :option="latencyChartOption" aria-label="处置时效图（近 30 天）" />
+        </ChartCard>
+
+        <ChartCard title="提案表决概况" :has-data="proposalTotal > 0">
+          <template #action>
+            <span class="text-sm text-muted">
+              通过率 <span class="font-medium text-ink">{{ approvalRateText }}</span>
+            </span>
+          </template>
+          <EChart class="mt-3" :option="proposalChartOption" aria-label="提案通过率图" />
+        </ChartCard>
+
+        <ChartCard class="col-span-2" title="审核员处置量排行" :has-data="ranking.length > 0">
           <EChart
-            v-if="latency.sampleSize > 0"
-            class="mt-3"
-            :option="latencyChartOption"
-            aria-label="处置时效图（近 30 天）"
-          />
-          <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
-        </BaseCard>
-
-        <BaseCard>
-          <div class="flex items-center justify-between">
-            <h2 class="text-sm font-medium text-muted">提案表决概况</h2>
-            <span class="text-sm text-muted">通过率 <span class="font-medium text-ink">{{ approvalRateText }}</span></span>
-          </div>
-          <EChart
-            v-if="proposalTotal > 0"
-            class="mt-3"
-            :option="proposalChartOption"
-            aria-label="提案通过率图"
-          />
-          <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
-        </BaseCard>
-
-        <BaseCard class="col-span-2">
-          <h2 class="text-sm font-medium text-muted">审核员处置量排行</h2>
-          <EChart
-            v-if="ranking.length"
             class="mt-3"
             :option="rankingChartOption"
             height="320px"
             aria-label="审核员处置量排行图"
           />
-          <p v-else class="mt-3 text-sm text-muted">暂无数据</p>
-        </BaseCard>
+        </ChartCard>
       </div>
     </StatePanel>
   </div>

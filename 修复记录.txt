@@ -17,6 +17,52 @@
 
 
 --------------------------------------------------------------------------------
+R-49 前端组件整合第三批（3B 波）：看板图表卡 + 理由弹窗封装
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：组件化重构  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿
+来源：第三批 3B。两件都属「逐字重复的确定性收敛」：看板 5 张图表卡与 4 处 ElMessageBox
+「填理由」弹窗。
+
+一、交付（2 件，均带 spec）
+  1. ChartCard.vue（admin/components，附 3 条 spec）：BaseCard + 标题（右侧 #action 插槽）
+     + 图表 + 统一「暂无数据」空态。看板 5 个图表卡此前逐字重复（标题样式 + EChart v-if +
+     p v-else 空态）。option 的构造仍留在 dashboardCharts，本组件只承载外壳与「有无数据」分支；
+     空态与失败态的分工不变——网络故障由外层 StatePanel 挡掉，不会走到这里被说成「没有数据」
+     （DashboardView.spec「加载失败不得出现暂无数据」的既有断言据此仍成立）。
+  2. useReasonPrompt.ts（admin/composables，附 3 条 spec）：ElMessageBox.prompt「填理由」的
+     统一封装。四处用法（审核队列单人处置 / 权限变更 / 解封 / 驳回帖子）的取消按钮、输入占位、
+     「非空」校验逐字相同，仅提示语与标题不同（解封的确认按钮为「确认解封」，其余「确认」）。
+     除 promptReason 外一并交出 promptOpen——审核队列与待审帖子队列的轮询据此在弹窗期间闭嘴。
+     用户取消（ElMessageBox 以 reject 表示）返回 null，调用方静默返回。
+
+二、连带调整与瘦身
+  - DashboardView：5 张图表卡换 ChartCard（排行图跨列由 class="col-span-2" 透传，ChartCard
+    根为 BaseCard，class 落到其根 section，无需额外的 colspan prop）。
+  - ReviewQueueView：删掉内联 promptReason（原 16 行）与 reasonPromptOpen ref，改用
+    useReasonPrompt；reasonPromptOpen 由 promptOpen 别名承接，busy 判定口径不变。
+  - PermissionManageView / UserManageView / PendingPostQueueView：同样改用 useReasonPrompt，
+    删除各自的内联 promptReason / 内联 try-catch（PendingPostQueue 的 handleReject 由
+    「let reason + try/finally」收敛为「await + 判空 + 提交」）。
+
+三、刻意不做
+  - 不抽 useReviewQueueActions（把 REASON_EXECUTORS / PROPOSAL_EXECUTORS / handleAction 进一步
+    下沉）：属另一件事，且会把「按当前焦点目标分发」的页面职责移出视图，超出本波范围。
+  - 看板 5 张图卡之外的 text-sm font-medium text-muted 标题不并入 ChartCard（那是统计分区标题，
+    不是图表卡）。
+
+验证（真跑，全绿）
+- pnpm lint / typecheck：管理端通过（shared / web 本波未改动）。
+- vitest：qinglan-admin **46 文件 281 例全绿**（波前 44 文件 275 例，+2 文件 +6 例为新 spec）。
+  DashboardView.spec 的「5 个 echart-stub / 5 个标题 / 通过率 75% / 失败态不得出现暂无数据」
+  原样通过、未改断言。
+- pnpm build：管理端产物成功；components.d.ts 自动补入 ChartCard（该文件须入库）。
+- 过程修正：useReasonPrompt.spec 初版直接 mockResolvedValue({ value, action }) 被 vue-tsc 挡下
+  ——element-plus 的 MessageBoxData 是夹了字符串联合的交叉类型，字面量不匹配；改用 helper
+  返回 `as never`（被测代码只读 result.value，行为不变）。
+- 视觉变化点：图表卡标题由「直接 h2」改为「h2 置于 flex justify-between 容器内」（无 #action
+  时为单元素，视觉一致）。
+
+--------------------------------------------------------------------------------
 R-48 前端组件整合第三批（3A 波）：学生端两列布局 / 侧栏卡 / 文案按钮三件
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：组件化重构  状态：已交付；学生端 lint/typecheck/vitest/build 真跑全绿

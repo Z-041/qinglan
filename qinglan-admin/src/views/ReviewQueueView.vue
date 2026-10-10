@@ -16,6 +16,7 @@ import { useDispositionFinisher } from '@/composables/useDispositionFinisher'
 import { usePermissions } from '@/composables/usePermissions'
 import { useQueuePolling } from '@/composables/useQueuePolling'
 import { useQueueShortcuts, type QueueShortcut } from '@/composables/useQueueShortcuts'
+import { useReasonPrompt } from '@/composables/useReasonPrompt'
 import { useReviewActions } from '@/composables/useReviewActions'
 import { useReviewContext } from '@/composables/useReviewContext'
 import { useReviewQueue } from '@/composables/useReviewQueue'
@@ -89,8 +90,8 @@ function resetFilters(): void {
 const panelOpen = ref(false)
 const dismissOpen = ref(false)
 const proposalOpen = ref(false)
-/** 理由弹窗（ElMessageBox）打开期间也计入「处置进行中」，轮询不得在此期间替换列表 */
-const reasonPromptOpen = ref(false)
+/** 理由弹窗打开期间也计入「处置进行中」，轮询不得在此期间替换列表（promptOpen 由 useReasonPrompt 提供） */
+const { promptOpen: reasonPromptOpen, promptReason } = useReasonPrompt()
 /** 本次发起的提案动作；决定 ProposalReasonDialog 的标题与提交后调哪个接口 */
 const proposalAction = ref<ReviewAction | null>(null)
 
@@ -269,24 +270,6 @@ const { finish } = useDispositionFinisher({
   },
 })
 
-/** 二次确认 + 填理由；用户取消返回 null（不是错误，静默返回） */
-async function promptReason(title: string): Promise<string | null> {
-  reasonPromptOpen.value = true
-  try {
-    const result = await ElMessageBox.prompt('请填写理由，会写入审计日志', title, {
-      confirmButtonText: '确认',
-      cancelButtonText: '取消',
-      inputPlaceholder: '理由',
-      inputValidator: (value: string) => (value.trim().length > 0 ? true : '理由不能为空'),
-    })
-    return result.value.trim()
-  } catch {
-    return null
-  } finally {
-    reasonPromptOpen.value = false
-  }
-}
-
 /** 按输入类别数据驱动分发；执行器映射与文案元数据见文件上方与 reviewActionFlow / reviewActionSet */
 async function handleAction(action: ReviewAction): Promise<void> {
   const current = target.value
@@ -303,7 +286,7 @@ async function handleAction(action: ReviewAction): Promise<void> {
       }
       return
     case 'reason': {
-      const reason = await promptReason(meta.dialogTitle ?? meta.label)
+      const reason = await promptReason(meta.dialogTitle ?? meta.label, '请填写理由，会写入审计日志')
       if (reason === null) {
         return
       }
