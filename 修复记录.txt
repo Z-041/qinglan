@@ -17,6 +17,41 @@
 
 
 --------------------------------------------------------------------------------
+R-52 前端组件整合第四批（4B 波）：学生端提示条 AlertBox + 话题拉取收敛 useTopics
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：一致性收口  状态：已交付；学生端 lint/typecheck/vitest/build 真跑全绿
+来源：第四批 4B。4C（shared 接口微调 + 低价值小件）另开。
+
+一、AlertBox（web/components，附 3 条 spec）
+  - 收敛「圆角浅底 + 同色系深字」的行内提示条，三档语气 danger / warning / primary。底色的
+    语义配对称对（bg-danger-soft 配 text-danger-deep、bg-warning-soft 配 text-warning、
+    bg-primary-tint 配 text-primary-deep）此前散落各处、各写一半，集中到一处，避免「改了一边
+    漏另一边」。
+  - 迁移 4 处纯文本提示：详情页「审核未通过」（danger）、详情页「联系方式」（primary）、
+    「我的帖子」驳回 / 下架原因（danger）、发布页窄屏「发布须知」回显（warning，额外 mb-2 /
+    hidden / max-lg:block 经 class 透传）。
+  - **刻意不迁移 4 处**（形态与口径不同，硬套会让调用方覆盖一堆 class，收益不抵）：
+    ① LoginView 验证码行（flex 行 + 更换按钮，语气色被内部元素全覆盖）；
+    ② LoginView 本地联调验证码（text-sm，与提示条的 text-xs 不同档）；
+    ③ PublishView 草稿横幅（带 border，且是含多段与按钮的容器）；
+    ④ AppealPanel 下架申诉面板（含多段 <p> 与表单控件，不该塞进 <p>）。
+  - 组件根是 `<p>`：与既有提示条元素类型一致，故 PublishView.spec 用 `findAll('p')` 数「两处
+    发布须知」的断言继续成立（若根改成 div 会数不到）。
+
+二、useTopics（web/composables，附 3 条 spec）
+  - 首页（话题筛选）与发布页（话题是发帖前置）的「topics + topicsFailed + loadTopics」逐字
+    相同，抽到 useTopics；两处各自删除副本，usePublish 顺带去掉 fetchTopics / Topic 的 import。
+  - 行为不变：失败只记状态位（不抛错），错误仍由拦截器 toast；重试成功后清掉失败位。
+
+验证（真跑，全绿）
+- pnpm lint / typecheck：学生端通过。
+- vitest：qinglan-web 36 文件 206 例全绿（波前 34 文件 200 例，+2 文件 +6 例为新 spec）。
+  PublishView.spec「两处发布须知」的 findAll('p') 计数、HomeView.spec 话题断言、usePublish.spec
+  均未改、原样通过。
+- pnpm build：学生端产物成功。
+- 视觉变化点：无（AlertBox 渲染的 class 集合与原手写类逐字等价）。
+
+--------------------------------------------------------------------------------
 R-51 前端组件整合第四批（4A 波）：管理端筛选字段行归一 FormField + 公告页接 useSubmit
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：一致性收口  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿

@@ -4,6 +4,7 @@ import { onMounted } from 'vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import StatePanel from '@shared/components/StatePanel.vue'
+import AlertBox from '@/components/AlertBox.vue'
 import PostImageGrid from '@/components/PostImageGrid.vue'
 import PostMetaRow from '@/components/PostMetaRow.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
@@ -78,12 +79,12 @@ onMounted(() => {
             <PostImageGrid class="mt-2" :urls="item.images" />
 
             <!-- 驳回与下架展示原因；其余状态（待审 / 已通过）没有原因可展示 -->
-            <p
+            <AlertBox
               v-if="(item.status === 'REJECTED' || item.status === 'TAKEN_DOWN') && reasonText(item)"
-              class="mt-2 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-deep"
+              class="mt-2"
             >
               {{ item.status === 'REJECTED' ? '驳回原因' : '下架原因' }}：{{ reasonText(item) }}
-            </p>
+            </AlertBox>
 
             <div class="mt-2 flex items-center gap-4 text-xs text-muted">
               <span>赞 {{ item.likeCount }}</span>

@@ -8,6 +8,7 @@ import BaseInput from '@shared/components/base/BaseInput.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
+import AlertBox from '@/components/AlertBox.vue'
 import SidebarCard from '@/components/SidebarCard.vue'
 import TwoColumnLayout from '@/components/TwoColumnLayout.vue'
 import { MAX_IMAGES_PER_POST, useImageUpload } from '@/composables/useImageUpload'
@@ -173,11 +174,9 @@ async function handleSubmit(): Promise<void> {
 
           <div class="mt-5">
             <!-- 窄屏右栏隐藏，须知在表单内回显；PC 由右栏「发布须知」卡承担 -->
-            <p
-              class="mb-2 hidden rounded-lg bg-warning-soft px-3 py-2 text-xs leading-relaxed text-warning max-lg:block"
-            >
+            <AlertBox tone="warning" class="mb-2 hidden leading-relaxed max-lg:block">
               {{ PUBLISH_NOTICE }}
-            </p>
+            </AlertBox>
             <FormField label="正文" :hint="`${content.length}/2000`">
               <BaseTextarea v-model="content" :rows="8" :maxlength="2000" placeholder="说点什么…" />
             </FormField>

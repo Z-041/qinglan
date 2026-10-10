@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, watch } from 'vue'
 
-import { fetchTopics } from '@/api/topic'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import StatePanel from '@shared/components/StatePanel.vue'
@@ -10,8 +9,9 @@ import PostCard from '@/components/PostCard.vue'
 import TopicFilter from '@/components/TopicFilter.vue'
 import TwoColumnLayout from '@/components/TwoColumnLayout.vue'
 import { useFeed } from '@/composables/useFeed'
+import { useTopics } from '@/composables/useTopics'
 import { useUserStore } from '@shared/stores/user'
-import type { PostSort, Topic } from '@/types/post'
+import type { PostSort } from '@/types/post'
 
 const userStore = useUserStore()
 
@@ -24,22 +24,8 @@ const SORT_TABS: { value: PostSort; label: string }[] = [
   { value: 'hot', label: '热门' },
 ]
 
-const topics = ref<Topic[]>([])
-/**
- * 话题拉取是否失败过。失败时话题筛选整块消失，不提示就等于「本来就没有话题」——
- * 与发布页（同样以话题为前置）用同一套「提示 + 重试」口径。
- */
-const topicsFailed = ref(false)
-
-async function loadTopics(): Promise<void> {
-  topicsFailed.value = false
-  try {
-    topics.value = await fetchTopics()
-  } catch {
-    // 话题筛选缺失不影响信息流本身，错误已由拦截器提示；这里只记状态位供页面给「重试」
-    topicsFailed.value = true
-  }
-}
+/** 话题列表与失败状态与发布页共用同一套「提示 + 重试」口径（见 useTopics） */
+const { topics, topicsFailed, loadTopics } = useTopics()
 
 onMounted(() => {
   void load(null)

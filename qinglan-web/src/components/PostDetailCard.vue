@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 
 import BaseCard from '@shared/components/base/BaseCard.vue'
+import AlertBox from '@/components/AlertBox.vue'
 import AppealPanel from '@/components/AppealPanel.vue'
 import LikeButton from '@/components/LikeButton.vue'
 import PostImageGrid from '@/components/PostImageGrid.vue'
@@ -82,20 +83,14 @@ const reportStatusText = computed(() => {
     />
 
     <!-- 驳回：内容从未上线，没有申诉入口，只有作者看得到本页 -->
-    <p
-      v-else-if="props.post.mine && props.post.reviewReason"
-      class="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-deep"
-    >
+    <AlertBox v-else-if="props.post.mine && props.post.reviewReason" class="mt-3">
       审核未通过：{{ props.post.reviewReason }}
-    </p>
+    </AlertBox>
 
     <div class="mt-3">
-      <p
-        v-if="contactText"
-        class="rounded-lg bg-primary-tint px-3 py-2 text-xs text-primary-deep"
-      >
+      <AlertBox v-if="contactText" tone="primary">
         联系方式：<span class="font-medium">{{ contactText }}</span>
-      </p>
+      </AlertBox>
       <p v-else-if="!props.authenticated" class="text-xs text-muted">
         <RouterLink class="text-primary-deep" to="/login">认证后</RouterLink>可查看联系方式
       </p>

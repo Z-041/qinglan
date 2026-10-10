@@ -1,8 +1,8 @@
 import { computed, ref } from 'vue'
 
 import { createPost } from '@/api/post'
-import { fetchTopics } from '@/api/topic'
-import type { CreatePostRequest, PostDetail, Topic } from '@/types/post'
+import { useTopics } from './useTopics'
+import type { CreatePostRequest, PostDetail } from '@/types/post'
 
 /** 中国大陆手机号。联系方式应填在独立字段（设计方案 4.3），出现在正文里即提示违规 */
 const PHONE_PATTERN = /1[3-9]\d{9}/
@@ -13,18 +13,14 @@ const PHONE_PATTERN = /1[3-9]\d{9}/
  * 客户端的违规提示只是体验层（降低违规率），真正的拦截在服务端（设计方案第四章）。
  */
 export function usePublish() {
-  const topics = ref<Topic[]>([])
+  /** 话题列表与失败状态（首页也用同一份口径，见 useTopics） */
+  const { topics, topicsFailed, loadTopics } = useTopics()
   const topicId = ref<number | null>(null)
   const content = ref('')
   const contact = ref('')
   const images = ref<string[]>([])
 
   const submitting = ref(false)
-  /**
-   * 话题拉取是否失败过。话题是发帖的前置：失败时不提示就等于「选择话题」永远空白、
-   * 发布按钮永远灰着却不说为什么。
-   */
-  const topicsFailed = ref(false)
 
   const selectedTopic = computed(
     () => topics.value.find((topic) => topic.id === topicId.value) ?? null,
@@ -45,16 +41,6 @@ export function usePublish() {
       (!contactRequired.value || contact.value.trim().length > 0) &&
       blockedReason.value === null,
   )
-
-  async function loadTopics(): Promise<void> {
-    topicsFailed.value = false
-    try {
-      topics.value = await fetchTopics()
-    } catch {
-      // 错误已由拦截器提示；这里只记状态位，供页面给出「重试」
-      topicsFailed.value = true
-    }
-  }
 
   /** 发布成功返回详情，失败返回 null（错误已由拦截器提示） */
   async function submit(): Promise<PostDetail | null> {
