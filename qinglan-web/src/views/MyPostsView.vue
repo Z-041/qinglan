@@ -3,9 +3,9 @@ import { onMounted } from 'vue'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
-import RelativeTime from '@shared/components/RelativeTime.vue'
 import StatePanel from '@shared/components/StatePanel.vue'
 import PostImageGrid from '@/components/PostImageGrid.vue'
+import PostMetaRow from '@/components/PostMetaRow.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { useMyPosts } from '@/composables/useMyPosts'
 import type { MyPostItem, PostStatus } from '@/types/post'
@@ -59,17 +59,17 @@ onMounted(() => {
       <ul class="mt-5 divide-y divide-line">
         <li v-for="item in items" :key="item.id" class="ql-row">
           <RouterLink :to="`/posts/${item.id}`" class="block px-4 pt-3.5 pb-3 max-lg:px-3">
-            <div class="flex items-center gap-2">
-              <span
-                class="ql-tag shrink-0"
-                :class="statusClass(item.status)"
-              >
-                {{ targetStatusLabel(item.status) }}
-              </span>
-              <span class="ql-tag shrink-0 bg-primary-soft text-primary-deep">{{ item.topicName }}</span>
-              <span class="truncate text-xs text-muted">{{ item.anonymousCode }}</span>
-              <RelativeTime class="ml-auto shrink-0 text-xs text-muted" :iso="item.createdAt" />
-            </div>
+            <PostMetaRow
+              :topic-name="item.topicName"
+              :anonymous-code="item.anonymousCode"
+              :created-at="item.createdAt"
+            >
+              <template #leading>
+                <span class="ql-tag shrink-0" :class="statusClass(item.status)">
+                  {{ targetStatusLabel(item.status) }}
+                </span>
+              </template>
+            </PostMetaRow>
 
             <p class="mt-2 line-clamp-2 text-sm leading-relaxed break-words text-ink">
               {{ item.content }}

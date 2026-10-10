@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import BaseIcon from '@shared/components/base/BaseIcon.vue'
-import RelativeTime from '@shared/components/RelativeTime.vue'
 import LikeButton from '@/components/LikeButton.vue'
 import PostImageGrid from '@/components/PostImageGrid.vue'
+import PostMetaRow from '@/components/PostMetaRow.vue'
 import type { PostSummary } from '@/types/post'
 
 /**
@@ -19,12 +19,12 @@ const emit = defineEmits<{ 'toggle-like': [] }>()
 <template>
   <article class="ql-row">
     <RouterLink :to="`/posts/${post.id}`" class="block px-4 pt-3.5 pb-2 max-lg:px-3">
-      <div class="flex items-center gap-2">
-        <span class="ql-tag shrink-0 bg-primary-soft text-primary-deep">{{ post.topicName }}</span>
-        <span v-if="post.mine" class="ql-tag shrink-0 bg-primary-tint text-primary-deep">我</span>
-        <span class="truncate text-xs text-muted">{{ post.anonymousCode }}</span>
-        <RelativeTime class="ml-auto shrink-0 text-xs text-muted" :iso="post.createdAt" />
-      </div>
+      <PostMetaRow
+        :topic-name="post.topicName"
+        :mine="post.mine"
+        :anonymous-code="post.anonymousCode"
+        :created-at="post.createdAt"
+      />
 
       <p class="mt-2 line-clamp-2 text-sm leading-relaxed break-words text-ink">{{ post.content }}</p>
 
