@@ -4,12 +4,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import DismissReportsDialog from '@/components/admin/DismissReportsDialog.vue'
 import ProposalReasonDialog from '@/components/admin/ProposalReasonDialog.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
-import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
 import QueueTable from '@/components/admin/QueueTable.vue'
 import ReviewActionBar from '@/components/admin/ReviewActionBar.vue'
 import ReviewContextPanel from '@/components/admin/ReviewContextPanel.vue'
+import WorkbenchList from '@/components/admin/WorkbenchList.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { REVIEW_ACTION_FLOW } from '@/composables/reviewActionFlow'
 import { availableReviewActions, blockedByOpenProposal, REVIEW_ACTION_META } from '@/composables/reviewActionSet'
@@ -399,24 +398,18 @@ async function handleDismiss(reason: string): Promise<void> {
       </div>
     </section>
 
-    <!-- 轮询到列表有变化时提示；处置进行中只挂角标，点击后再合并刷新 -->
-    <button
-      v-if="hasNewContent"
-      type="button"
-      class="cursor-pointer rounded-lg border border-warning bg-warning-soft px-3 py-2 text-left text-sm text-warning"
-      @click="applyNow"
-    >
-      列表有新内容，点击刷新
-    </button>
-
-    <QueueShortcutHints :bindings="shortcuts.bindings.value" />
-
-    <section
-      class="ql-card overflow-clip outline-none focus-visible:ring-2 focus-visible:ring-primary-soft"
-      tabindex="0"
+    <WorkbenchList
+      :has-new-content="hasNewContent"
+      :has-more="hasMore"
+      :loading-more="loadingMore"
+      :shortcuts="shortcuts.bindings.value"
+      :load-more-disabled="filtersDirty"
+      :load-more-hint="filtersDirty ? '筛选条件已修改，正在重新加载，请稍候再继续加载' : ''"
       @focusin="focusList"
       @focusout="handleFocusOut"
       @keydown="onKeydown"
+      @load="loadMore"
+      @apply-now="applyNow"
     >
       <QueueTable
         :items="items"
@@ -425,16 +418,7 @@ async function handleDismiss(reason: string): Promise<void> {
         :active-key="activeKey"
         @handle="handleSelect"
       />
-
-      <LoadMoreButton
-        variant="table"
-        :has-more="hasMore"
-        :loading="loadingMore"
-        :disabled="filtersDirty"
-        :hint="filtersDirty ? '筛选条件已修改，正在重新加载，请稍候再继续加载' : ''"
-        @load="loadMore"
-      />
-    </section>
+    </WorkbenchList>
 
     <ReviewContextPanel
       v-model:open="panelOpen"

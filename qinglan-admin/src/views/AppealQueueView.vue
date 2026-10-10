@@ -4,8 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import AppealReviewDialog from '@/components/admin/AppealReviewDialog.vue'
 import AppealTable from '@/components/admin/AppealTable.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
-import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
-import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
+import WorkbenchList from '@/components/admin/WorkbenchList.vue'
 import { useAppealQueue } from '@/composables/useAppealQueue'
 import { useDispositionFinisher } from '@/composables/useDispositionFinisher'
 import { usePermissions } from '@/composables/usePermissions'
@@ -123,24 +122,16 @@ async function handleSubmit(approved: boolean, reason: string): Promise<void> {
   <div class="flex flex-col gap-5">
     <PageHeader title="申诉复审" :refreshing="loading" @refresh="refresh" />
 
-    <!-- 轮询到列表有变化时提示；处置进行中只挂角标，点击后再合并刷新 -->
-    <button
-      v-if="hasNewContent"
-      type="button"
-      class="cursor-pointer rounded-lg border border-warning bg-warning-soft px-3 py-2 text-left text-sm text-warning"
-      @click="applyNow"
-    >
-      列表有新内容，点击刷新
-    </button>
-
-    <QueueShortcutHints :bindings="shortcuts.bindings.value" />
-
-    <section
-      class="ql-card overflow-clip outline-none focus-visible:ring-2 focus-visible:ring-primary-soft"
-      tabindex="0"
+    <WorkbenchList
+      :has-new-content="hasNewContent"
+      :has-more="hasMore"
+      :loading-more="loadingMore"
+      :shortcuts="shortcuts.bindings.value"
       @focusin="focusList"
       @focusout="handleFocusOut"
       @keydown="onKeydown"
+      @load="loadMore"
+      @apply-now="applyNow"
     >
       <AppealTable
         :items="items"
@@ -150,9 +141,7 @@ async function handleSubmit(approved: boolean, reason: string): Promise<void> {
         :can-review="can('APPEAL_REVIEW')"
         @review="openReview($event, true)"
       />
-
-      <LoadMoreButton variant="table" :has-more="hasMore" :loading="loadingMore" @load="loadMore" />
-    </section>
+    </WorkbenchList>
 
     <AppealReviewDialog
       :open="dialogOpen"

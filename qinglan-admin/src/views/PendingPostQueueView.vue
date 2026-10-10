@@ -3,10 +3,9 @@ import { computed, onMounted, ref, watch } from 'vue'
 
 import PageHeader from '@/components/admin/PageHeader.vue'
 import PendingPostTable from '@/components/admin/PendingPostTable.vue'
-import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
 import ReviewContextPanel from '@/components/admin/ReviewContextPanel.vue'
+import WorkbenchList from '@/components/admin/WorkbenchList.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { useDispositionFinisher } from '@/composables/useDispositionFinisher'
 import { usePendingPostQueue } from '@/composables/usePendingPostQueue'
 import { usePermissions } from '@/composables/usePermissions'
@@ -174,24 +173,16 @@ async function handleReject(): Promise<void> {
 
     <p class="text-sm text-muted">主帖先审后发：这里的帖子尚未对外可见，放行后才会出现在信息流。</p>
 
-    <!-- 轮询到列表有变化时提示；处置进行中只挂角标，点击后再合并刷新 -->
-    <button
-      v-if="hasNewContent"
-      type="button"
-      class="cursor-pointer rounded-lg border border-warning bg-warning-soft px-3 py-2 text-left text-sm text-warning"
-      @click="applyNow"
-    >
-      列表有新内容，点击刷新
-    </button>
-
-    <QueueShortcutHints :bindings="shortcuts.bindings.value" />
-
-    <section
-      class="ql-card overflow-clip outline-none focus-visible:ring-2 focus-visible:ring-primary-soft"
-      tabindex="0"
+    <WorkbenchList
+      :has-new-content="hasNewContent"
+      :has-more="hasMore"
+      :loading-more="loadingMore"
+      :shortcuts="shortcuts.bindings.value"
       @focusin="focusList"
       @focusout="handleFocusOut"
       @keydown="onKeydown"
+      @load="loadMore"
+      @apply-now="applyNow"
     >
       <PendingPostTable
         :items="items"
@@ -200,9 +191,7 @@ async function handleReject(): Promise<void> {
         :active-key="activeKey"
         @handle="handleSelect"
       />
-
-      <LoadMoreButton variant="table" :has-more="hasMore" :loading="loadingMore" @load="loadMore" />
-    </section>
+    </WorkbenchList>
 
     <ReviewContextPanel
       v-model:open="panelOpen"

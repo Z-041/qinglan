@@ -46,5 +46,6 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     TodoBell: typeof import('./components/admin/TodoBell.vue')['default']
     UserTable: typeof import('./components/admin/UserTable.vue')['default']
+    WorkbenchList: typeof import('./components/admin/WorkbenchList.vue')['default']
   }
 }
