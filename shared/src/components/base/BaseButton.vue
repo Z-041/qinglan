@@ -16,11 +16,12 @@ const props = withDefaults(
     /** 原生 button 的 type，默认 button 以避免在表单内意外触发提交 */
     htmlType?: 'button' | 'submit'
     /**
-     * 换成链接等其它元素：传元素名或**已全局注册的组件名**（如 'RouterLink'）——字符串由 Vue
-     * 解析，因此调用方无需 import，shared 也不必反向依赖 vue-router。不传则渲染 `<button>`。
+     * 换成链接等其它元素：传原生标签名（'a'）或**已全局注册的组件名**（'RouterLink'）——字符串
+     * 由 Vue 解析，因此调用方无需 import，shared 也不必反向依赖 vue-router。不传则渲染 `<button>`。
      * 非 button 时不输出 `type` / `disabled`（链接不接受这两个属性），其余 props 落到根元素。
+     * 收窄为字面量联合：拼错（如 'Routerlink'）在 typecheck 即报错，而不是静默渲染成未知元素。
      */
-    as?: string
+    as?: 'button' | 'a' | 'RouterLink'
   }>(),
   { variant: 'primary', size: 'md', block: false, disabled: false, loading: false, htmlType: 'button' },
 )
