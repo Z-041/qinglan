@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 
 import { exportAuditLogs, fetchAuditLogs } from '@/api/admin'
+import DataTable from '@/components/admin/DataTable.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
@@ -110,39 +111,37 @@ onMounted(() => {
         <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">筛选</BaseButton>
       </div>
 
-      <table class="w-full border-collapse text-sm">
+      <DataTable
+        :items="items"
+        :colspan="5"
+        :loading="loading"
+        :failed="failed"
+        empty-text="暂无审计记录"
+      >
         <!-- 审计时间保留绝对时间（合规语义），压成短格式；完整时刻悬停可见 -->
-        <thead class="sticky top-0 z-10 bg-surface">
-          <tr class="border-b border-line text-left text-xs text-muted">
-            <th class="px-3 py-2.5 font-medium">时间</th>
-            <th class="px-3 py-2.5 font-medium">动作</th>
-            <th class="px-3 py-2.5 font-medium">目标</th>
-            <th class="px-3 py-2.5 font-medium">操作人</th>
-            <th class="px-3 py-2.5 font-medium">理由</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in items" :key="row.id" class="border-b border-line last:border-0">
-            <td class="px-3 py-3 whitespace-nowrap">
-              <RelativeTime variant="absolute-short" :iso="row.createdAt" />
-            </td>
-            <td class="px-3 py-3">{{ actionLabel(row.action) }}</td>
-            <td class="px-3 py-3">{{ TARGET_TYPE_LABELS[row.targetType] }} #{{ row.targetId }}</td>
-            <td class="px-3 py-3">
-              <!-- 0 是系统自动处置的哨兵值（后端 AuditLogService.SYSTEM_OPERATOR_ID） -->
-              {{ row.operatorId === 0 ? '系统' : `#${row.operatorId}` }}
-            </td>
-            <td class="max-w-[360px] truncate px-3 py-3" :title="reviewReasonText(row.reason) ?? ''">
-              {{ reviewReasonText(row.reason) ?? '—' }}
-            </td>
-          </tr>
-          <tr v-if="!items.length">
-            <td colspan="5" class="px-3 py-10 text-center text-sm text-muted">
-              {{ loading ? '加载中…' : failed ? '加载失败，请点击「刷新」重试' : '暂无审计记录' }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+        <template #head>
+          <th class="px-3 py-2.5 font-medium">时间</th>
+          <th class="px-3 py-2.5 font-medium">动作</th>
+          <th class="px-3 py-2.5 font-medium">目标</th>
+          <th class="px-3 py-2.5 font-medium">操作人</th>
+          <th class="px-3 py-2.5 font-medium">理由</th>
+        </template>
+
+        <tr v-for="row in items" :key="row.id" class="border-b border-line last:border-0">
+          <td class="px-3 py-3 whitespace-nowrap">
+            <RelativeTime variant="absolute-short" :iso="row.createdAt" />
+          </td>
+          <td class="px-3 py-3">{{ actionLabel(row.action) }}</td>
+          <td class="px-3 py-3">{{ TARGET_TYPE_LABELS[row.targetType] }} #{{ row.targetId }}</td>
+          <td class="px-3 py-3">
+            <!-- 0 是系统自动处置的哨兵值（后端 AuditLogService.SYSTEM_OPERATOR_ID） -->
+            {{ row.operatorId === 0 ? '系统' : `#${row.operatorId}` }}
+          </td>
+          <td class="max-w-[360px] truncate px-3 py-3" :title="reviewReasonText(row.reason) ?? ''">
+            {{ reviewReasonText(row.reason) ?? '—' }}
+          </td>
+        </tr>
+      </DataTable>
 
       <LoadMoreButton variant="table" :has-more="hasMore" :loading="loadingMore" @load="loadMore" />
     </section>

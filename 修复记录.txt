@@ -17,6 +17,46 @@
 
 
 --------------------------------------------------------------------------------
+R-46 前端组件整合第二批（2B-3a 波）：管理端 9 张表外壳归一为 DataTable
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：组件化重构  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿
+来源：2B-3 是最大一波（9 张表 + 3 工作台页），按稳妥原则再拆：本波 2B-3a 做 9 张表的
+外壳归一，工作台骨架与 ElMessageBox 封装评估留 2B-3b。
+
+做法：新建 admin/DataTable.vue（附 5 条 spec）——只收敛三处逐字重复的**外壳**：
+  <table class="w-full border-collapse text-sm">、吸顶表头（sticky top-0 z-10 bg-surface +
+  表头行样式）、以及「加载中… / 加载失败，请点击「刷新」重试 / 空态文案」三态占位行
+  （colspan 由 props 给出，不再手工维护）。
+**列定义与行内容仍留在各表内**：9 张表的列数（5/6/9）、单元格形态（缩略图、徽标、
+行内按钮、投票明细）差异大，强行配置化会把差异藏进一堆插槽，收益不抵复杂度。
+调用方以 #head 插槽给表头、默认插槽给行；有数据时占位行不渲染，加载中已有数据也不遮挡。
+
+迁移范围（9 张）：
+  - 表组件 5：QueueTable(9 列)、PendingPostTable(6)、AppealTable(6)、UserTable(6)、
+    AnnouncementTable(9)
+  - 页面内联 4：ProposalListView(6)、ArbitrationView(5)、PermissionManageView(6)、
+    AuditLogView(5)
+顺带统一容器：后三张内联表原用 `ql-card overflow-hidden`（会另建滚动容器、令 sticky 失效），
+改为与其余表一致的 `ql-card overflow-clip`——表头吸顶从此真正生效（阶段 B 的一致化收尾）。
+
+刻意不做：
+  - 不做 columns 配置驱动（理由见上）。
+  - 3 个工作台页（ReviewQueue/PendingPostQueue/AppealQueue）的轮询/键盘/提示条/连续处置
+    接线去重，以及 ElMessageBox 命令式封装评估，留 2B-3b。
+
+验证（真跑，全绿）
+- pnpm -r lint / typecheck：三包通过。
+- vitest：shared 19 文件 102 例、qinglan-web 31 文件 192 例、qinglan-admin 43 文件
+  269 例，共 563 例全绿。**既有 9 张表相关 spec（含 5 条「thead 带 sticky + bg-surface」
+  断言、各表空态文案断言、行内按钮与图片断言）在换壳后全部原样通过**，未改任何断言
+  ——外壳的 DOM 契约与迁移前一致。
+- pnpm -r build：两端产物成功。
+- 过程修正：DataTable 自己的 spec 初版在默认插槽塞了固定行，与占位行同时渲染导致 2 条
+  断言失败——已按「真实调用方用 v-for、无数据时插槽不产出行」重写 spec（不是放宽断言）。
+- 视觉变化点：后三张表的表头获得吸顶能力（此前 overflow-hidden 下 sticky 无效），
+  建议浏览器实测长列表滚动时核对。
+
+--------------------------------------------------------------------------------
 R-45 前端组件整合第二批（2B-2 波）：PostDetailView 442 行拆分为组合层
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：组件化重构  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿

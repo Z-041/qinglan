@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 
 import { changeUserRole, fetchCommittee } from '@/api/admin'
+import DataTable from '@/components/admin/DataTable.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
@@ -134,52 +135,50 @@ async function revoke(member: UserProfile): Promise<void> {
       </div>
     </BaseCard>
 
-    <section class="ql-card overflow-hidden">
+    <section class="ql-card overflow-clip">
       <div class="flex items-center justify-between border-b border-line px-3 py-2.5">
         <span class="text-sm font-medium text-ink">委员会成员</span>
         <span class="text-xs text-muted">{{ used }} / {{ MAX_COMMITTEE_SIZE }}</span>
       </div>
-      <table class="w-full border-collapse text-sm">
-        <thead>
-          <tr class="border-b border-line text-left text-xs text-muted">
-            <th class="px-3 py-2.5 font-medium">用户 ID</th>
-            <th class="px-3 py-2.5 font-medium">角色</th>
-            <th class="px-3 py-2.5 font-medium">状态</th>
-            <th class="px-3 py-2.5 font-medium">信用分</th>
-            <th class="px-3 py-2.5 font-medium">加入时间</th>
-            <th class="px-3 py-2.5 font-medium">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="member in members" :key="member.id" class="border-b border-line last:border-0">
-            <td class="px-3 py-3">{{ member.id }}</td>
-            <td class="px-3 py-3">{{ roleLabel(member.role) }}</td>
-            <td class="px-3 py-3">{{ statusLabel(member.status) }}</td>
-            <td class="px-3 py-3">{{ member.creditScore }}</td>
-            <td class="px-3 py-3">
-              <RelativeTime :iso="member.createdAt" />
-            </td>
-            <td class="px-3 py-3">
-              <!-- 超管不可被收回：后端也会拒（唯一超管是后台的最后一道保险） -->
-              <BaseButton
-                v-if="isRoleRevocable(member.role)"
-                variant="ghost-danger"
-                size="xs"
-                :disabled="submitting"
-                @click="revoke(member)"
-              >
-                收回权限
-              </BaseButton>
-              <span v-else class="text-xs text-muted">不可变更</span>
-            </td>
-          </tr>
-          <tr v-if="!members.length">
-            <td colspan="6" class="px-3 py-10 text-center text-sm text-muted">
-              {{ loading ? '加载中…' : failed ? '加载失败，请点击「刷新」重试' : '暂无成员' }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <DataTable
+        :items="members"
+        :colspan="6"
+        :loading="loading"
+        :failed="failed"
+        empty-text="暂无成员"
+      >
+        <template #head>
+          <th class="px-3 py-2.5 font-medium">用户 ID</th>
+          <th class="px-3 py-2.5 font-medium">角色</th>
+          <th class="px-3 py-2.5 font-medium">状态</th>
+          <th class="px-3 py-2.5 font-medium">信用分</th>
+          <th class="px-3 py-2.5 font-medium">加入时间</th>
+          <th class="px-3 py-2.5 font-medium">操作</th>
+        </template>
+
+        <tr v-for="member in members" :key="member.id" class="border-b border-line last:border-0">
+          <td class="px-3 py-3">{{ member.id }}</td>
+          <td class="px-3 py-3">{{ roleLabel(member.role) }}</td>
+          <td class="px-3 py-3">{{ statusLabel(member.status) }}</td>
+          <td class="px-3 py-3">{{ member.creditScore }}</td>
+          <td class="px-3 py-3">
+            <RelativeTime :iso="member.createdAt" />
+          </td>
+          <td class="px-3 py-3">
+            <!-- 超管不可被收回：后端也会拒（唯一超管是后台的最后一道保险） -->
+            <BaseButton
+              v-if="isRoleRevocable(member.role)"
+              variant="ghost-danger"
+              size="xs"
+              :disabled="submitting"
+              @click="revoke(member)"
+            >
+              收回权限
+            </BaseButton>
+            <span v-else class="text-xs text-muted">不可变更</span>
+          </td>
+        </tr>
+      </DataTable>
     </section>
   </div>
 </template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
+import DataTable from '@/components/admin/DataTable.vue'
 import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
 import type { AdminAnnouncementItem, AnnouncementLevel, AnnouncementStatus } from '@/types/admin'
 
@@ -63,65 +64,63 @@ function boolText(value: boolean): string {
 </script>
 
 <template>
-  <table class="w-full border-collapse text-sm">
-    <thead class="sticky top-0 z-10 bg-surface">
-      <tr class="border-b border-line text-left text-xs text-muted">
-        <th class="px-3 py-2.5 font-medium">标题</th>
-        <th class="px-3 py-2.5 font-medium">等级</th>
-        <th class="px-3 py-2.5 font-medium">状态</th>
-        <th class="px-3 py-2.5 font-medium">生效区间</th>
-        <th class="px-3 py-2.5 font-medium">最短阅读秒数</th>
-        <th class="px-3 py-2.5 font-medium">需滚动到底</th>
-        <th class="px-3 py-2.5 font-medium">需勾选已了解</th>
-        <th class="px-3 py-2.5 font-medium">发布时间</th>
-        <th class="px-3 py-2.5 font-medium">操作</th>
-      </tr>
-    </thead>
-    <tbody>
-      <!-- key 用 id 只为稳定复用 DOM，该数字不渲染到界面上 -->
-      <tr v-for="row in props.items" :key="row.id" class="border-b border-line last:border-0">
-        <td class="px-3 py-3">{{ row.title }}</td>
-        <td class="px-3 py-3" :class="row.level === 'URGENT' ? 'font-medium text-danger-deep' : ''">
-          {{ levelLabel(row.level) }}
-        </td>
-        <td class="px-3 py-3">{{ statusLabel(row.status) }}</td>
-        <td class="whitespace-nowrap px-3 py-3">{{ periodText(row) }}</td>
-        <td class="px-3 py-3 tabular-nums">{{ row.minReadSeconds }}</td>
-        <td class="px-3 py-3">{{ boolText(row.requireScrollToEnd) }}</td>
-        <td class="px-3 py-3">{{ boolText(row.requireConfirm) }}</td>
-        <td class="whitespace-nowrap px-3 py-3">
-          <RelativeTime v-if="row.publishedAt" :iso="row.publishedAt" />
-          <span v-else>—</span>
-        </td>
-        <td class="px-3 py-3">
-          <div class="flex gap-2">
-            <BaseButton
-              v-if="row.status === 'DRAFT'"
-              variant="ghost"
-              size="xs"
-              :disabled="!props.canOperate || props.submitting"
-              @click="emit('publish', row)"
-            >
-              发布
-            </BaseButton>
-            <BaseButton
-              v-else-if="row.status === 'PUBLISHED'"
-              variant="ghost-danger"
-              size="xs"
-              :disabled="!props.canOperate || props.submitting"
-              @click="emit('revoke', row)"
-            >
-              撤回
-            </BaseButton>
-            <span v-else class="text-xs text-muted">—</span>
-          </div>
-        </td>
-      </tr>
-      <tr v-if="!props.items.length">
-        <td colspan="9" class="px-3 py-10 text-center text-sm text-muted">
-          {{ props.loading ? '加载中…' : props.failed ? '加载失败，请点击「刷新」重试' : '还没有公告' }}
-        </td>
-      </tr>
-    </tbody>
-  </table>
+  <DataTable
+    :items="props.items"
+    :colspan="9"
+    :loading="props.loading"
+    :failed="props.failed"
+    empty-text="还没有公告"
+  >
+    <template #head>
+      <th class="px-3 py-2.5 font-medium">标题</th>
+      <th class="px-3 py-2.5 font-medium">等级</th>
+      <th class="px-3 py-2.5 font-medium">状态</th>
+      <th class="px-3 py-2.5 font-medium">生效区间</th>
+      <th class="px-3 py-2.5 font-medium">最短阅读秒数</th>
+      <th class="px-3 py-2.5 font-medium">需滚动到底</th>
+      <th class="px-3 py-2.5 font-medium">需勾选已了解</th>
+      <th class="px-3 py-2.5 font-medium">发布时间</th>
+      <th class="px-3 py-2.5 font-medium">操作</th>
+    </template>
+
+    <!-- key 用 id 只为稳定复用 DOM，该数字不渲染到界面上 -->
+    <tr v-for="row in props.items" :key="row.id" class="border-b border-line last:border-0">
+      <td class="px-3 py-3">{{ row.title }}</td>
+      <td class="px-3 py-3" :class="row.level === 'URGENT' ? 'font-medium text-danger-deep' : ''">
+        {{ levelLabel(row.level) }}
+      </td>
+      <td class="px-3 py-3">{{ statusLabel(row.status) }}</td>
+      <td class="whitespace-nowrap px-3 py-3">{{ periodText(row) }}</td>
+      <td class="px-3 py-3 tabular-nums">{{ row.minReadSeconds }}</td>
+      <td class="px-3 py-3">{{ boolText(row.requireScrollToEnd) }}</td>
+      <td class="px-3 py-3">{{ boolText(row.requireConfirm) }}</td>
+      <td class="whitespace-nowrap px-3 py-3">
+        <RelativeTime v-if="row.publishedAt" :iso="row.publishedAt" />
+        <span v-else>—</span>
+      </td>
+      <td class="px-3 py-3">
+        <div class="flex gap-2">
+          <BaseButton
+            v-if="row.status === 'DRAFT'"
+            variant="ghost"
+            size="xs"
+            :disabled="!props.canOperate || props.submitting"
+            @click="emit('publish', row)"
+          >
+            发布
+          </BaseButton>
+          <BaseButton
+            v-else-if="row.status === 'PUBLISHED'"
+            variant="ghost-danger"
+            size="xs"
+            :disabled="!props.canOperate || props.submitting"
+            @click="emit('revoke', row)"
+          >
+            撤回
+          </BaseButton>
+          <span v-else class="text-xs text-muted">—</span>
+        </div>
+      </td>
+    </tr>
+  </DataTable>
 </template>
