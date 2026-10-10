@@ -1,4 +1,6 @@
-import { getCurrentScope, onMounted, onScopeDispose, ref } from 'vue'
+import { ref } from 'vue'
+
+import { useVisibilityPolling } from './useVisibilityPolling'
 
 /** 队列轮询间隔（方案：30 秒、可配）。低频 + 只取首屏做比对，避免给后端加压 */
 export const QUEUE_POLL_INTERVAL_MS = 30_000
@@ -38,54 +40,23 @@ export function useQueuePolling(options: QueuePollingOptions) {
   /** 是否检测到列表有变化；点击角标（applyNow）后清除 */
   const hasNewContent = ref(false)
 
-  let timer: ReturnType<typeof setInterval> | null = null
-  /** 防重入：上一次探针未返回时不再叠加请求 */
-  let inFlight = false
-
-  function isVisible(): boolean {
-    return typeof document === 'undefined' || document.visibilityState === 'visible'
-  }
-
-  function startTimer(): void {
-    if (timer !== null) {
+  /**
+   * 探针：拉首屏键与展示列表比对。发现新内容先点亮角标；若此刻 isBusy 为真（弹窗打开或提交中），
+   * 只挂角标、**不替换列表**，等用户点击角标或处置结束后再合并刷新。
+   * 失败静默（错误由 http 拦截器统一负责，下一轮自会重试）。
+   */
+  async function probe(): Promise<void> {
+    const head = await options.fetchHeadKeys()
+    if (isPrefixEqual(head, options.getDisplayedKeys())) {
       return
     }
-    timer = setInterval(() => {
-      void tick()
-    }, intervalMs)
-  }
-
-  function stopTimer(): void {
-    if (timer !== null) {
-      clearInterval(timer)
-      timer = null
-    }
-  }
-
-  async function tick(): Promise<void> {
-    // 切后台立刻停表；这里再兜一次，覆盖「定时器与切换同时发生」的窗口
-    if (!isVisible() || inFlight) {
+    hasNewContent.value = true
+    if (options.isBusy()) {
       return
     }
-    inFlight = true
-    try {
-      const head = await options.fetchHeadKeys()
-      if (isPrefixEqual(head, options.getDisplayedKeys())) {
-        return
-      }
-      hasNewContent.value = true
-      // 处置进行中：只把角标挂起，绝不替换列表，否则会抽走正在处置的目标
-      if (options.isBusy()) {
-        return
-      }
-      await options.onRefresh()
-      // 刷新后仍不一致（如刷新失败）就保留角标，下一轮会再试
-      hasNewContent.value = !isPrefixEqual(head, options.getDisplayedKeys())
-    } catch {
-      // 轮询失败静默：错误提示由 http 拦截器统一负责，下一轮自会重试
-    } finally {
-      inFlight = false
-    }
+    await options.onRefresh()
+    // 刷新后仍不一致（如刷新失败）就保留角标，下一轮会再试
+    hasNewContent.value = !isPrefixEqual(head, options.getDisplayedKeys())
   }
 
   /** 用户点击「有新内容」角标：合并刷新并清除角标 */
@@ -102,31 +73,8 @@ export function useQueuePolling(options: QueuePollingOptions) {
     hasNewContent.value = false
   }
 
-  function handleVisibilityChange(): void {
-    if (isVisible()) {
-      startTimer()
-    } else {
-      stopTimer()
-    }
-  }
-
-  function start(): void {
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    if (isVisible()) {
-      startTimer()
-    }
-  }
-
-  function stop(): void {
-    document.removeEventListener('visibilitychange', handleVisibilityChange)
-    stopTimer()
-  }
-
-  // 组件内使用时自动随生命周期启停；单测里在无 scope 环境调用则手动 start/stop
-  if (getCurrentScope()) {
-    onMounted(start)
-    onScopeDispose(stop)
-  }
+  // 计时器 / 可见性 / 防重入 / 生命周期由原语负责；本 composable 只管探针与角标
+  const { start, stop } = useVisibilityPolling(probe, { intervalMs })
 
   return { hasNewContent, applyNow, clear, start, stop }
 }

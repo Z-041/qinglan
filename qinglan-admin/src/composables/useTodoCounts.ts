@@ -1,6 +1,7 @@
-import { getCurrentScope, onMounted, onScopeDispose, ref } from 'vue'
+import { ref } from 'vue'
 
 import { fetchAdminTodoCounts } from '@/api/review'
+import { useVisibilityPolling } from './useVisibilityPolling'
 import { hasPermission, type AdminPermission } from '@/types/permission'
 import type { AdminTodoCounts } from '@/types/admin'
 
@@ -61,25 +62,11 @@ export function buildTodoGroups(
 export function useTodoCounts() {
   const counts = ref<AdminTodoCounts>({})
 
-  let timer: ReturnType<typeof setInterval> | null = null
-  /** 防重入：上一次请求未返回时不再叠加 */
-  let inFlight = false
-
-  function isVisible(): boolean {
-    return typeof document === 'undefined' || document.visibilityState === 'visible'
-  }
-
   async function load(): Promise<void> {
-    if (inFlight) {
-      return
-    }
-    inFlight = true
     try {
       counts.value = await fetchAdminTodoCounts()
     } catch {
       // 错误提示由 http 拦截器统一负责；保留上一次计数，下一轮自会重试
-    } finally {
-      inFlight = false
     }
   }
 
@@ -91,49 +78,12 @@ export function useTodoCounts() {
     counts.value = { ...counts.value, [key]: 0 }
   }
 
-  function startTimer(): void {
-    if (timer !== null) {
-      return
-    }
-    timer = setInterval(() => {
-      void load()
-    }, TODO_POLL_INTERVAL_MS)
-  }
-
-  function stopTimer(): void {
-    if (timer !== null) {
-      clearInterval(timer)
-      timer = null
-    }
-  }
-
-  function handleVisibilityChange(): void {
-    if (isVisible()) {
-      void load()
-      startTimer()
-    } else {
-      stopTimer()
-    }
-  }
-
-  function start(): void {
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    if (isVisible()) {
-      void load()
-      startTimer()
-    }
-  }
-
-  function stop(): void {
-    document.removeEventListener('visibilitychange', handleVisibilityChange)
-    stopTimer()
-  }
-
-  // 组件内使用时自动随生命周期启停；单测里在无 scope 环境调用则手动 start/stop
-  if (getCurrentScope()) {
-    onMounted(start)
-    onScopeDispose(stop)
-  }
+  // 轮询脚手架（计时器 / 可见性 / 防重入 / 生命周期）复用原语；本 composable 只管取数与本地清零。
+  // immediate=true：进入页面先拉一次，顶栏角标不必等第一个间隔。
+  const { start, stop } = useVisibilityPolling(load, {
+    intervalMs: TODO_POLL_INTERVAL_MS,
+    immediate: true,
+  })
 
   return { counts, load, clear, start, stop }
 }

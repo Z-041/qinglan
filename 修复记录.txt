@@ -17,6 +17,42 @@
 
 
 --------------------------------------------------------------------------------
+R-55 前端组件整合第五批（5B 波）：管理端 composable 归一（轮询 / 筛选游标 / 确认框）
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：composable 归一  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿
+来源：第五批 5B。5C（学生端）另开。
+
+一、交付（3 件，均带 spec）
+  1. useVisibilityPolling.ts（原语）：可见性感知的定时轮询——只在页面可见时按间隔执行，切后台暂停、
+     切回恢复，带防重入与生命周期自动启停。useQueuePolling 与 useTodoCounts 此前各复制了一整套
+     脚手架（计时器 + 可见性 + 防重入 + onMounted/onScopeDispose），仅「探针逻辑」与「start 时是否
+     先跑一次」不同（队列 false、待办计数 true，用 immediate 选项表达）。
+  2. useFilteredCursorList.ts：在 shared/useCursorList 之上叠加「筛选已改但未重查」的记账——
+     续页闸门（加载更多）+ 探针用「列表实际对应的筛选」（effectiveFilters）。举报队列（手写
+     snapshot + 逐字段 equals）与用户管理（JSON 串）原先各写一份，统一到 JSON 串口径。
+     关键点：快照在**发起请求时**捕获，onApplied 用请求时的快照记账——避免请求在途时用户又改筛选
+     被误记为「已应用」（原 useReviewQueue 手写实现即如此，迁移后行为不变）。
+  3. useConfirm.ts：ElMessageBox.confirm 的统一封装，确认返回 true、取消 / 关闭返回 false（不抛）。
+     收口 AnnouncementManageView 里两处逐字重复的「发布 / 撤回」确认。
+
+二、评估后不做（2 项）
+  1. **三视图下沉 composable（PermissionManageView / AuditLogView / AnnouncementManageView）不做**：
+     这三处逻辑都只有单一消费者、与别处无重复，抽出来只是把代码从视图搬进新文件，不消除任何重复，
+     按 AGENTS「不为一次性操作造抽象」的口径收益不抵（其中真正的纯逻辑——委员会规则——早已在
+     rolePolicy.ts）。视图本身也不长（124–171 行）。
+  2. **ReviewActionBar 的权限 / 可用动作判定上移不做**：`usePermissions` 是模块级 UI 单例，**不是
+     Pinia 业务 store**，故未触 AGENTS「展示组件不得直取 store」这条硬规则；而把判定上移会改动组件
+     公开 API（新增 actions prop），并使 ReviewActionBar.spec 里 8 条「按状态给哪些动作」的断言失去
+     被测对象（需新建 reviewActionSet.spec 承接），改动面与收益不匹配；组件内注释已说明其与快捷键
+     共用同一份 permission 口径的用意。
+
+验证（真跑，全绿）
+- pnpm lint / typecheck：管理端通过。
+- vitest：qinglan-admin 49 文件 292 例全绿（较 5A 的 47/286 增 2 文件 6 例为新 spec；
+  useQueuePolling / useTodoCounts 的既有用例未改、原样通过）。
+- pnpm build：管理端产物成功。
+
+--------------------------------------------------------------------------------
 R-54 前端组件整合第五批（5A 波）：管理端契约与性能收口
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：组件/接口优化  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿

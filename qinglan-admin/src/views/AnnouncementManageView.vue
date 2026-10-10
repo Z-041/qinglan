@@ -14,6 +14,7 @@ import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { useCursorList } from '@shared/composables/useCursorList'
 import { useSubmit } from '@shared/composables/useSubmit'
+import { useConfirm } from '@/composables/useConfirm'
 import { usePermissions } from '@/composables/usePermissions'
 import type { AdminAnnouncementItem, CreateAnnouncementPayload } from '@/types/admin'
 
@@ -29,6 +30,7 @@ const canOperate = computed(() => can('ANNOUNCEMENT_MANAGE'))
 
 /** 提交态统一走 shared/useSubmit；成功才关弹窗，失败保持打开（错误由拦截器提示） */
 const { submitting, run } = useSubmit()
+const { confirm } = useConfirm()
 const formOpen = ref(false)
 
 /**
@@ -55,16 +57,15 @@ async function handleCreate(payload: CreateAnnouncementPayload): Promise<void> {
 
 /**
  * 发布是不可逆的全员触达：先二次确认，明确它等于「面向全员的强制弹窗」。
- * 用户取消时 ElMessageBox 以 reject 表示，不是错误，静默返回。
+ * 用户取消返回 false，静默返回。
  */
 async function handlePublish(row: AdminAnnouncementItem): Promise<void> {
-  try {
-    await ElMessageBox.confirm(
-      `「${row.title}」发布后即为面向全员的强制弹窗，未读用户进入页面时必须读完才能继续。确认发布？`,
-      '发布公告',
-      { confirmButtonText: '确认发布', cancelButtonText: '取消', type: 'warning' },
-    )
-  } catch {
+  const ok = await confirm(
+    `「${row.title}」发布后即为面向全员的强制弹窗，未读用户进入页面时必须读完才能继续。确认发布？`,
+    '发布公告',
+    '确认发布',
+  )
+  if (!ok) {
     return
   }
   // 失败错误已由拦截器提示（QL-409-008 状态不允许 / QL-429-004 当日发布超上限）
@@ -75,13 +76,12 @@ async function handlePublish(row: AdminAnnouncementItem): Promise<void> {
 }
 
 async function handleRevoke(row: AdminAnnouncementItem): Promise<void> {
-  try {
-    await ElMessageBox.confirm(
-      `撤回「${row.title}」后用户将不再被强制阅读该公告，已读记录保留。确认撤回？`,
-      '撤回公告',
-      { confirmButtonText: '确认撤回', cancelButtonText: '取消', type: 'warning' },
-    )
-  } catch {
+  const ok = await confirm(
+    `撤回「${row.title}」后用户将不再被强制阅读该公告，已读记录保留。确认撤回？`,
+    '撤回公告',
+    '确认撤回',
+  )
+  if (!ok) {
     return
   }
   await run(async () => {
