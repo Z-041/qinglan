@@ -17,6 +17,37 @@
 
 
 --------------------------------------------------------------------------------
+R-58 前端组件整合第六批（6B 波）：图标体系收口 + 公告阅读器状态受控化
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：组件/接口优化  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿
+来源：第六批 6B，收尾波。
+
+一、交付
+  1. BaseIcon 补两个图标 + 两登录页迁移：全站内联图标集（BaseIcon）的注释自称「唯一」，但两个
+     登录页各自裸写了一个 `<svg>`——web 是信封、admin 是盾形勾（**并非同一个图标**，故不是简单的
+     「复制两处」）。把两者补进 BaseIcon（'mail' / 'shield-check'），登录页改用 `<BaseIcon>`；
+     顺带获得 aria-hidden / focusable=false 的统一骨架。
+  2. AnnouncementReader 的「已滚到底」改为**受控**（与 confirmed 对称）：
+     - 原先 `confirmed` 走 `update:confirmed`（受控），而 `scrolledToEnd` 是组件内部 ref + 一次性
+       事件——同一类「阅读信号」一半受控一半自持，且组件与 `useReadCountdown` 各存一份真相。
+     - 现在新增必填 prop `scrolledToEnd`、事件改 `update:scrolledToEnd`，组件只负责展示与判定，
+       权威状态只在 `useReadCountdown` 一处。
+     - 学生端 AnnouncementModal 与管理端强读预览各自把 gate 的值接上（`:scrolled-to-end` +
+       `@update:scrolled-to-end`），两条阅读流程的行为不变。
+
+二、说明
+  - 本波触及「强制阅读」（不变量 #6）相关链路，改动处只有「已滚到底」的**状态归属**，服务端校验
+    与上报 payload 未动；三包全部用例（含公告阅读 / 预览）原样通过。
+
+验证（真跑，全绿；shared 已改，故三包都跑）
+- pnpm -r lint / typecheck：shared / web / admin 全过。
+- pnpm -r test：shared 19 文件 102 例、qinglan-web 36 文件 208 例、qinglan-admin 49 文件 292 例，
+  共 602 例全绿（AnnouncementReader.spec 的滚到底用例随事件名同步，其余断言未改）。
+- pnpm -r build：web / admin 产物成功。
+- 过程修正：改写 AnnouncementReader.spec 的类型声明时多带了一个 `()`，eslint 首跑即报
+  Parsing error（`}>()` → `}>`）——lint 门禁当场拦住。
+
+--------------------------------------------------------------------------------
 R-57 前端组件整合第六批（6A 波）：管理端表格 props 归一 + 行内状态行
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：组件/接口优化  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿

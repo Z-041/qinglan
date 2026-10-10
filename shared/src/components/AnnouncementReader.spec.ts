@@ -11,6 +11,7 @@ type Overrides = Partial<{
   requireScrollToEnd: boolean
   requireConfirm: boolean
   confirmed: boolean
+  scrolledToEnd: boolean
 }>
 
 function mountReader(overrides: Overrides = {}): VueWrapper {
@@ -23,6 +24,7 @@ function mountReader(overrides: Overrides = {}): VueWrapper {
       requireScrollToEnd: false,
       requireConfirm: false,
       confirmed: false,
+      scrolledToEnd: false,
       ...overrides,
     },
   })
@@ -51,6 +53,6 @@ describe('AnnouncementReader', () => {
     const wrapper = mountReader({ requireScrollToEnd: true })
     await flushPromises()
 
-    expect(wrapper.emitted('scrolled-to-end')).toHaveLength(1)
+    expect(wrapper.emitted('update:scrolledToEnd')).toEqual([[true]])
   })
 })

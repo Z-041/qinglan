@@ -19,6 +19,7 @@ import { useFocusTrap } from '@/composables/useFocusTrap'
 const {
   current,
   remainingSeconds,
+  scrolledToEnd,
   confirmed,
   submitting,
   canClose,
@@ -130,8 +131,9 @@ onBeforeUnmount(() => {
           :require-scroll-to-end="current.requireScrollToEnd"
           :require-confirm="current.requireConfirm"
           :confirmed="confirmed"
+          :scrolled-to-end="scrolledToEnd"
           @update:confirmed="confirmed = $event"
-          @scrolled-to-end="noteScrolledToEnd"
+          @update:scrolled-to-end="noteScrolledToEnd"
         >
           <!--
             标记已读失败时切出「重试 / 关闭」两个出口：只给一个按钮、失败后又关不掉，会把用户

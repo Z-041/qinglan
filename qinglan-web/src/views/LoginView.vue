@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
+import BaseIcon from '@shared/components/base/BaseIcon.vue'
 import BaseInput from '@shared/components/base/BaseInput.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import { useAuth } from '@shared/composables/useAuth'
@@ -122,17 +123,7 @@ function changeEmail(): void {
   <BaseCard class="mx-auto mt-10 w-full max-w-[440px] max-sm:mt-4">
     <div class="flex items-center gap-3">
       <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          class="size-5"
-          aria-hidden="true"
-        >
-          <rect x="2.5" y="4.5" width="19" height="15" rx="3" />
-          <path d="m3 7 8.2 6a1.5 1.5 0 0 0 1.6 0L21 7" stroke-linecap="round" />
-        </svg>
+        <BaseIcon name="mail" class="size-5" />
       </span>
       <div class="min-w-0">
         <h1 class="text-base font-semibold text-ink">校园邮箱认证</h1>

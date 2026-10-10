@@ -93,8 +93,9 @@ const closeLabel = computed(() =>
         :require-scroll-to-end="props.requireScrollToEnd"
         :require-confirm="props.requireConfirm"
         :confirmed="gate.confirmed.value"
+        :scrolled-to-end="gate.scrolledToEnd.value"
         @update:confirmed="gate.setConfirmed"
-        @scrolled-to-end="gate.noteScrolledToEnd"
+        @update:scrolled-to-end="gate.noteScrolledToEnd"
       >
         <template #footer>
           <BaseButton variant="ghost" :disabled="!canClose" @click="emit('close')">

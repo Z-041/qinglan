@@ -20,9 +20,14 @@ const props = defineProps<{
   requireScrollToEnd: boolean
   requireConfirm: boolean
   confirmed: boolean
+  /**
+   * 是否已滚到底。**与 confirmed 一样是受控值**：本组件只负责「看起来、摸起来一致」，
+   * 判定结果（滚到底 / 勾选）都经 update 事件交回调用方（`useReadCountdown` 是唯一权威）。
+   */
+  scrolledToEnd: boolean
 }>()
 
-const emit = defineEmits<{ 'update:confirmed': [boolean]; 'scrolled-to-end': [] }>()
+const emit = defineEmits<{ 'update:confirmed': [boolean]; 'update:scrolledToEnd': [boolean] }>()
 
 /** 标题 id 唯一化：同一页面可能同时存在学生弹窗与管理端预览两个 Reader，硬编码 id 会冲突 */
 const titleId = `announcement-title-${useId()}`
@@ -36,21 +41,17 @@ const progressWidth = computed(() => {
   return `${Math.min(100, Math.max(0, ratio * 100))}%`
 })
 
-/** 「已滚到底」只在组件内部用于提示文案，判定结果同时抛给调用方去决定能否关闭 */
-const scrolledToEnd = ref(false)
-
 const scrollHint = computed(() =>
-  props.requireScrollToEnd && !scrolledToEnd.value ? '请滚动到正文末尾' : '',
+  props.requireScrollToEnd && !props.scrolledToEnd ? '请滚动到正文末尾' : '',
 )
 
 const scrollAreaRef = ref<HTMLElement | null>(null)
 
 function markScrolledToEnd(): void {
-  if (scrolledToEnd.value) {
+  if (props.scrolledToEnd) {
     return
   }
-  scrolledToEnd.value = true
-  emit('scrolled-to-end')
+  emit('update:scrolledToEnd', true)
 }
 
 function handleScroll(): void {

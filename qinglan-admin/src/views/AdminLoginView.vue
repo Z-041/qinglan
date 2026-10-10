@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
+import BaseIcon from '@shared/components/base/BaseIcon.vue'
 import BaseInput from '@shared/components/base/BaseInput.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import { useAuth } from '@shared/composables/useAuth'
@@ -78,10 +79,7 @@ async function handleVerify(): Promise<void> {
     <BaseCard class="w-full max-w-[440px]">
       <div class="flex items-center gap-3">
         <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-5" aria-hidden="true">
-            <path d="M12 3 4 6.5v5c0 4.4 3.2 8.4 8 9.5 4.8-1.1 8-5.1 8-9.5v-5Z" stroke-linejoin="round" />
-            <path d="m9 12 2 2 4-4" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <BaseIcon name="shield-check" class="size-5" />
         </span>
         <div class="min-w-0">
           <h1 class="text-base font-semibold text-ink">青栏管理后台</h1>
