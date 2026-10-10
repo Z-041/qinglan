@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 
-import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { ReportReason } from '@shared/types/review-common'
 import type { ProposalDispositionPayload } from '@/types/review'
+import ReasonDialogShell from './ReasonDialogShell.vue'
 
 /**
  * 通用「发起处置提案」弹窗：下架 / 移除评论 / 隐藏联系方式 / 维持下架四处复用。
@@ -57,25 +57,19 @@ function handleSubmit(): void {
     detail: detail.value.trim() || null,
   })
 }
-
-/** Enter 确认（Esc 由 el-dialog 默认关闭）；多行说明里的 Enter 是换行，不能当确认 */
-function handleEnter(event: KeyboardEvent): void {
-  if ((event.target as HTMLElement).tagName === 'TEXTAREA') {
-    return
-  }
-  event.preventDefault()
-  handleSubmit()
-}
 </script>
 
 <template>
-  <el-dialog
-    :model-value="props.open"
+  <ReasonDialogShell
+    :open="props.open"
     :title="props.title"
-    width="480px"
-    @update:model-value="emit('close')"
+    :confirm-text="props.confirmText"
+    confirm-variant="danger"
+    :submitting="props.submitting"
+    @close="emit('close')"
+    @confirm="handleSubmit"
   >
-    <div class="flex flex-col gap-4" @keydown.enter="handleEnter">
+    <div class="flex flex-col gap-4">
       <FormField label="违规类型">
         <select v-model="reasonCode" class="ql-field">
           <option v-for="reason in REASONS" :key="reason" :value="reason">
@@ -88,16 +82,5 @@ function handleEnter(event: KeyboardEvent): void {
         <BaseTextarea v-model="detail" :rows="3" :maxlength="400" placeholder="说明处置依据" />
       </FormField>
     </div>
-
-    <template #footer>
-      <div class="flex justify-end gap-2">
-        <BaseButton variant="ghost" size="sm" :disabled="props.submitting" @click="emit('close')">
-          取消
-        </BaseButton>
-        <BaseButton variant="danger" size="sm" :loading="props.submitting" @click="handleSubmit">
-          {{ props.confirmText }}
-        </BaseButton>
-      </div>
-    </template>
-  </el-dialog>
+  </ReasonDialogShell>
 </template>

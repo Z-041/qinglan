@@ -9,6 +9,7 @@ import {
 } from '@/api/admin'
 import AnnouncementFormDialog from '@/components/admin/AnnouncementFormDialog.vue'
 import AnnouncementTable from '@/components/admin/AnnouncementTable.vue'
+import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { usePermissions } from '@/composables/usePermissions'
@@ -165,14 +166,12 @@ async function handleRevoke(row: AdminAnnouncementItem): Promise<void> {
 
 <template>
   <div class="flex flex-col gap-5">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-ink">公告管理</h1>
-      <div class="flex items-center gap-3">
+    <PageHeader :refreshing="loading" title="公告管理" @refresh="refresh">
+      <template #extra>
         <span v-if="!canOperate" class="text-xs text-muted">发布与撤回仅超级管理员可操作</span>
-        <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">刷新</BaseButton>
         <BaseButton size="sm" @click="formOpen = true">新建公告</BaseButton>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <section class="ql-card overflow-clip">
       <AnnouncementTable

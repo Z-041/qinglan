@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 
 import DismissReportsDialog from '@/components/admin/DismissReportsDialog.vue'
 import ProposalReasonDialog from '@/components/admin/ProposalReasonDialog.vue'
+import PageHeader from '@/components/admin/PageHeader.vue'
 import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
 import QueueTable from '@/components/admin/QueueTable.vue'
 import ReviewActionBar from '@/components/admin/ReviewActionBar.vue'
@@ -351,10 +352,7 @@ async function handleDismiss(reason: string): Promise<void> {
 
 <template>
   <div class="flex flex-col gap-5">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-ink">审核队列</h1>
-      <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">刷新</BaseButton>
-    </div>
+    <PageHeader title="审核队列" :refreshing="loading" @refresh="refresh" />
 
     <!-- 筛选一律作为查询参数传后端（不前端本地过滤），切换后 watch 会重置游标回第一页 -->
     <section class="ql-card flex flex-wrap items-end gap-3 p-4">

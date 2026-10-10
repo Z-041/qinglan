@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 
 import { changeUserRole, fetchCommittee } from '@/api/admin'
+import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
@@ -95,10 +96,7 @@ async function revoke(member: UserProfile): Promise<void> {
 
 <template>
   <div class="flex flex-col gap-5">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-ink">权限管理</h1>
-      <BaseButton variant="ghost" size="sm" :loading="loading" @click="load">刷新</BaseButton>
-    </div>
+    <PageHeader title="权限管理" :refreshing="loading" @refresh="load" />
 
     <p class="text-sm text-muted">
       管理员与学生评议员共同组成处置表决委员会，合计上限 {{ MAX_COMMITTEE_SIZE }} 人；
@@ -163,15 +161,15 @@ async function revoke(member: UserProfile): Promise<void> {
             </td>
             <td class="px-3 py-3">
               <!-- 超管不可被收回：后端也会拒（唯一超管是后台的最后一道保险） -->
-              <button
+              <BaseButton
                 v-if="isRoleRevocable(member.role)"
-                type="button"
-                class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-danger hover:text-danger-deep disabled:cursor-not-allowed"
+                variant="ghost-danger"
+                size="xs"
                 :disabled="submitting"
                 @click="revoke(member)"
               >
                 收回权限
-              </button>
+              </BaseButton>
               <span v-else class="text-xs text-muted">不可变更</span>
             </td>
           </tr>

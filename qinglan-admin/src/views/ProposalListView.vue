@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 
+import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
@@ -45,10 +46,7 @@ async function handleVote(row: ProposalSummary, decision: VoteDecision): Promise
 
 <template>
   <div class="flex flex-col gap-5">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-ink">我的提案与投票</h1>
-      <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">刷新</BaseButton>
-    </div>
+    <PageHeader title="我的提案与投票" :refreshing="loading" @refresh="refresh" />
 
     <div class="flex flex-wrap items-center gap-4">
       <label class="flex items-center gap-2 text-sm text-ink">

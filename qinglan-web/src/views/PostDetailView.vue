@@ -4,11 +4,11 @@ import { useRoute } from 'vue-router'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
-import BaseIcon from '@shared/components/base/BaseIcon.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import StatePanel from '@shared/components/StatePanel.vue'
 import CommentItem from '@/components/CommentItem.vue'
+import LikeButton from '@/components/LikeButton.vue'
 import ReportDialog from '@/components/ReportDialog.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import { usePostDetail } from '@/composables/usePostDetail'
@@ -272,17 +272,12 @@ async function handleAppeal(): Promise<void> {
             </div>
 
             <div class="mt-4 flex items-center gap-4 border-t border-line pt-3">
-              <button
-                type="button"
-                class="flex cursor-pointer items-center gap-1.5 text-sm transition"
-                :class="post.liked ? 'text-primary-deep' : 'text-muted hover:text-primary-deep'"
-                :aria-pressed="post.liked"
-                :aria-label="post.liked ? '取消点赞' : '点赞'"
-                @click="toggleLike()"
-              >
-                <BaseIcon name="heart" class="size-4" :filled="post.liked" />
-                <span>{{ post.likeCount }}</span>
-              </button>
+              <LikeButton
+                :liked="post.liked"
+                :count="post.likeCount"
+                :label="post.liked ? '取消点赞' : '点赞'"
+                @toggle="toggleLike()"
+              />
               <span class="text-xs text-muted">评论 {{ post.commentCount }}</span>
               <!-- 已举报时入口置灰并展示处理进度，提前挡掉重复举报（防线仍是后端 409） -->
               <div v-if="reportAllowed && !post.mine" class="ml-auto flex items-center gap-2">

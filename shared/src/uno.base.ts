@@ -91,6 +91,8 @@ export const shortcuts = {
     'inline-flex items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition select-none disabled:(cursor-not-allowed opacity-60)',
   'ql-btn-md': 'px-4 py-2.5',
   'ql-btn-sm': 'px-3 py-1.5',
+  // 表格行内动作：比 sm 再小一档（text-xs + 更紧的纵向内边距）
+  'ql-btn-xs': 'px-3 py-1 text-xs',
 }
 
 export const preflights = [

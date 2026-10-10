@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
 import type { AdminAnnouncementItem, AnnouncementLevel, AnnouncementStatus } from '@/types/admin'
@@ -94,24 +95,24 @@ function boolText(value: boolean): string {
         </td>
         <td class="px-3 py-3">
           <div class="flex gap-2">
-            <button
+            <BaseButton
               v-if="row.status === 'DRAFT'"
-              type="button"
+              variant="ghost"
+              size="xs"
               :disabled="!props.canOperate || props.submitting"
-              class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-primary hover:text-primary-deep disabled:(cursor-not-allowed opacity-50)"
               @click="emit('publish', row)"
             >
               发布
-            </button>
-            <button
+            </BaseButton>
+            <BaseButton
               v-else-if="row.status === 'PUBLISHED'"
-              type="button"
+              variant="ghost-danger"
+              size="xs"
               :disabled="!props.canOperate || props.submitting"
-              class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-danger hover:text-danger-deep disabled:(cursor-not-allowed opacity-50)"
               @click="emit('revoke', row)"
             >
               撤回
-            </button>
+            </BaseButton>
             <span v-else class="text-xs text-muted">—</span>
           </div>
         </td>

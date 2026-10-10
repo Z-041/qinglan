@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 
 import EChart from '@/components/admin/EChart.vue'
-import BaseButton from '@shared/components/base/BaseButton.vue'
+import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
 import StatePanel from '@shared/components/StatePanel.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
@@ -96,12 +96,8 @@ onMounted(() => {
 
 <template>
   <div class="flex flex-col gap-5">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-ink">数据看板</h1>
-      <!-- 用 BaseButton 而非裸 button：与其余管理端页面一致，且 loading 期间自动禁用，
-           避免连点打出多个请求 -->
-      <BaseButton variant="ghost" size="sm" :loading="loading" @click="load">刷新</BaseButton>
-    </div>
+    <!-- 标准刷新按钮收敛在 PageHeader（在途自动禁用，避免连点） -->
+    <PageHeader title="数据看板" :refreshing="loading" @refresh="load" />
 
     <!-- 失败与「真的没有数据」必须分成两屏；文案是状态说明，请求错误信息仍只由
          http 拦截器的 toast 给出（AGENTS.md 第七章）。本块在 flex gap 容器内，去重顶边距 -->

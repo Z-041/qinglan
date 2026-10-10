@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import BaseIcon from '@shared/components/base/BaseIcon.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
+import LikeButton from '@/components/LikeButton.vue'
 import type { Comment } from '@/types/comment'
 
 const props = withDefaults(
@@ -41,17 +41,13 @@ const emit = defineEmits<{
     </p>
 
     <div class="mt-1.5 flex items-center gap-4">
-      <button
-        type="button"
-        class="flex cursor-pointer items-center gap-1 text-xs transition"
-        :class="props.comment.liked ? 'text-primary-deep' : 'text-muted hover:text-primary-deep'"
-        :aria-pressed="props.comment.liked"
-        :aria-label="`${props.comment.liked ? '取消点赞' : '点赞'} ${props.comment.anonymousCode} 的评论`"
-        @click="emit('toggle-like', props.comment.id)"
-      >
-        <BaseIcon name="heart" class="size-3.5" :filled="props.comment.liked" />
-        <span>{{ props.comment.likeCount }}</span>
-      </button>
+      <LikeButton
+        size="sm"
+        :liked="props.comment.liked"
+        :count="props.comment.likeCount"
+        :label="`${props.comment.liked ? '取消点赞' : '点赞'} ${props.comment.anonymousCode} 的评论`"
+        @toggle="emit('toggle-like', props.comment.id)"
+      />
 
       <button
         v-if="props.depth === 0"

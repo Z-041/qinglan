@@ -6,6 +6,7 @@ import { fetchMyReportState } from '@/api/report'
 import { submitAppeal as requestAppeal } from '@shared/api/report'
 import { useSubmit } from '@shared/composables/useSubmit'
 import { useUserStore } from '@shared/stores/user'
+import { useLikeToggle } from '@/composables/useLikeToggle'
 import type { Comment } from '@/types/comment'
 import type { PostDetail } from '@/types/post'
 import type { MyReportState } from '@/types/report'
@@ -119,17 +120,10 @@ export function usePostDetail(postId: number) {
     }
   }
 
-  async function toggleLike(): Promise<void> {
-    if (!post.value) {
-      return
-    }
-    try {
-      const state = post.value.liked ? await unlikePost(postId) : await likePost(postId)
-      post.value.liked = state.liked
-      post.value.likeCount = state.likeCount
-    } catch {
-      // 错误已由拦截器提示
-    }
+  const { toggleLike: toggle } = useLikeToggle()
+
+  function toggleLike(): Promise<void> {
+    return post.value ? toggle(post.value, postId, likePost, unlikePost) : Promise.resolve()
   }
 
   function findComment(commentId: number): Comment | undefined {
@@ -145,18 +139,9 @@ export function usePostDetail(postId: number) {
     return undefined
   }
 
-  async function toggleCommentLike(commentId: number): Promise<void> {
+  function toggleCommentLike(commentId: number): Promise<void> {
     const target = findComment(commentId)
-    if (!target) {
-      return
-    }
-    try {
-      const state = target.liked ? await unlikeComment(commentId) : await likeComment(commentId)
-      target.liked = state.liked
-      target.likeCount = state.likeCount
-    } catch {
-      // 错误已由拦截器提示
-    }
+    return target ? toggle(target, commentId, likeComment, unlikeComment) : Promise.resolve()
   }
 
   /** 发表评论或回复；返回是否成功，失败时由调用方保留已输入的草稿 */

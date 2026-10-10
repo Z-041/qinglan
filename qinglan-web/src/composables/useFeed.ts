@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useCursorList } from '@shared/composables/useCursorList'
 
 import { fetchPosts, likePost, unlikePost } from '@/api/post'
+import { useLikeToggle } from '@/composables/useLikeToggle'
 import type { PostSort, PostSummary } from '@/types/post'
 
 /**
@@ -47,17 +48,13 @@ export function useFeed() {
     await list.refresh()
   }
 
+  const { toggleLike: toggle } = useLikeToggle()
+
   /**
    * 点赞 / 取消点赞。不做乐观更新——失败时无需回滚，状态始终与后端一致。
    */
-  async function toggleLike(post: PostSummary): Promise<void> {
-    try {
-      const state = post.liked ? await unlikePost(post.id) : await likePost(post.id)
-      post.liked = state.liked
-      post.likeCount = state.likeCount
-    } catch {
-      // 错误已由拦截器提示
-    }
+  function toggleLike(post: PostSummary): Promise<void> {
+    return toggle(post, post.id, likePost, unlikePost)
   }
 
   return {

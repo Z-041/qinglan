@@ -5,12 +5,14 @@ import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import type { ArbitratePayload, ArbitrationDecision } from '@/types/proposal'
+import ReasonDialogShell from './ReasonDialogShell.vue'
 
 /**
  * 超管裁决弹窗（仅僵局提案）。
  *
  * 裁决推翻委员会表决，**必须填理由**，否则无法追溯「为什么这么判」——
  * 前端先做非空校验，不把明显的 400 丢给用户（后端 @NotBlank 仍是真正的防线）。
+ * 有两个提交目标（准予 / 不予），故关闭 Shell 的 Enter 确认并自定义 footer。
  */
 
 /** 与后端 ArbitrateRequest 的 @Size(max = 200) 对齐 */
@@ -46,11 +48,11 @@ function handleSubmit(decision: ArbitrationDecision): void {
 </script>
 
 <template>
-  <el-dialog
-    :model-value="props.open"
+  <ReasonDialogShell
+    :open="props.open"
     title="裁决提案"
-    width="480px"
-    @update:model-value="emit('close')"
+    :enter-to-confirm="false"
+    @close="emit('close')"
   >
     <FormField
       label="裁决理由"
@@ -91,5 +93,5 @@ function handleSubmit(decision: ArbitrationDecision): void {
         </BaseButton>
       </div>
     </template>
-  </el-dialog>
+  </ReasonDialogShell>
 </template>

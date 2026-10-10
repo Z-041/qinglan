@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import { isReportOverdue } from '@/composables/useReviewQueue'
 import { proposalActionLabel, proposalStatusLabel } from '@/types/proposal'
@@ -119,13 +120,9 @@ function hasOpenProposal(item: AdminQueueItem): boolean {
           <span v-else class="text-xs text-muted">—</span>
         </td>
         <td class="px-3 py-3">
-          <button
-            type="button"
-            class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-primary hover:text-primary-deep"
-            @click="emit('handle', row)"
-          >
+          <BaseButton variant="ghost" size="xs" @click="emit('handle', row)">
             处置
-          </button>
+          </BaseButton>
           <span v-if="hasOpenProposal(row)" class="ml-2 text-xs text-muted">表决中</span>
         </td>
       </tr>

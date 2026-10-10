@@ -17,6 +17,52 @@
 
 
 --------------------------------------------------------------------------------
+R-43 前端组件整合第二批（2A 波）：PageHeader / 理由弹窗壳 / 行内按钮 / 点赞收编
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：组件化重构  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿
+来源：R-42 全量组件审计的第二批。第二批整体范围大，按「分批稳妥」拆 2A/2B：本波 2A 做四个
+边界清晰的小基座；DataTable（9 表）、QueueWorkbench（3 工作台）、PostDetailView 拆分、
+学生端 ModalShell/ConfirmDialog/PostImageGrid、2 处手写分页接回 useCursorList、
+BaseButton 链接形态留 2B（行为/结构面更大，需独立验证）。
+
+1. PageHeader（管理端，附 5 条 spec）：标题 + 标准刷新按钮（refreshing/@refresh）+
+   #extra 插槽。10 个页面的「h1 + 右侧按钮组」全部迁移；多按钮页（审计/用户的导出、
+   公告的提示+新建）走 extra，按钮顺序由 [extra…, 刷新] 统一（公告页原序
+   提示/刷新/新建变为 提示/新建/刷新，纯视觉微调）。
+2. BaseButton 扩两档能力：
+   - size 新增 xs（ql-btn-xs：text-xs + py-1，表格行内专用）；
+   - variant 新增 ghost-danger（描边危险态：平时中性、悬停转危险色，对应封禁/撤回/收回，
+     区别于实心 danger 的高警示）。
+   5 张表与权限页共 9 处逐字重复的裸 <button> 行内动作全部收编；原裸按钮禁用透明度 50%
+   统一到 BaseButton 的 60% 口径。
+3. ReasonDialogShell（管理端，附 7 条 spec）：el-dialog 面板 + 取消/确认 footer +
+   Enter 提交（TEXTAREA 放行换行）的统一外壳，props 控标题/宽度/确认文案与配色/禁用/
+   在途态，#footer 可完全替换。6 个自绘处置弹窗（申诉复审/驳回举报/处置提案/超管裁决/
+   调分/封禁）收编：各弹窗只留字段与载荷构造，el-dialog 外壳、watch 之外的重复模板、
+   三份逐字相同的 handleEnter 全部删除；裁决弹窗双提交目标走 enter-to-confirm=false +
+   自定义 footer。各弹窗平均减少 20–30 行。
+4. LikeButton + useLikeToggle（学生端，附 4+3 条 spec）：三处点赞按钮（PostCard/
+   CommentItem/PostDetailView）收成一件纯展示组件（label 必填，aria-pressed/心形
+   实心切换/sm-md 两尺寸）；三段逐字同构的 try/catch 切换逻辑（useFeed 帖、usePostDetail
+   帖与评论）收成一个注入 like/unlike 请求的高阶函数，约定不做乐观更新、失败静默
+   （错误由拦截器 toast）。
+
+刻意不做（2B 范围）：
+- ElMessageBox 的 4 处 prompt + 2 处 confirm 未并入 Shell——Shell 基于 el-dialog，
+  收编命令式 API 需要额外的命令式封装，收益与风险不匹配，留 2B 评估。
+- DataTable/工作台骨架等见上；审计确认本波无行为变更（API、权限口径、键盘快捷键、
+  提案流程均不动）。
+
+验证（真跑，全绿）
+- pnpm -r lint / typecheck：三包通过（typecheck 抓到一处 spec 误用 get().exists()，
+  已修，再次印证经验 56）。
+- vitest：shared 19 文件 100 例、qinglan-web 25 文件 164 例、qinglan-admin 42 文件
+  264 例，共 528 例全绿。
+- pnpm -r build：两端产物成功。
+- 视觉微调点（ghost 行内按钮文字色 ink→muted、禁用透明度、公告页按钮顺序）建议浏览器
+  实测时顺带核对。
+
+--------------------------------------------------------------------------------
 R-42 前端组件整合第一批：公告弹窗加宽修复 + 六个共享件抽取（55 文件）
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：组件化重构  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 
+import PageHeader from '@/components/admin/PageHeader.vue'
 import PendingPostTable from '@/components/admin/PendingPostTable.vue'
 import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
 import ReviewContextPanel from '@/components/admin/ReviewContextPanel.vue'
@@ -169,10 +170,7 @@ async function handleReject(): Promise<void> {
 
 <template>
   <div class="flex flex-col gap-5">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-ink">待审帖子</h1>
-      <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">刷新</BaseButton>
-    </div>
+    <PageHeader title="待审帖子" :refreshing="loading" @refresh="refresh" />
 
     <p class="text-sm text-muted">主帖先审后发：这里的帖子尚未对外可见，放行后才会出现在信息流。</p>
 

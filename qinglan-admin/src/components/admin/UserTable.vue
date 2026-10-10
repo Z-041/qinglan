@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminUserItem } from '@/types/admin'
@@ -46,29 +47,15 @@ const { roleLabel, statusLabel } = useUserLabels()
         </td>
         <td class="px-3 py-3">
           <div class="flex gap-2">
-            <button
-              v-if="row.status === 'ACTIVE'"
-              type="button"
-              class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-danger hover:text-danger-deep"
-              @click="emit('ban', row)"
-            >
+            <BaseButton v-if="row.status === 'ACTIVE'" variant="ghost-danger" size="xs" @click="emit('ban', row)">
               封禁
-            </button>
-            <button
-              v-else
-              type="button"
-              class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-primary hover:text-primary-deep"
-              @click="emit('unban', row)"
-            >
+            </BaseButton>
+            <BaseButton v-else variant="ghost" size="xs" @click="emit('unban', row)">
               解封
-            </button>
-            <button
-              type="button"
-              class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-primary hover:text-primary-deep"
-              @click="emit('credit', row)"
-            >
+            </BaseButton>
+            <BaseButton variant="ghost" size="xs" @click="emit('credit', row)">
               调分
-            </button>
+            </BaseButton>
           </div>
         </td>
       </tr>

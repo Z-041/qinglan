@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
-import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
+import ReasonDialogShell from './ReasonDialogShell.vue'
 
 const props = defineProps<{ open: boolean; submitting?: boolean }>()
 
@@ -44,11 +44,16 @@ function handleSubmit(): void {
 </script>
 
 <template>
-  <el-dialog
-    :model-value="props.open"
+  <ReasonDialogShell
+    :open="props.open"
     title="封禁用户"
     width="440px"
-    @update:model-value="emit('close')"
+    confirm-text="确认封禁"
+    confirm-variant="danger"
+    :submitting="props.submitting"
+    :confirm-disabled="!canSubmit"
+    @close="emit('close')"
+    @confirm="handleSubmit"
   >
     <div class="flex flex-col gap-4">
       <FormField
@@ -70,22 +75,5 @@ function handleSubmit(): void {
         <BaseTextarea v-model="reason" :rows="3" :maxlength="500" placeholder="说明封禁依据" />
       </FormField>
     </div>
-
-    <template #footer>
-      <div class="flex justify-end gap-2">
-        <BaseButton variant="ghost" size="sm" :disabled="props.submitting" @click="emit('close')">
-          取消
-        </BaseButton>
-        <BaseButton
-          variant="danger"
-          size="sm"
-          :loading="props.submitting"
-          :disabled="!canSubmit"
-          @click="handleSubmit"
-        >
-          确认封禁
-        </BaseButton>
-      </div>
-    </template>
-  </el-dialog>
+  </ReasonDialogShell>
 </template>

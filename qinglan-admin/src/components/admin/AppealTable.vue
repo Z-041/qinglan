@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminAppealItem } from '@/types/review'
@@ -57,14 +58,9 @@ function takenDownText(reason: string | null): string {
           <RelativeTime :iso="row.appealedAt" />
         </td>
         <td class="px-3 py-3">
-          <button
-            v-if="props.canReview"
-            type="button"
-            class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-primary hover:text-primary-deep"
-            @click="emit('review', row)"
-          >
+          <BaseButton v-if="props.canReview" variant="ghost" size="xs" @click="emit('review', row)">
             复审
-          </button>
+          </BaseButton>
         </td>
       </tr>
       <tr v-if="!props.items.length">

@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 
 import { exportAuditLogs, fetchAuditLogs } from '@/api/admin'
+import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
@@ -118,13 +119,11 @@ onMounted(() => {
 
 <template>
   <div class="flex flex-col gap-5">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-ink">审计日志</h1>
-      <div class="flex items-center gap-2">
+    <PageHeader :refreshing="loading" title="审计日志" @refresh="refresh">
+      <template #extra>
         <BaseButton variant="ghost" size="sm" :loading="exporting" @click="exportCsv">导出 CSV</BaseButton>
-        <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">刷新</BaseButton>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <p class="text-sm text-muted">
       记录全部治理动作，只增不改删；操作人只以 ID 出现，不含学号与邮箱明文。

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BaseIcon from '@shared/components/base/BaseIcon.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
+import LikeButton from '@/components/LikeButton.vue'
 import type { PostSummary } from '@/types/post'
 
 /**
@@ -39,17 +40,12 @@ const emit = defineEmits<{ 'toggle-like': [] }>()
     </RouterLink>
 
     <div class="flex items-center gap-4 px-4 pb-3 max-lg:px-3">
-      <button
-        type="button"
-        class="flex cursor-pointer items-center gap-1 text-xs transition"
-        :class="post.liked ? 'text-primary-deep' : 'text-muted hover:text-primary-deep'"
-        :aria-pressed="post.liked"
-        :aria-label="post.liked ? '取消点赞' : '点赞'"
-        @click="emit('toggle-like')"
-      >
-        <BaseIcon name="heart" class="size-4" :filled="post.liked" />
-        <span>{{ post.likeCount }}</span>
-      </button>
+      <LikeButton
+        :liked="post.liked"
+        :count="post.likeCount"
+        :label="post.liked ? '取消点赞' : '点赞'"
+        @toggle="emit('toggle-like')"
+      />
 
       <span class="flex items-center gap-1 text-xs text-muted">
         <BaseIcon name="comment" class="size-4" />

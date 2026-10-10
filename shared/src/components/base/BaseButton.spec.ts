@@ -26,6 +26,20 @@ describe('BaseButton', () => {
     expect(wrapper.classes()).toContain('bg-transparent')
   })
 
+  it('xs 尺寸用 ql-btn-xs，表格行内动作专用', () => {
+    const wrapper = mount(BaseButton, { props: { size: 'xs' } })
+    expect(wrapper.classes()).toContain('ql-btn-xs')
+    expect(wrapper.classes()).not.toContain('ql-btn-sm')
+  })
+
+  it('ghost-danger 为描边危险态：透明底 + 危险色悬停，区别于实心 danger', () => {
+    const ghostDanger = mount(BaseButton, { props: { variant: 'ghost-danger' } })
+    expect(ghostDanger.classes()).toContain('bg-transparent')
+    expect(ghostDanger.classes()).toContain('hover:border-danger')
+
+    expect(mount(BaseButton, { props: { variant: 'danger' } }).classes()).toContain('bg-danger')
+  })
+
   it('点击时向外抛出 click 事件', async () => {
     const wrapper = mount(BaseButton, { props: { htmlType: 'submit' } })
 

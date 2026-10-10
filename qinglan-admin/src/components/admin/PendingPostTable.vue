@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BaseButton from '@shared/components/base/BaseButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminPendingPostItem } from '@/types/review'
@@ -64,13 +65,9 @@ const { targetStatusLabel } = useUserLabels()
           <RelativeTime :iso="row.submittedAt" />
         </td>
         <td class="px-3 py-3">
-          <button
-            type="button"
-            class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs text-ink transition hover:border-primary hover:text-primary-deep"
-            @click="emit('handle', row)"
-          >
+          <BaseButton variant="ghost" size="xs" @click="emit('handle', row)">
             审核
-          </button>
+          </BaseButton>
         </td>
       </tr>
       <tr v-if="!props.items.length">

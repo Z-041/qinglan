@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 
 import BanUserDialog from '@/components/admin/BanUserDialog.vue'
 import CreditAdjustDialog from '@/components/admin/CreditAdjustDialog.vue'
+import PageHeader from '@/components/admin/PageHeader.vue'
 import UserTable from '@/components/admin/UserTable.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
@@ -128,9 +129,8 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
 
 <template>
   <div class="flex flex-col gap-5">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-ink">用户管理</h1>
-      <div class="flex items-center gap-2">
+    <PageHeader :refreshing="loading" title="用户管理" @refresh="search">
+      <template #extra>
         <BaseButton
           variant="ghost"
           size="sm"
@@ -140,9 +140,8 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
         >
           导出 CSV
         </BaseButton>
-        <BaseButton variant="ghost" size="sm" :loading="loading" @click="search">刷新</BaseButton>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <form class="ql-card flex flex-wrap items-end gap-3 p-4" @submit.prevent="search">
       <label class="flex flex-col gap-1">

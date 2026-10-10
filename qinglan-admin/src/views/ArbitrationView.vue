@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 
 import ArbitrationDialog from '@/components/admin/ArbitrationDialog.vue'
+import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
@@ -46,10 +47,7 @@ async function handleArbitrate(payload: ArbitratePayload): Promise<void> {
 
 <template>
   <div class="flex flex-col gap-5">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-ink">待裁决</h1>
-      <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">刷新</BaseButton>
-    </div>
+    <PageHeader title="待裁决" :refreshing="loading" @refresh="refresh" />
 
     <section class="ql-card overflow-hidden">
       <table class="w-full border-collapse text-sm">

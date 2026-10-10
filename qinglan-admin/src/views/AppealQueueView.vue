@@ -3,8 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 
 import AppealReviewDialog from '@/components/admin/AppealReviewDialog.vue'
 import AppealTable from '@/components/admin/AppealTable.vue'
+import PageHeader from '@/components/admin/PageHeader.vue'
 import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
-import BaseButton from '@shared/components/base/BaseButton.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { useAppealQueue } from '@/composables/useAppealQueue'
 import { useDispositionFinisher } from '@/composables/useDispositionFinisher'
@@ -121,10 +121,7 @@ async function handleSubmit(approved: boolean, reason: string): Promise<void> {
 
 <template>
   <div class="flex flex-col gap-5">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-ink">申诉复审</h1>
-      <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">刷新</BaseButton>
-    </div>
+    <PageHeader title="申诉复审" :refreshing="loading" @refresh="refresh" />
 
     <!-- 轮询到列表有变化时提示；处置进行中只挂角标，点击后再合并刷新 -->
     <button

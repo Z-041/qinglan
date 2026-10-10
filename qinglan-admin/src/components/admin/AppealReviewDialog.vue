@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
-import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
+import ReasonDialogShell from './ReasonDialogShell.vue'
 
 const props = defineProps<{ open: boolean; submitting?: boolean; initialApproved?: boolean }>()
 
@@ -34,25 +34,19 @@ function handleSubmit(): void {
   }
   emit('submit', approved.value, reason.value.trim())
 }
-
-/** Enter 确认（Esc 由 el-dialog 默认关闭）；多行说明里的 Enter 是换行，不能当确认 */
-function handleEnter(event: KeyboardEvent): void {
-  if ((event.target as HTMLElement).tagName === 'TEXTAREA') {
-    return
-  }
-  event.preventDefault()
-  handleSubmit()
-}
 </script>
 
 <template>
-  <el-dialog
-    :model-value="props.open"
+  <ReasonDialogShell
+    :open="props.open"
     title="申诉复审"
-    width="480px"
-    @update:model-value="emit('close')"
+    confirm-text="提交复审"
+    :submitting="props.submitting"
+    :confirm-disabled="!canSubmit"
+    @close="emit('close')"
+    @confirm="handleSubmit"
   >
-    <div class="flex flex-col gap-4" @keydown.enter="handleEnter">
+    <div class="flex flex-col gap-4">
       <!-- 单选组**不能**用 FormField 包：FormField 的根是 <label>（它是为单个输入框设计的），
            再套一层 radio 的 <label> 就构成非法嵌套；而 HTML 规定无 for 的 <label> 会关联
            树序上第一个 labelable 后代——也就是「通过申诉」。结果点一下分组标题「复审结论」
@@ -84,14 +78,5 @@ function handleEnter(event: KeyboardEvent): void {
         <BaseTextarea v-model="reason" :rows="3" :maxlength="500" placeholder="说明复审依据" />
       </FormField>
     </div>
-
-    <template #footer>
-      <div class="flex justify-end gap-2">
-        <BaseButton variant="ghost" size="sm" :disabled="props.submitting" @click="emit('close')">取消</BaseButton>
-        <BaseButton size="sm" :loading="props.submitting" :disabled="!canSubmit" @click="handleSubmit">
-          提交复审
-        </BaseButton>
-      </div>
-    </template>
-  </el-dialog>
+  </ReasonDialogShell>
 </template>
