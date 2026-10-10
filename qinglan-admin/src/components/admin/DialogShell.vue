@@ -2,14 +2,15 @@
 import BaseButton from '@shared/components/base/BaseButton.vue'
 
 /**
- * 管理端「处置理由确认」弹窗的统一外壳：el-dialog 面板 + 标准取消/确认 footer + Enter 提交。
+ * 管理端弹窗的统一外壳：el-dialog 面板 + 标准「取消 / 确认」footer + Enter 提交。
  *
- * 6 个处置弹窗（申诉复审 / 驳回举报 / 处置提案 / 超管裁决 / 调分 / 封禁）原本各自复制同一套
- * 外壳、footer 与 Enter 处理；本组件只管这些**固定骨架**，字段（理由框 / 数字 / 选择器）与
- * 载荷构造由调用方经默认插槽和 @confirm 保留，差异不外泄。
+ * 八个弹窗（申诉复审 / 驳回举报 / 处置提案 / 超管裁决 / 调分 / 封禁 / 新建公告 / 强读预览）
+ * 共用同一套骨架。本组件只管这些**固定骨架**，字段（理由框 / 数字 / 选择器 / 表单）与载荷构造
+ * 由调用方经默认插槽和 @confirm 保留，差异不外泄。footer 需要多按钮时用 #footer 覆盖，
+ * 完全不需要 footer 时传 hideFooter。
  *
  * Enter 规则：TEXTAREA 内的 Enter 是换行，必须放行；其余元素按 Enter 等同点确认。
- * 有多个提交目标（如裁决的同意/驳回）时传 enter-to-confirm=false 并自定义 #footer。
+ * 有多个提交目标（如裁决的同意/驳回）或不走「单确认」流程（如公告表单）时传 enter-to-confirm=false。
  */
 const props = withDefaults(
   defineProps<{
@@ -23,8 +24,10 @@ const props = withDefaults(
     confirmVariant?: 'primary' | 'danger'
     /** 外部校验未过时禁用确认按钮 */
     confirmDisabled?: boolean
-    /** 是否启用「非文本域按 Enter 即确认」；双提交目标的弹窗应关闭 */
+    /** 是否启用「非文本域按 Enter 即确认」；双提交目标或无单确认流程的弹窗应关闭 */
     enterToConfirm?: boolean
+    /** 完全去掉 footer（如强读预览：关闭按钮在内容区自管，不需要标准取消/确认） */
+    hideFooter?: boolean
   }>(),
   {
     width: '480px',
@@ -34,6 +37,7 @@ const props = withDefaults(
     confirmVariant: 'primary',
     confirmDisabled: false,
     enterToConfirm: true,
+    hideFooter: false,
   },
 )
 
@@ -65,10 +69,10 @@ function handleEnter(event: KeyboardEvent): void {
       <slot />
     </div>
 
-    <template v-if="$slots.footer" #footer>
+    <template v-if="!hideFooter && $slots.footer" #footer>
       <slot name="footer" />
     </template>
-    <template v-else #footer>
+    <template v-else-if="!hideFooter" #footer>
       <div class="flex justify-end gap-2">
         <BaseButton variant="ghost" size="sm" :disabled="submitting" @click="emit('close')">
           {{ cancelText }}

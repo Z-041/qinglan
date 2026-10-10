@@ -17,6 +17,42 @@
 
 
 --------------------------------------------------------------------------------
+R-50 前端组件整合第三批（3C 波）：弹窗外壳收敛（改名）+ 死代码清理
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：组件化重构 + 死代码清理  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿
+来源：第三批 3C，收尾波。
+
+一、弹窗外壳收敛（含改名）
+  - ReasonDialogShell → DialogShell：该外壳早已是**通用**弹窗骨架（el-dialog + 标准取消/确认
+    footer + Enter 提交），「Reason」之名只在它最初只服务 6 个处置理由弹窗时成立。本波要让
+    两个公告弹窗也复用它，旧名就成了误导——故一并改为 DialogShell（8 处引用 + components.d.ts）。
+  - 新增 hideFooter 属性：强读预览弹窗没有 footer（关闭按钮在 AnnouncementReader 内容区自管），
+    此前靠自绘 el-dialog 规避；既然收敛到统一外壳，就给外壳一个「去掉 footer」的正当能力，
+    而非为单一消费者保留第二套弹窗写法。
+  - AnnouncementFormDialog 改用 DialogShell（title/width + #footer 覆盖三按钮，enter-to-confirm=false
+    ——表单无单确认流程）；AnnouncementPreviewDialog 改用 DialogShell（hide-footer + width=720px
+    + enter-to-confirm=false）。
+  - 6 个既有处置弹窗仅随改名同步（纯机械替换，行为不变）；DialogShell.spec 在旧 7 条基础上
+    补 1 条 hideFooter 断言。
+
+二、死代码清理（3 个符号，全仓零引用，逐条 grep 确认）
+  - qinglan-admin/src/api/proposals.ts 的 fetchAdminProposalDetail()：全仓仅定义处出现。
+  - qinglan-admin/src/types/proposal.ts 的 ProposalDetail：仅被上面那个死函数消费，连带死。
+  - qinglan-admin/src/types/proposal.ts 的 CreateProposalPayload：全仓零引用。
+  - 连带：types/proposal.ts 的 ReportReason 只剩被删的两处使用，从 import 一并移除。
+  判据沿用经验 #52 的口径：从最外层入口反查调用链，走不到的导出才算死。
+
+验证（真跑，全绿）
+- pnpm lint / typecheck：管理端通过。
+- vitest：qinglan-admin **46 文件 282 例全绿**（3B 落点 281 例；旧 ReasonDialogShell.spec 的
+  7 条原样迁入 DialogShell.spec，另补 hideFooter 1 条；6 个处置弹窗的既有断言未改、原样通过）。
+- pnpm build：管理端产物成功；components.d.ts 自动更新（去 ReasonDialogShell、加 DialogShell）。
+- 删除文件用 shell Remove-Item 完成（DeleteFile 在本机移入回收站失败），git 仍正确记录为
+  删除 + 新增（改名）。
+- 视觉变化点：公告表单/预览弹窗的 el-dialog 内容外层多出一层 `<div @keydown.enter>`（DialogShell
+  的固定骨架），两处均 enter-to-confirm=false 故无按键副作用；宽度 / 标题 / 内容不变。
+
+--------------------------------------------------------------------------------
 R-49 前端组件整合第三批（3B 波）：看板图表卡 + 理由弹窗封装
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：组件化重构  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿

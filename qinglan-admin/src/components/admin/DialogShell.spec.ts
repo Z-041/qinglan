@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import ReasonDialogShell from './ReasonDialogShell.vue'
+import DialogShell from './DialogShell.vue'
 
 /** el-dialog 走 Teleport 且懒渲染，单测桩成仅按 modelValue 渲染插槽与 footer */
 const ElDialogStub = {
@@ -12,14 +12,14 @@ const ElDialogStub = {
 }
 
 function mountShell(props: Record<string, unknown> = {}, slots: Record<string, unknown> = {}) {
-  return mount(ReasonDialogShell, {
+  return mount(DialogShell, {
     props: { open: true, title: '测试弹窗', ...props },
     slots: { default: '<p>字段区</p>', ...slots },
     global: { stubs: { ElDialog: ElDialogStub } },
   })
 }
 
-describe('ReasonDialogShell', () => {
+describe('DialogShell', () => {
   it('渲染标题与默认插槽，footer 默认为取消 + 确认双按钮', () => {
     const wrapper = mountShell()
     expect(wrapper.text()).toContain('字段区')
@@ -79,5 +79,13 @@ describe('ReasonDialogShell', () => {
     expect(wrapper.text()).not.toContain('取消')
     expect(wrapper.text()).toContain('同意')
     expect(wrapper.text()).toContain('驳回')
+  })
+
+  it('hideFooter 时连默认按钮也不渲染（无 footer 的弹窗）', () => {
+    const wrapper = mountShell({ hideFooter: true })
+
+    expect(wrapper.text()).toContain('字段区')
+    expect(wrapper.text()).not.toContain('取消')
+    expect(wrapper.text()).not.toContain('确认')
   })
 })

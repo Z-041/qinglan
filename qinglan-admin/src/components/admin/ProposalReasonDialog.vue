@@ -6,7 +6,7 @@ import FormField from '@shared/components/base/FormField.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { ReportReason } from '@shared/types/review-common'
 import type { ProposalDispositionPayload } from '@/types/review'
-import ReasonDialogShell from './ReasonDialogShell.vue'
+import DialogShell from './DialogShell.vue'
 
 /**
  * 通用「发起处置提案」弹窗：下架 / 移除评论 / 隐藏联系方式 / 维持下架四处复用。
@@ -60,7 +60,7 @@ function handleSubmit(): void {
 </script>
 
 <template>
-  <ReasonDialogShell
+  <DialogShell
     :open="props.open"
     :title="props.title"
     :confirm-text="props.confirmText"
@@ -82,5 +82,5 @@ function handleSubmit(): void {
         <BaseTextarea v-model="detail" :rows="3" :maxlength="400" placeholder="说明处置依据" />
       </FormField>
     </div>
-  </ReasonDialogShell>
+  </DialogShell>
 </template>

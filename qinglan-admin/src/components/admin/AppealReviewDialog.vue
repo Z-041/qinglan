@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
-import ReasonDialogShell from './ReasonDialogShell.vue'
+import DialogShell from './DialogShell.vue'
 
 const props = defineProps<{ open: boolean; submitting?: boolean; initialApproved?: boolean }>()
 
@@ -37,7 +37,7 @@ function handleSubmit(): void {
 </script>
 
 <template>
-  <ReasonDialogShell
+  <DialogShell
     :open="props.open"
     title="申诉复审"
     confirm-text="提交复审"
@@ -78,5 +78,5 @@ function handleSubmit(): void {
         <BaseTextarea v-model="reason" :rows="3" :maxlength="500" placeholder="说明复审依据" />
       </FormField>
     </div>
-  </ReasonDialogShell>
+  </DialogShell>
 </template>

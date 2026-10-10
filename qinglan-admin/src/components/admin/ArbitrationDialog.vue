@@ -5,7 +5,7 @@ import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import type { ArbitratePayload, ArbitrationDecision } from '@/types/proposal'
-import ReasonDialogShell from './ReasonDialogShell.vue'
+import DialogShell from './DialogShell.vue'
 
 /**
  * 超管裁决弹窗（仅僵局提案）。
@@ -48,7 +48,7 @@ function handleSubmit(decision: ArbitrationDecision): void {
 </script>
 
 <template>
-  <ReasonDialogShell
+  <DialogShell
     :open="props.open"
     title="裁决提案"
     :enter-to-confirm="false"
@@ -93,5 +93,5 @@ function handleSubmit(decision: ArbitrationDecision): void {
         </BaseButton>
       </div>
     </template>
-  </ReasonDialogShell>
+  </DialogShell>
 </template>

@@ -4,7 +4,6 @@ import type { CursorPage } from '@shared/types/api'
 import type {
   ArbitratePayload,
   EscalatedProposal,
-  ProposalDetail,
   ProposalStatus,
   ProposalSummary,
   VotePayload,
@@ -25,10 +24,6 @@ export function fetchAdminProposals(
   cursor: string | null,
 ): Promise<CursorPage<ProposalSummary>> {
   return httpGet<CursorPage<ProposalSummary>>('/admin/proposals', { status, mine, cursor })
-}
-
-export function fetchAdminProposalDetail(proposalId: number): Promise<ProposalDetail> {
-  return httpGet<ProposalDetail>(`/admin/proposals/${proposalId}`)
 }
 
 /** 投票；达阈值即在同一事务内执行处置，不可能过半即转超管裁决 */

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 
 import AnnouncementPreviewDialog from '@/components/admin/AnnouncementPreviewDialog.vue'
+import DialogShell from '@/components/admin/DialogShell.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseInput from '@shared/components/base/BaseInput.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
@@ -138,11 +139,12 @@ function handleSubmit(): void {
 </script>
 
 <template>
-  <el-dialog
-    :model-value="props.open"
+  <DialogShell
+    :open="props.open"
     title="新建公告"
     width="520px"
-    @update:model-value="emit('close')"
+    :enter-to-confirm="false"
+    @close="emit('close')"
   >
     <div class="flex flex-col gap-4">
       <FormField label="标题">
@@ -225,7 +227,7 @@ function handleSubmit(): void {
         </BaseButton>
       </div>
     </template>
-  </el-dialog>
+  </DialogShell>
 
   <!-- 发布前先看清学生端的强读效果（阶段 D）。仅前置一步预览，发布流程与校验不变 -->
   <AnnouncementPreviewDialog

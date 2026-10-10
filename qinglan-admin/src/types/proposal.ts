@@ -5,7 +5,7 @@
  * 也不暴露「谁投了什么」——真名与每一票明细只走超管的待裁决端点（决策 D8）。
  */
 
-import type { ReportReason, ReviewTargetType } from '@shared/types/review-common'
+import type { ReviewTargetType } from '@shared/types/review-common'
 
 /** 与后端 review/entity/ProposalStatus 一一对应 */
 export type ProposalStatus = 'OPEN' | 'APPROVED' | 'REJECTED' | 'ESCALATED'
@@ -39,15 +39,6 @@ export interface ProposalSummary {
   createdAt: string
 }
 
-/** 与后端 review/dto/ProposalDetailResponse 一一对应（列表行 + 理由 / 结论） */
-export interface ProposalDetail extends ProposalSummary {
-  reasonCode: ReportReason
-  detail: string | null
-  /** 结案说明；未结案（OPEN / ESCALATED）为 null */
-  resolution: string | null
-  resolvedAt: string | null
-}
-
 /** 与后端 review/dto/VoteResultResponse 一一对应（投票后的汇总） */
 export interface VoteResult {
   status: ProposalStatus
@@ -70,15 +61,6 @@ export interface ProposalVoteItem {
  */
 export interface EscalatedProposal extends Omit<ProposalSummary, 'myDecision'> {
   votes: ProposalVoteItem[]
-}
-
-/** 与后端 review/dto/CreateProposalRequest 一一对应（直接发起提案时使用） */
-export interface CreateProposalPayload {
-  targetType: ReviewTargetType
-  targetId: number
-  action: ProposalAction
-  reasonCode: ReportReason
-  detail?: string | null
 }
 
 /** 与后端 review/dto/VoteRequest 一一对应 */

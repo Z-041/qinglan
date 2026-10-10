@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 
 import AnnouncementReader from '@shared/components/AnnouncementReader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import DialogShell from '@/components/admin/DialogShell.vue'
 import { useReadCountdown } from '@shared/composables/useReadCountdown'
 
 /**
@@ -66,11 +67,13 @@ const closeLabel = computed(() =>
 </script>
 
 <template>
-  <el-dialog
-    :model-value="props.open"
+  <DialogShell
+    :open="props.open"
     title="学生视角强读预览"
     width="720px"
-    @update:model-value="emit('close')"
+    hide-footer
+    :enter-to-confirm="false"
+    @close="emit('close')"
   >
     <p class="mb-3 text-xs text-muted">
       以下为学生端强制阅读弹窗的实际呈现，含最短阅读时长倒计时与「我知道了」按钮的可用性。
@@ -100,5 +103,5 @@ const closeLabel = computed(() =>
         </template>
       </AnnouncementReader>
     </div>
-  </el-dialog>
+  </DialogShell>
 </template>
