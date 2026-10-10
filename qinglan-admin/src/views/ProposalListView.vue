@@ -4,6 +4,7 @@ import { onMounted } from 'vue'
 import DataTable from '@/components/admin/DataTable.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import FormField from '@shared/components/base/FormField.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import { pushToast } from '@shared/composables/useToast'
@@ -49,21 +50,25 @@ async function handleVote(row: ProposalSummary, decision: VoteDecision): Promise
   <div class="flex flex-col gap-5">
     <PageHeader title="我的提案与投票" :refreshing="loading" @refresh="refresh" />
 
-    <div class="flex flex-wrap items-center gap-4">
-      <label class="flex items-center gap-2 text-sm text-ink">
-        <span class="text-muted">状态</span>
-        <select v-model="status" class="ql-field">
-          <option v-for="option in STATUS_OPTIONS" :key="option.value" :value="option.value">
-            {{ option.label }}
-          </option>
-        </select>
-      </label>
+    <!-- 筛选栏容器与其它列表页统一：独立 ql-card + FormField 标签 + items-end；改动即重查（见 useProposalList） -->
+    <form class="ql-card flex flex-wrap items-end gap-4 p-4" @submit.prevent="refresh">
+      <FormField label="状态">
+        <el-select v-model="status" class="w-[160px]">
+          <el-option
+            v-for="option in STATUS_OPTIONS"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </el-select>
+      </FormField>
 
-      <label class="flex cursor-pointer items-center gap-2 text-sm text-ink">
-        <input v-model="mine" type="checkbox" class="cursor-pointer" />
-        只看我发起的
-      </label>
-    </div>
+      <div class="flex h-8 items-center">
+        <el-checkbox v-model="mine">只看我发起的</el-checkbox>
+      </div>
+
+      <BaseButton html-type="submit" size="sm" :loading="loading">查询</BaseButton>
+    </form>
 
     <section class="ql-card overflow-clip">
       <DataTable
@@ -74,15 +79,15 @@ async function handleVote(row: ProposalSummary, decision: VoteDecision): Promise
         empty-text="暂无提案"
       >
         <template #head>
-          <th class="px-3 py-2.5 font-medium">内容摘要</th>
-          <th class="px-3 py-2.5 font-medium">动作</th>
-          <th class="px-3 py-2.5 font-medium">状态</th>
-          <th class="px-3 py-2.5 font-medium">进度</th>
-          <th class="px-3 py-2.5 font-medium">创建时间</th>
-          <th class="px-3 py-2.5 font-medium">我的选择 / 操作</th>
+          <th scope="col" class="ql-th">内容摘要</th>
+          <th scope="col" class="ql-th">动作</th>
+          <th scope="col" class="ql-th">状态</th>
+          <th scope="col" class="ql-th">进度</th>
+          <th scope="col" class="ql-th">创建时间</th>
+          <th scope="col" class="ql-th">我的选择 / 操作</th>
         </template>
 
-        <tr v-for="row in items" :key="row.proposalId" class="border-b border-line last:border-0">
+        <tr v-for="row in items" :key="row.proposalId" class="ql-tr">
           <td class="max-w-[320px] truncate px-3 py-3" :title="row.preview">{{ row.preview }}</td>
           <td class="px-3 py-3">{{ proposalActionLabel(row.action) }}</td>
           <td class="px-3 py-3">{{ proposalStatusLabel(row.status) }}</td>

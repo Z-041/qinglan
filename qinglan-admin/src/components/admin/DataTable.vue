@@ -26,7 +26,7 @@ withDefaults(
 </script>
 
 <template>
-  <table class="w-full border-collapse text-sm">
+  <table class="w-full border-collapse text-sm" :aria-busy="loading ? 'true' : undefined">
     <thead class="sticky top-0 z-10 bg-surface">
       <tr class="border-b border-line text-left text-xs text-muted">
         <slot name="head" />

@@ -98,7 +98,7 @@ const closeLabel = computed(() =>
         @update:scrolled-to-end="gate.noteScrolledToEnd"
       >
         <template #footer>
-          <BaseButton variant="ghost" :disabled="!canClose" @click="emit('close')">
+          <BaseButton variant="ghost" size="sm" :disabled="!canClose" @click="emit('close')">
             {{ closeLabel }}
           </BaseButton>
         </template>

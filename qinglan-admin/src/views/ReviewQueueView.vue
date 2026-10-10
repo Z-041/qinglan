@@ -338,9 +338,17 @@ async function handleDismiss(reason: string): Promise<void> {
     <PageHeader title="审核队列" :refreshing="loading" @refresh="refresh" />
 
     <!-- 筛选一律作为查询参数传后端（不前端本地过滤），切换后 watch 会重置游标回第一页 -->
-    <section class="ql-card flex flex-wrap items-end gap-3 p-4">
+    <!-- 筛选栏容器与其它列表页统一（独立 ql-card + FormField 标签 + items-end + 结尾按钮组）；
+         本页仍是「改动即重查」（见下方 watch），故只放「重置」不放「查询」 -->
+    <form class="ql-card flex flex-wrap items-end gap-3 p-4" @submit.prevent="refresh">
       <FormField label="举报理由">
-        <el-select v-model="filters.reasons" multiple collapse-tags class="w-[280px]" placeholder="全部理由">
+        <el-select
+          v-model="filters.reasons"
+          multiple
+          collapse-tags
+          class="w-[280px]"
+          placeholder="全部理由"
+        >
           <el-option
             v-for="reason in REPORT_REASONS"
             :key="reason"
@@ -351,7 +359,7 @@ async function handleDismiss(reason: string): Promise<void> {
       </FormField>
 
       <FormField label="目标类型">
-        <el-select v-model="targetTypeFilter" class="w-[130px]" placeholder="全部">
+        <el-select v-model="targetTypeFilter" class="w-[160px]" placeholder="全部">
           <el-option label="全部类型" value="" />
           <el-option :label="targetTypeLabel('POST')" value="POST" />
           <el-option :label="targetTypeLabel('COMMENT')" value="COMMENT" />
@@ -369,15 +377,14 @@ async function handleDismiss(reason: string): Promise<void> {
         </el-select>
       </FormField>
 
-      <label class="flex items-center gap-2 pb-2.5">
+      <!-- 与控件同高（h-8）后按 items-end 对齐，取代原先靠 pb-* 硬凑基线 -->
+      <label class="flex h-8 items-center gap-2">
         <el-switch v-model="filters.overdueOnly" />
         <span class="text-sm text-ink">只看超时</span>
       </label>
 
-      <div class="pb-1.5">
-        <BaseButton variant="ghost" size="sm" @click="resetFilters">重置</BaseButton>
-      </div>
-    </section>
+      <BaseButton variant="ghost" size="sm" @click="resetFilters">重置</BaseButton>
+    </form>
 
     <WorkbenchList
       :has-new-content="hasNewContent"

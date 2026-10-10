@@ -32,7 +32,7 @@ function buttonByText(wrapper: VueWrapper, text: string): DOMWrapper<HTMLButtonE
 
 describe('AnnouncementTable', () => {
   it('空列表渲染空态提示', () => {
-    expect(mount(AnnouncementTable, { props: { items: [] } }).text()).toContain('还没有公告')
+    expect(mount(AnnouncementTable, { props: { items: [] } }).text()).toContain('暂无公告')
   })
 
   it('发布时间由 RelativeTime 渲染：time[datetime] + 绝对 title + 相对正文', () => {

@@ -5,6 +5,7 @@ import { exportAuditLogs, fetchAuditLogs } from '@/api/admin'
 import DataTable from '@/components/admin/DataTable.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import FormField from '@shared/components/base/FormField.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import { useCursorList } from '@shared/composables/useCursorList'
@@ -21,8 +22,17 @@ const { reviewReasonText } = useUserLabels()
 const { exporting, download } = useCsvExport()
 
 const actionFilter = ref('')
-const fromFilter = ref('')
-const toFilter = ref('')
+/** el-date-picker 清空时置 null，故类型含 null（toInstantOrNull 已容忍） */
+const fromFilter = ref<string | null>(null)
+const toFilter = ref<string | null>(null)
+
+/** 清空筛选并回到第一页 */
+async function resetFilters(): Promise<void> {
+  actionFilter.value = ''
+  fromFilter.value = null
+  toFilter.value = null
+  await refresh()
+}
 
 function actionLabel(action: string): string {
   return ACTION_LABELS[action] ?? action
@@ -73,39 +83,42 @@ onMounted(() => {
       记录全部治理动作，只增不改删；操作人只以 ID 出现，不含学号与邮箱明文。
     </p>
 
-    <section class="ql-card overflow-clip">
-      <div class="flex flex-wrap items-center gap-2 border-b border-line px-3 py-3">
-        <el-select
-          v-model="actionFilter"
-          class="w-[200px]"
-          placeholder="全部动作"
-          clearable
-          aria-label="按动作筛选"
-        >
-          <el-option
-            v-for="(label, action) in ACTION_LABELS"
-            :key="action"
-            :label="label"
-            :value="action"
-          />
+    <form class="ql-card flex flex-wrap items-end gap-3 p-4" @submit.prevent="refresh">
+      <FormField label="动作">
+        <el-select v-model="actionFilter" class="w-[200px]" placeholder="全部动作" clearable>
+          <el-option v-for="(label, action) in ACTION_LABELS" :key="action" :label="label" :value="action" />
         </el-select>
-        <el-input
+      </FormField>
+
+      <FormField label="起始时间">
+        <el-date-picker
           v-model="fromFilter"
-          type="datetime-local"
+          type="datetime"
           class="w-[210px]"
+          value-format="YYYY-MM-DD[T]HH:mm:ss"
           placeholder="起始时间"
-          aria-label="起始时间"
+          clearable
         />
-        <span class="text-xs text-muted">至</span>
-        <el-input
+      </FormField>
+
+      <FormField label="结束时间">
+        <el-date-picker
           v-model="toFilter"
-          type="datetime-local"
+          type="datetime"
           class="w-[210px]"
+          value-format="YYYY-MM-DD[T]HH:mm:ss"
           placeholder="结束时间"
-          aria-label="结束时间"
+          clearable
         />
-        <BaseButton variant="ghost" size="sm" :loading="loading" @click="refresh">筛选</BaseButton>
+      </FormField>
+
+      <div class="flex gap-2">
+        <BaseButton html-type="submit" size="sm" :loading="loading">查询</BaseButton>
+        <BaseButton variant="ghost" size="sm" @click="resetFilters">重置</BaseButton>
       </div>
+    </form>
+
+    <section class="ql-card overflow-clip">
 
       <DataTable
         :items="items"
@@ -116,14 +129,14 @@ onMounted(() => {
       >
         <!-- 审计时间保留绝对时间（合规语义），压成短格式；完整时刻悬停可见 -->
         <template #head>
-          <th class="px-3 py-2.5 font-medium">时间</th>
-          <th class="px-3 py-2.5 font-medium">动作</th>
-          <th class="px-3 py-2.5 font-medium">目标</th>
-          <th class="px-3 py-2.5 font-medium">操作人</th>
-          <th class="px-3 py-2.5 font-medium">理由</th>
+          <th scope="col" class="ql-th">时间</th>
+          <th scope="col" class="ql-th">动作</th>
+          <th scope="col" class="ql-th">目标</th>
+          <th scope="col" class="ql-th">操作人</th>
+          <th scope="col" class="ql-th">理由</th>
         </template>
 
-        <tr v-for="row in items" :key="row.id" class="border-b border-line last:border-0">
+        <tr v-for="row in items" :key="row.id" class="ql-tr">
           <td class="px-3 py-3 whitespace-nowrap">
             <RelativeTime variant="absolute-short" :iso="row.createdAt" />
           </td>
@@ -133,7 +146,7 @@ onMounted(() => {
             <!-- 0 是系统自动处置的哨兵值（后端 AuditLogService.SYSTEM_OPERATOR_ID） -->
             {{ row.operatorId === 0 ? '系统' : `#${row.operatorId}` }}
           </td>
-          <td class="max-w-[360px] truncate px-3 py-3" :title="reviewReasonText(row.reason) ?? ''">
+          <td class="max-w-[320px] truncate px-3 py-3" :title="reviewReasonText(row.reason) ?? ''">
             {{ reviewReasonText(row.reason) ?? '—' }}
           </td>
         </tr>

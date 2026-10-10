@@ -6,6 +6,7 @@ import DataTable from '@/components/admin/DataTable.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
+import FormField from '@shared/components/base/FormField.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import { pushToast } from '@shared/composables/useToast'
 import { useUserLabels } from '@shared/composables/useUserLabels'
@@ -97,29 +98,33 @@ async function revoke(member: UserProfile): Promise<void> {
         <!-- 不变量 #3：后台看不到学号与邮箱，因此只能按用户 ID 操作 -->
         出于隐私要求后台看不到学号与邮箱，请填写目标用户的 ID（可由本人提供）。
       </p>
-      <div class="mt-3 flex flex-wrap items-center gap-2">
-        <el-input
-          v-model="targetUserId"
-          class="w-[160px]"
-          placeholder="用户 ID"
-          inputmode="numeric"
-          aria-label="目标用户 ID"
-        />
-        <el-select v-model="targetRole" class="w-[160px]" aria-label="要授予的角色">
-          <el-option
-            v-for="option in ASSIGNABLE_ROLE_OPTIONS"
-            :key="option.value"
-            :label="option.label"
-            :value="option.value"
+      <div class="mt-3 flex flex-wrap items-end gap-3">
+        <FormField label="目标用户 ID">
+          <el-input
+            v-model="targetUserId"
+            class="w-[180px]"
+            placeholder="如 1024"
+            inputmode="numeric"
+            aria-label="目标用户 ID"
           />
-        </el-select>
+        </FormField>
+        <FormField label="要授予的角色">
+          <el-select v-model="targetRole" class="w-[180px]" aria-label="要授予的角色">
+            <el-option
+              v-for="option in ASSIGNABLE_ROLE_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </FormField>
         <BaseButton variant="primary" size="sm" :disabled="submitting || full" @click="grant">
           授予
         </BaseButton>
-        <span v-if="full" class="text-xs text-danger-deep">
-          名额已满（{{ used }} / {{ MAX_COMMITTEE_SIZE }}），请先收回其他成员的权限
-        </span>
       </div>
+      <p v-if="full" class="mt-2 text-xs text-danger-deep">
+        名额已满（{{ used }} / {{ MAX_COMMITTEE_SIZE }}），请先收回其他成员的权限
+      </p>
     </BaseCard>
 
     <section class="ql-card overflow-clip">
@@ -135,15 +140,15 @@ async function revoke(member: UserProfile): Promise<void> {
         empty-text="暂无成员"
       >
         <template #head>
-          <th class="px-3 py-2.5 font-medium">用户 ID</th>
-          <th class="px-3 py-2.5 font-medium">角色</th>
-          <th class="px-3 py-2.5 font-medium">状态</th>
-          <th class="px-3 py-2.5 font-medium">信用分</th>
-          <th class="px-3 py-2.5 font-medium">加入时间</th>
-          <th class="px-3 py-2.5 font-medium">操作</th>
+          <th scope="col" class="ql-th">用户 ID</th>
+          <th scope="col" class="ql-th">角色</th>
+          <th scope="col" class="ql-th">状态</th>
+          <th scope="col" class="ql-th">信用分</th>
+          <th scope="col" class="ql-th">加入时间</th>
+          <th scope="col" class="ql-th">操作</th>
         </template>
 
-        <tr v-for="member in members" :key="member.id" class="border-b border-line last:border-0">
+        <tr v-for="member in members" :key="member.id" class="ql-tr">
           <td class="px-3 py-3">{{ member.id }}</td>
           <td class="px-3 py-3">{{ roleLabel(member.role) }}</td>
           <td class="px-3 py-3">{{ statusLabel(member.status) }}</td>

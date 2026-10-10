@@ -17,6 +17,72 @@
 
 
 --------------------------------------------------------------------------------
+R-59 管理端口径统一：表单控件全面 Element Plus + 表格样式下沉 + 筛选栏对齐
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：口径统一 / 组件对齐  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿
+来源：用户明确「后台是有 EP 组件库的，不能混」，并要求把已写出的组件彼此「对齐」（不再逐页
+挤牙膏）。本批做 A（表单控件 EP 化）+ B（筛选栏容器/外观/按钮统一）+ C（空态文案对齐）+
+D（表格样式下沉），三包门禁最后统一跑。
+
+一、口径确立（本批核心）
+  管理端「每个表单字段 = shared `FormField` 壳（label/error/hint）+ Element Plus 控件」，
+  不再出现原生 `<input class="ql-field">` / `<select class="ql-field">` / `datetime-local` /
+  `BaseInput` / `BaseTextarea`。字段壳沿用 shared 组件：它不含控件（只是 label + 提示），且
+  管理端内只此一种壳，故不构成「混用」。
+
+二、A 表单控件 EP 化（前端 11 个文件 + 2 个 composable/类型）
+  - AnnouncementFormDialog：BaseInput/BaseTextarea/原生 select/datetime×2/number/checkbox×2 →
+    el-input（含 type=textarea）/el-select/el-date-picker×2/el-input/el-checkbox×2；「强制方式」
+    改 fieldset+legend（与 AppealReviewDialog 同口径）；删掉两个为绕过原生类型漂移而写的
+    `@input` 收敛函数；startAt/endAt 类型改 `string | null`。
+  - AppealReview / Arbitration / BanUser / CreditAdjust / ProposalReason / DismissReports：
+    BaseTextarea → el-input type=textarea；BanUser·CreditAdjust 的 number → el-input（删
+    onDeltaInput）；ProposalReason 的 select → el-select。
+  - AdminLoginView：BaseInput×2 → el-input。
+  - UserManageView：select×2 → el-select、number×2 → el-input、datetime×2 → el-date-picker
+    （删掉 setCreditFilter 这个防类型漂移的 workaround）。
+  - AuditLogView：筛选从「表格卡头 toolbar」提到独立 ql-card 表单，三控件 → el-select +
+    el-date-picker×2，补 FormField 标签 + 查询/重置。
+  - PermissionManageView：补 FormField 标签 + items-end；「名额已满」移出行内。
+  - ProposalListView：裸 div → 独立 ql-card 表单 + FormField + el-select + el-checkbox + 查询。
+  - ReviewQueueView：去掉 pb-2.5/pb-1.5 对齐 hack（改 h-8 + items-end），目标类型 130→160。
+  - types/admin.ts：UserFilterState.createdFrom/To → `string | null`；useUserManage 的
+    createEmptyFilters 相应给 null；composables/datetime.ts 的 toInstantOrNull 容忍 null
+    （el-date-picker 清空给 null）。
+  - 三个 spec（AnnouncementFormDialog / CreditAdjustDialog / ProposalReasonDialog）改为「EP 桩
+    驱动」：桩渲染真 DOM 并转发 update:modelValue；**el-select 桩必须同时桩 ElOption 并渲染真
+    `<option>`**（否则 setValue 取不到值，且真实 el-option 会报 usage 错）。
+
+三、B 筛选栏对齐（容器/外观/按钮统一；触发模型保留）
+  四页筛选栏统一为「独立 ql-card + `<form>` + FormField 标签 + items-end + 结尾按钮组」。
+  **触发模型未改**：审核队列 / 提案列表仍「改动即重查」，用户管理 / 审计日志是「手动查询」
+  ——改成手动要给提案列表补 filtersDirty 续页闸门，属行为变更，本批不动，已在各页注释写明。
+
+四、C 空态文案对齐
+  10 张表里 8 张已是「暂无…」，把例外两处统一：AnnouncementTable「还没有公告」→「暂无公告」、
+  UserTable「没有符合条件的用户」→「暂无符合条件的用户」（两条 spec 断言同步）。
+  三态实现本身（DataTable 表格内 / InlineState 面板内 / StatePanel 学生端整页）复核后属
+  「不同容器语义」的有意差异，不强合。
+
+五、D 表格样式下沉
+  - uno.base.ts 新增 `ql-th` / `ql-tr` 快捷类；5 个表组件 + 4 个页面内联表的 30+ 个
+    `<th class="px-3 py-2.5 font-medium">` 与 9 处行分隔线 class 收敛到它们。
+  - 页面内联表的 `<th>` 补 `scope="col"`（此前只补了 5 个表组件）。
+  - 列宽档位收敛：280 / 360 → 320（主内容列）；保留 220（次要列）与 420（长预览）。
+
+六、两个副作用（本批未动，待定）
+  1. shared 的 `BaseInput` / `BaseTextarea` 管理端已不再使用（只剩学生端用）→ 按 AGENTS
+     「谁在用」应下沉到 `qinglan-web`；属架构调整，未动。
+  2. EP 的 `el-input` 不接受 `:class="!valid && '!border-danger'"` 这类覆盖，故表单校验反馈
+     只剩 FormField 的错误文案（红框没了）；要红框需给 EP 控件做统一 error 态封装。
+
+验证（真跑，三包）
+- pnpm -r lint / typecheck：三包全过。
+- pnpm -r test：shared 19 文件 102 例、qinglan-web 36 文件 208 例、qinglan-admin 49 文件 292 例，
+  共 602 例全绿（3 个控件 spec 随 EP 化改用桩驱动，2 条空态文案断言同步；其余断言未改）。
+- pnpm -r build：两端产物成功。
+
+--------------------------------------------------------------------------------
 R-58 前端组件整合第六批（6B 波）：图标体系收口 + 公告阅读器状态受控化
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：组件/接口优化  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿

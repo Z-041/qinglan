@@ -79,6 +79,10 @@ export const shortcuts = {
   'ql-nav-link':
     'px-2.5 py-1.5 text-sm text-muted transition hover:text-ink [&.router-link-exact-active]:font-medium [&.router-link-exact-active]:text-primary-deep',
 
+  // 表格（管理端 DataTable 及其调用方共用，避免 30+ 处逐字重复）
+  'ql-th': 'px-3 py-2.5 font-medium',
+  'ql-tr': 'border-b border-line last:border-0',
+
   // 表单
   'ql-label': 'mb-1.5 block text-xs text-muted',
   'ql-field':

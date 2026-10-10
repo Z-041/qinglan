@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import type { ArbitratePayload, ArbitrationDecision } from '@/types/proposal'
 import DialogShell from './DialogShell.vue'
@@ -59,11 +58,11 @@ function handleSubmit(decision: ArbitrationDecision): void {
       :error="showError ? '请填写裁决理由' : undefined"
       hint="必填，会写入提案结论与审计日志"
     >
-      <BaseTextarea
+      <el-input
         v-model="reason"
+        type="textarea"
         :rows="3"
         :maxlength="MAX_REASON_LENGTH"
-        :invalid="showError && !canSubmit"
         placeholder="说明裁决依据"
       />
     </FormField>

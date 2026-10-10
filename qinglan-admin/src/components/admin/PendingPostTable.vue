@@ -27,18 +27,18 @@ const { targetStatusLabel } = useUserLabels()
     empty-text="暂无待审帖子"
   >
     <template #head>
-      <th class="px-3 py-2.5 font-medium">内容摘要</th>
-      <th class="px-3 py-2.5 font-medium">图片</th>
-      <th class="px-3 py-2.5 font-medium">状态</th>
-      <th class="px-3 py-2.5 font-medium">待处理举报</th>
-      <th class="px-3 py-2.5 font-medium">提交时间</th>
-      <th class="px-3 py-2.5 font-medium">操作</th>
+      <th scope="col" class="ql-th">内容摘要</th>
+      <th scope="col" class="ql-th">图片</th>
+      <th scope="col" class="ql-th">状态</th>
+      <th scope="col" class="ql-th">待处理举报</th>
+      <th scope="col" class="ql-th">提交时间</th>
+      <th scope="col" class="ql-th">操作</th>
     </template>
 
     <tr
       v-for="row in props.items"
       :key="row.postId"
-      class="border-b border-line last:border-0"
+      class="ql-tr"
       :class="props.activeKey === String(row.postId) ? 'bg-primary-soft' : ''"
     >
       <td class="max-w-[420px] truncate px-3 py-3" :title="row.preview">{{ row.preview }}</td>

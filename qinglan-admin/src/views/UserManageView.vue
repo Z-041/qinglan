@@ -59,14 +59,6 @@ function openCredit(row: AdminUserItem): void {
   creditOpen.value = true
 }
 
-/**
- * filters 的信用分字段声明为 string，type="number" 上的 v-model 会写入 number，
- * 使 toNumberOrNull 的 value.trim() 抛错（异常被 refresh 的 catch 吞掉，表现为点查询无反应）。
- */
-function setCreditFilter(key: 'minCredit' | 'maxCredit', event: Event): void {
-  filters.value[key] = (event.target as HTMLInputElement).value
-}
-
 /** 空串=不限；填了必须是 0-100 的整数（后端也会校验，这里前置拦住，免得多弹一次 400） */
 function creditBoundInvalid(value: string): boolean {
   const trimmed = value.trim()
@@ -143,57 +135,53 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
 
     <form class="ql-card flex flex-wrap items-end gap-3 p-4" @submit.prevent="search">
       <FormField label="状态">
-        <select v-model="filters.status" class="ql-field">
-          <option value="">不限</option>
-          <option v-for="status in STATUSES" :key="status" :value="status">
-            {{ statusLabel(status) }}
-          </option>
-        </select>
+        <el-select v-model="filters.status" class="w-[140px]" placeholder="不限">
+          <el-option label="不限" value="" />
+          <el-option v-for="status in STATUSES" :key="status" :label="statusLabel(status)" :value="status" />
+        </el-select>
       </FormField>
 
       <FormField label="角色">
-        <select v-model="filters.role" class="ql-field">
-          <option value="">不限</option>
-          <option v-for="role in ROLES" :key="role" :value="role">{{ roleLabel(role) }}</option>
-        </select>
+        <el-select v-model="filters.role" class="w-[170px]" placeholder="不限">
+          <el-option label="不限" value="" />
+          <el-option v-for="role in ROLES" :key="role" :label="roleLabel(role)" :value="role" />
+        </el-select>
       </FormField>
 
       <FormField
         label="信用分下界"
         :error="creditBoundInvalid(filters.minCredit) ? '须为 0-100 的整数' : ''"
       >
-        <input
-          :value="filters.minCredit"
-          type="number"
-          min="0"
-          max="100"
-          class="ql-field"
-          placeholder="含"
-          @input="setCreditFilter('minCredit', $event)"
-        />
+        <el-input v-model="filters.minCredit" class="w-[110px]" placeholder="含" inputmode="numeric" />
       </FormField>
 
       <FormField
         label="信用分上界"
         :error="creditBoundInvalid(filters.maxCredit) ? '须为 0-100 的整数' : ''"
       >
-        <input
-          :value="filters.maxCredit"
-          type="number"
-          min="0"
-          max="100"
-          class="ql-field"
-          placeholder="含"
-          @input="setCreditFilter('maxCredit', $event)"
-        />
+        <el-input v-model="filters.maxCredit" class="w-[110px]" placeholder="含" inputmode="numeric" />
       </FormField>
 
       <FormField label="注册时间起">
-        <input v-model="filters.createdFrom" type="datetime-local" class="ql-field" />
+        <el-date-picker
+          v-model="filters.createdFrom"
+          type="datetime"
+          class="w-[210px]"
+          value-format="YYYY-MM-DD[T]HH:mm:ss"
+          placeholder="起始时间"
+          clearable
+        />
       </FormField>
 
       <FormField label="注册时间止">
-        <input v-model="filters.createdTo" type="datetime-local" class="ql-field" />
+        <el-date-picker
+          v-model="filters.createdTo"
+          type="datetime"
+          class="w-[210px]"
+          value-format="YYYY-MM-DD[T]HH:mm:ss"
+          placeholder="结束时间"
+          clearable
+        />
       </FormField>
 
       <div class="flex gap-2">

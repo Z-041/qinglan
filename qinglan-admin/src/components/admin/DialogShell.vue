@@ -43,12 +43,24 @@ const props = withDefaults(
 
 const emit = defineEmits<{ close: []; confirm: [] }>()
 
-/** 与原各弹窗一致的 Enter 处理：TEXTAREA 放行换行，其余拦截并触发确认 */
+/**
+ * 这些元素上按 Enter 有**原生语义**（textarea 换行、下拉展开、日期/数字提交、勾选、按钮自带点击），
+ * 不能当成「确认」——否则 Enter 会同时触发控件行为与提交（此前只放行了 TEXTAREA，
+ * 含下拉/日期控件的弹窗需要各自显式关掉 enterToConfirm 才能避免冲突）。
+ */
+const ENTER_NATIVE_TAGS = new Set(['TEXTAREA', 'SELECT', 'BUTTON', 'A'])
+const ENTER_NATIVE_INPUT_TYPES = new Set(['date', 'datetime-local', 'number', 'checkbox', 'radio', 'file'])
+
+/** 其余元素按 Enter 等同点确认 */
 function handleEnter(event: KeyboardEvent): void {
   if (!props.enterToConfirm) {
     return
   }
-  if ((event.target as HTMLElement).tagName === 'TEXTAREA') {
+  const target = event.target as HTMLElement
+  if (ENTER_NATIVE_TAGS.has(target.tagName)) {
+    return
+  }
+  if (target instanceof HTMLInputElement && ENTER_NATIVE_INPUT_TYPES.has(target.type)) {
     return
   }
   event.preventDefault()

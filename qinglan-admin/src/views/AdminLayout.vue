@@ -46,7 +46,9 @@ function signOut(): void {
 
 <template>
   <!-- el-config-provider 已上提到 App.vue：/login 与本布局是同级路由，放这里登录页拿不到语言包 -->
-  <div class="flex min-h-screen bg-canvas">
+  <!-- h-screen + overflow-hidden：外壳占满视口、不随内容滚，滚动只发生在 <main>；
+       否则页面一长，整块（含左侧导航）都会跟着滚上去，导航滚出视野 -->
+  <div class="flex h-screen overflow-hidden bg-canvas">
     <!-- 跳到主内容：侧栏导航十余项，键盘用户不跳链接就要逐项 Tab 才能到工作区 -->
     <a
       href="#admin-main"
@@ -56,7 +58,8 @@ function signOut(): void {
     </a>
     <aside class="flex w-[200px] shrink-0 flex-col border-r border-line bg-surface">
       <p class="px-5 py-5 text-sm font-semibold text-ink">青栏管理后台</p>
-      <nav class="flex flex-1 flex-col gap-1 px-2">
+      <!-- 导航自身可滚：视口矮于导航总高时在侧栏内滚动，而不是把整栏撑高 -->
+      <nav class="flex flex-1 flex-col gap-1 overflow-y-auto px-2 pb-4">
         <RouterLink
           v-for="item in navItems"
           :key="item.name"
@@ -85,7 +88,7 @@ function signOut(): void {
 
       <!-- 拆分后管理端 App.vue 不再有外层 <main>，这里用 <main> 才是正确语义
            （每个页面应恰有一个主内容地标）。原先为避免嵌套地标才退化成 div。 -->
-      <main id="admin-main" class="flex-1 p-6" tabindex="-1">
+      <main id="admin-main" class="flex-1 overflow-y-auto p-6" tabindex="-1">
         <!-- 管理端仅支持 PC，不做移动断点（AGENTS.md 第七章） -->
         <RouterView />
       </main>

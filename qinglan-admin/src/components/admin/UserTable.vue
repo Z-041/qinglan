@@ -25,19 +25,19 @@ const { roleLabel, statusLabel } = useUserLabels()
     :colspan="6"
     :loading="props.loading"
     :failed="props.failed"
-    empty-text="没有符合条件的用户"
+    empty-text="暂无符合条件的用户"
   >
     <template #head>
-      <th class="px-3 py-2.5 font-medium">注册时间</th>
-      <th class="px-3 py-2.5 font-medium">角色</th>
-      <th class="px-3 py-2.5 font-medium">状态</th>
-      <th class="px-3 py-2.5 font-medium">信用分</th>
-      <th class="px-3 py-2.5 font-medium">封禁至</th>
-      <th class="px-3 py-2.5 font-medium">操作</th>
+      <th scope="col" class="ql-th">注册时间</th>
+      <th scope="col" class="ql-th">角色</th>
+      <th scope="col" class="ql-th">状态</th>
+      <th scope="col" class="ql-th">信用分</th>
+      <th scope="col" class="ql-th">封禁至</th>
+      <th scope="col" class="ql-th">操作</th>
     </template>
 
     <!-- key 用 id 只为稳定复用 DOM，该数字不渲染到界面上 -->
-    <tr v-for="row in props.items" :key="row.id" class="border-b border-line last:border-0">
+    <tr v-for="row in props.items" :key="row.id" class="ql-tr">
       <td class="px-3 py-3">
         <RelativeTime :iso="row.createdAt" />
       </td>

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 
-import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { ReportReason } from '@shared/types/review-common'
@@ -71,15 +70,18 @@ function handleSubmit(): void {
   >
     <div class="flex flex-col gap-4">
       <FormField label="违规类型">
-        <select v-model="reasonCode" class="ql-field">
-          <option v-for="reason in REASONS" :key="reason" :value="reason">
-            {{ reportReasonLabel(reason) }}
-          </option>
-        </select>
+        <el-select v-model="reasonCode" class="w-full">
+          <el-option
+            v-for="reason in REASONS"
+            :key="reason"
+            :label="reportReasonLabel(reason)"
+            :value="reason"
+          />
+        </el-select>
       </FormField>
 
       <FormField label="补充说明" hint="可选，会随理由展示给作者">
-        <BaseTextarea v-model="detail" :rows="3" :maxlength="400" placeholder="说明处置依据" />
+        <el-input v-model="detail" type="textarea" :rows="3" :maxlength="400" placeholder="说明处置依据" />
       </FormField>
     </div>
   </DialogShell>

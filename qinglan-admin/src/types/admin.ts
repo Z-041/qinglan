@@ -220,13 +220,27 @@ export interface UserFilterState {
   /** 空串 = 不限；输入为字符串，提交时转数字 */
   minCredit: string
   maxCredit: string
-  /** datetime-local 的值（本地时间，形如 2026-10-01T08:00），空串 = 不限 */
-  createdFrom: string
-  createdTo: string
+  /** el-date-picker 的值（本地时间，形如 2026-10-01T08:00），null = 不限 */
+  createdFrom: string | null
+  createdTo: string | null
 }
 
 /** 与后端 announcement/entity/AnnouncementStatus 一致（P4 决策 D7：撤回后不可再发布） */
 export type AnnouncementStatus = 'DRAFT' | 'PUBLISHED' | 'REVOKED'
+
+/** 公告等级 → 中文。列表与新建表单**共用这一份**，不再两处各写一份（原先重复定义、易漂移） */
+export const ANNOUNCEMENT_LEVEL_LABELS: Record<AnnouncementLevel, string> = {
+  URGENT: '紧急',
+  NORMAL: '普通',
+  ACTIVITY: '活动',
+}
+
+/** 公告状态 → 中文 */
+export const ANNOUNCEMENT_STATUS_LABELS: Record<AnnouncementStatus, string> = {
+  DRAFT: '草稿',
+  PUBLISHED: '已发布',
+  REVOKED: '已撤回',
+}
 
 /**
  * 与后端 announcement/dto/AdminAnnouncementResponse 一一对应。

@@ -36,22 +36,22 @@ function takenDownText(reason: string | null): string {
     empty-text="暂无待复审申诉"
   >
     <template #head>
-      <th class="px-3 py-2.5 font-medium">内容摘要</th>
-      <th class="px-3 py-2.5 font-medium">目标状态</th>
-      <th class="px-3 py-2.5 font-medium">原下架理由</th>
-      <th class="px-3 py-2.5 font-medium">申诉理由</th>
-      <th class="px-3 py-2.5 font-medium">申诉时间</th>
-      <th class="px-3 py-2.5 font-medium">操作</th>
+      <th scope="col" class="ql-th">内容摘要</th>
+      <th scope="col" class="ql-th">目标状态</th>
+      <th scope="col" class="ql-th">原下架理由</th>
+      <th scope="col" class="ql-th">申诉理由</th>
+      <th scope="col" class="ql-th">申诉时间</th>
+      <th scope="col" class="ql-th">操作</th>
     </template>
 
     <!-- key 用 appealId 只为稳定复用 DOM；该数字不渲染到界面上（决策 6） -->
     <tr
       v-for="row in props.items"
       :key="row.appealId"
-      class="border-b border-line last:border-0"
+      class="ql-tr"
       :class="props.activeKey === String(row.appealId) ? 'bg-primary-soft' : ''"
     >
-      <td class="max-w-[320px] truncate px-3 py-3" :title="row.preview ?? ''">
+      <td class="max-w-[320px] truncate px-3 py-3" :title="row.preview ?? '内容已不存在'">
         {{ row.preview ?? '内容已不存在' }}
       </td>
       <td class="px-3 py-3">{{ row.targetStatus ? targetStatusLabel(row.targetStatus) : '已删除' }}</td>

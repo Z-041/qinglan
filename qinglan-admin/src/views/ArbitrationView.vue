@@ -59,15 +59,15 @@ async function handleArbitrate(payload: ArbitratePayload): Promise<void> {
         empty-text="暂无待裁决提案"
       >
         <template #head>
-          <th class="px-3 py-2.5 font-medium">内容摘要</th>
-          <th class="px-3 py-2.5 font-medium">动作</th>
-          <th class="px-3 py-2.5 font-medium">票数进度</th>
-          <th class="px-3 py-2.5 font-medium">投票明细</th>
-          <th class="px-3 py-2.5 font-medium">操作</th>
+          <th scope="col" class="ql-th">内容摘要</th>
+          <th scope="col" class="ql-th">动作</th>
+          <th scope="col" class="ql-th">票数进度</th>
+          <th scope="col" class="ql-th">投票明细</th>
+          <th scope="col" class="ql-th">操作</th>
         </template>
 
-        <tr v-for="row in items" :key="row.proposalId" class="border-b border-line last:border-0">
-          <td class="max-w-[280px] truncate px-3 py-3" :title="row.preview">{{ row.preview }}</td>
+        <tr v-for="row in items" :key="row.proposalId" class="ql-tr">
+          <td class="max-w-[320px] truncate px-3 py-3" :title="row.preview">{{ row.preview }}</td>
           <td class="px-3 py-3">{{ proposalActionLabel(row.action) }}</td>
           <td class="px-3 py-3 tabular-nums">
             {{ row.agreeCount }}/{{ row.needed }} 同意（已投 {{ row.votedCount }} 票）

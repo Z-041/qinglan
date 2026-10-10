@@ -62,6 +62,7 @@ const classes = computed(() => [
     :type="isButton ? htmlType : undefined"
     class="cursor-pointer"
     :class="classes"
+    :aria-busy="isButton && loading ? 'true' : undefined"
     :disabled="isButton ? disabled || loading : undefined"
     @click="emit('click', $event)"
   >

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
-import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import DialogShell from './DialogShell.vue'
 
@@ -75,7 +74,7 @@ function handleSubmit(): void {
       </fieldset>
 
       <FormField label="复审说明" hint="会写入审计日志">
-        <BaseTextarea v-model="reason" :rows="3" :maxlength="500" placeholder="说明复审依据" />
+        <el-input v-model="reason" type="textarea" :rows="3" :maxlength="500" placeholder="说明复审依据" />
       </FormField>
     </div>
   </DialogShell>

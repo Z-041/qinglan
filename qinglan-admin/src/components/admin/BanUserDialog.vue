@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
-import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import DialogShell from './DialogShell.vue'
 
@@ -60,19 +59,11 @@ function handleSubmit(): void {
         label="封禁天数"
         :error="daysValid ? '' : `请输入 ${MIN_DAYS} - ${MAX_DAYS} 之间的整数`"
       >
-        <input
-          v-model="days"
-          type="number"
-          :min="MIN_DAYS"
-          :max="MAX_DAYS"
-          class="ql-field"
-          :class="!daysValid ? '!border-danger' : ''"
-          :aria-invalid="!daysValid"
-        />
+        <el-input v-model="days" inputmode="numeric" />
       </FormField>
 
       <FormField label="封禁理由" hint="会写入审计日志">
-        <BaseTextarea v-model="reason" :rows="3" :maxlength="500" placeholder="说明封禁依据" />
+        <el-input v-model="reason" type="textarea" :rows="3" :maxlength="500" placeholder="说明封禁依据" />
       </FormField>
     </div>
   </DialogShell>

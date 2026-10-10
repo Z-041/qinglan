@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
-import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import DialogShell from './DialogShell.vue'
 
@@ -37,15 +36,6 @@ const deltaValid = computed(
 )
 const canSubmit = computed(() => deltaValid.value && reason.value.trim().length > 0)
 
-/**
- * type="number" 上的 v-model 会把值转成 number，破坏「状态字段恒为 string」这一前提
- * （deltaValid 里的 .trim() 会抛 TypeError，按钮永久禁用）。改用 :value + @input
- * 把值收敛回字符串，逻辑与常量一律不动。
- */
-function onDeltaInput(event: Event): void {
-  delta.value = (event.target as HTMLInputElement).value
-}
-
 function handleSubmit(): void {
   if (!canSubmit.value) {
     return
@@ -71,20 +61,11 @@ function handleSubmit(): void {
         :hint="`正数加分、负数扣分，单次范围 ${MIN_DELTA} ~ ${MAX_DELTA}`"
         :error="deltaValid || !delta.trim() ? '' : '请输入范围内非 0 的整数'"
       >
-        <input
-          :value="delta"
-          type="number"
-          :min="MIN_DELTA"
-          :max="MAX_DELTA"
-          class="ql-field"
-          :class="!deltaValid && delta.trim() !== '' ? '!border-danger' : ''"
-          :aria-invalid="!deltaValid && delta.trim() !== ''"
-          @input="onDeltaInput"
-        />
+        <el-input v-model="delta" inputmode="numeric" />
       </FormField>
 
       <FormField label="调整理由" hint="会写入审计日志">
-        <BaseTextarea v-model="reason" :rows="3" :maxlength="500" placeholder="说明调整依据" />
+        <el-input v-model="reason" type="textarea" :rows="3" :maxlength="500" placeholder="说明调整依据" />
       </FormField>
     </div>
   </DialogShell>

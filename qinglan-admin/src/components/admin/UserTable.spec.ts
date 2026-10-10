@@ -28,7 +28,7 @@ describe('UserTable', () => {
   it('空列表渲染空态提示', () => {
     const wrapper = mount(UserTable, { props: { items: [] } })
 
-    expect(wrapper.text()).toContain('没有符合条件的用户')
+    expect(wrapper.text()).toContain('暂无符合条件的用户')
   })
 
   it('角色与状态渲染成中文标签，信用分原样展示', () => {

@@ -48,21 +48,21 @@ function hasOpenProposal(item: AdminQueueItem): boolean {
     empty-text="暂无待处理举报"
   >
     <template #head>
-      <th class="px-3 py-2.5 font-medium">目标类型</th>
-      <th class="px-3 py-2.5 font-medium">内容摘要</th>
-      <th class="px-3 py-2.5 font-medium">图片</th>
-      <th class="px-3 py-2.5 font-medium">目标状态</th>
-      <th class="px-3 py-2.5 font-medium">待处理举报</th>
-      <th class="px-3 py-2.5 font-medium">首报时间</th>
-      <th class="px-3 py-2.5 font-medium">理由</th>
-      <th class="px-3 py-2.5 font-medium">提案进度</th>
-      <th class="px-3 py-2.5 font-medium">操作</th>
+      <th scope="col" class="ql-th">目标类型</th>
+      <th scope="col" class="ql-th">内容摘要</th>
+      <th scope="col" class="ql-th">图片</th>
+      <th scope="col" class="ql-th">目标状态</th>
+      <th scope="col" class="ql-th">待处理举报</th>
+      <th scope="col" class="ql-th">首报时间</th>
+      <th scope="col" class="ql-th">理由</th>
+      <th scope="col" class="ql-th">提案进度</th>
+      <th scope="col" class="ql-th">操作</th>
     </template>
 
     <tr
       v-for="row in props.items"
       :key="rowKey(row)"
-      class="border-b border-line last:border-0"
+      class="ql-tr"
       :class="props.activeKey === rowKey(row) ? 'bg-primary-soft' : ''"
     >
       <td class="px-3 py-3">{{ targetTypeLabel(row.targetType) }}</td>
