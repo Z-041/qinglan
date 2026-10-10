@@ -15,13 +15,16 @@ import type { EChartsOption } from 'echarts'
  * 容器有**固定高度**（props.height，默认 280px），避免图表未渲染时布局跳动；
  * 宽度跟随父容器，并在容器尺寸变化时 resize——管理端仅 PC，但窗口可缩小。
  */
-const props = defineProps<{
-  option: EChartsOption
-  /** 容器高度；图表必须有确定高度，否则初次渲染高度为 0 */
-  height?: string
-  /** 图表的可访问名：屏幕阅读器据此得知图表含义（canvas 本身无文字） */
-  ariaLabel?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    option: EChartsOption
+    /** 容器高度；图表必须有确定高度，否则初次渲染高度为 0 */
+    height?: string
+    /** 图表的可访问名：屏幕阅读器据此得知图表含义（canvas 本身无文字） */
+    ariaLabel?: string
+  }>(),
+  { ariaLabel: '数据图表' },
+)
 
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRenderer])
 
@@ -83,7 +86,7 @@ onBeforeUnmount(() => {
   <div
     ref="el"
     role="img"
-    :aria-label="props.ariaLabel ?? '数据图表'"
+    :aria-label="props.ariaLabel"
     class="w-full"
     :style="{ height: props.height ?? '280px' }"
   />

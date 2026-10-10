@@ -2,10 +2,11 @@
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import DataTable from '@/components/admin/DataTable.vue'
+import type { TableStateProps } from '@/components/admin/tableProps'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminUserItem } from '@/types/admin'
 
-const props = defineProps<{ items: AdminUserItem[]; loading?: boolean; failed?: boolean }>()
+const props = defineProps<TableStateProps<AdminUserItem>>()
 
 const emit = defineEmits<{
   ban: [item: AdminUserItem]

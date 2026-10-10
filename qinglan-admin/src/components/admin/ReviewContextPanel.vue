@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 
 import RelativeTime from '@shared/components/RelativeTime.vue'
+import InlineState from '@/components/admin/InlineState.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import { auditActionLabel } from '@/types/admin'
 import type { AdminReviewContext, AdminReviewHistory } from '@/types/review'
@@ -34,11 +35,11 @@ const activeTab = ref('context')
     size="480px"
     @update:model-value="emit('update:open', $event)"
   >
-    <p v-if="props.loading && !props.context" class="text-sm text-muted">加载中…</p>
+    <InlineState v-if="props.loading && !props.context" loading />
 
-    <p v-else-if="props.failed && !props.context" class="text-sm text-muted">
+    <InlineState v-else-if="props.failed && !props.context">
       上下文没能加载出来，请关闭面板后重试
-    </p>
+    </InlineState>
 
     <div v-else-if="props.context" class="flex flex-col gap-5">
       <!-- 三个 Tab 都只展示聚合/流水信息；处置按钮组在 Tab 之外，切到历史也随时可操作 -->
@@ -89,10 +90,10 @@ const activeTab = ref('context')
         </el-tab-pane>
 
         <el-tab-pane label="作者动态" name="author">
-          <p v-if="props.historyLoading && !props.history" class="text-sm text-muted">加载中…</p>
-          <p v-else-if="props.historyFailed && !props.history" class="text-sm text-muted">
+          <InlineState v-if="props.historyLoading && !props.history" loading />
+          <InlineState v-else-if="props.historyFailed && !props.history">
             作者动态没能加载出来
-          </p>
+          </InlineState>
           <ul v-else-if="props.history?.authorRecentPosts.length" class="flex flex-col gap-3 text-sm">
             <li
               v-for="post in props.history.authorRecentPosts"
@@ -105,14 +106,14 @@ const activeTab = ref('context')
               <RelativeTime class="text-muted" :iso="post.createdAt" />
             </li>
           </ul>
-          <p v-else class="text-sm text-muted">暂无近期动态</p>
+          <InlineState v-else>暂无近期动态</InlineState>
         </el-tab-pane>
 
         <el-tab-pane label="处置历史" name="history">
-          <p v-if="props.historyLoading && !props.history" class="text-sm text-muted">加载中…</p>
-          <p v-else-if="props.historyFailed && !props.history" class="text-sm text-muted">
+          <InlineState v-if="props.historyLoading && !props.history" loading />
+          <InlineState v-else-if="props.historyFailed && !props.history">
             处置历史没能加载出来
-          </p>
+          </InlineState>
           <ul v-else-if="props.history?.targetDispositions.length" class="flex flex-col gap-3 text-sm">
             <li
               v-for="item in props.history.targetDispositions"
@@ -130,7 +131,7 @@ const activeTab = ref('context')
               </p>
             </li>
           </ul>
-          <p v-else class="text-sm text-muted">暂无处置记录</p>
+          <InlineState v-else>暂无处置记录</InlineState>
         </el-tab-pane>
       </el-tabs>
 

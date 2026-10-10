@@ -17,6 +17,36 @@
 
 
 --------------------------------------------------------------------------------
+R-57 前端组件整合第六批（6A 波）：管理端表格 props 归一 + 行内状态行
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：组件/接口优化  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿
+来源：第六批（用户选定「只做确定性 5 项」）。6B（shared + 双端）另开。
+
+一、交付
+  1. components/admin/tableProps.ts 的 TableStateProps<T>（items / loading / failed）：5 张表
+     （QueueTable / PendingPostTable / AppealTable / UserTable / AnnouncementTable）此前各自逐字
+     重复这三个 props，改为 `defineProps<TableStateProps<T> & { 列特有 props }>()` 交叉。纯类型。
+  2. components/admin/InlineState.vue：抽屉 / Tab 内部的「加载中 / 失败 / 空」文案（一行灰字、不带框）。
+     与 StatePanel 的分工写进注释——StatePanel 是整块四态（带虚线框、可重试），本组件用在不该再套框
+     的位置。ReviewContextPanel 的 8 处 `<p class="text-sm text-muted">`（3 处「加载中…」+ 3 处失败
+     + 2 处空态）迁到它，「加载中…」文案统一在此一处。
+  3. 小件两处：
+     - useQueueShortcuts 导出 `ShortcutHint`（键 + 文案）；WorkbenchList 与 QueueShortcutHints 原先
+       各自写 `{ key: string; label: string }[]`，改用同一形状。
+     - EChart 的 ariaLabel 默认值从模板的 `?? '数据图表'` 移到 `withDefaults`，默认值不再散在模板。
+
+二、评估后不做（1 项，改判）
+  - 「三态三写法」原本列为本波项，复核后**只做了该做的一半**：DataTable 的占位行（表格内）、
+    StatePanel（整块）、InlineState（行内）三者对应三种容器语义，是**有意为之**而非漂移——失败
+    文案也各按自己的重试路径写（表格「请点击刷新」/ 抽屉「请关闭面板后重试」）。故不强行合并三者，
+    只把同一容器内的重复（ReviewContextPanel 8 处）收敛。
+
+验证（真跑，全绿）
+- pnpm lint / typecheck：管理端通过。
+- vitest：qinglan-admin 49 文件 292 例全绿（既有表格与上下文面板断言未改、原样通过）。
+- pnpm build：管理端产物成功。
+
+--------------------------------------------------------------------------------
 R-56 前端组件整合第五批（5C 波）：学生端弹层焦点陷阱 + 点赞可访问名 + 图片并入收口
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：组件/接口优化  状态：已交付；学生端 lint/typecheck/vitest/build 真跑全绿

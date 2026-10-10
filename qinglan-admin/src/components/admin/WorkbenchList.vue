@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import QueueShortcutHints from '@/components/admin/QueueShortcutHints.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
+import type { ShortcutHint } from '@/composables/useQueueShortcuts'
 
 /**
  * 审核工作台三页（审核队列 / 待审帖子 / 申诉复审）共用的列表骨架：
@@ -22,7 +23,7 @@ withDefaults(
     hasMore: boolean
     loadingMore?: boolean
     /** 本页可用快捷键绑定（已按权限过滤），仅用于提示条 */
-    shortcuts?: readonly { key: string; label: string }[]
+    shortcuts?: readonly ShortcutHint[]
     /** 加载更多上方的条件提示（如「筛选条件已修改，请先查询」） */
     loadMoreHint?: string
     /** 加载更多禁用（与 loadMoreHint 搭配，如筛选脏态） */

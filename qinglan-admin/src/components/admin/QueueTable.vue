@@ -2,18 +2,18 @@
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import DataTable from '@/components/admin/DataTable.vue'
+import type { TableStateProps } from '@/components/admin/tableProps'
 import { isReportOverdue } from '@/composables/useReviewQueue'
 import { proposalActionLabel, proposalStatusLabel } from '@/types/proposal'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminQueueItem, AdminQueueProposalProgress } from '@/types/review'
 
-const props = defineProps<{
-  items: AdminQueueItem[]
-  loading?: boolean
-  failed?: boolean
-  /** 键盘行焦点所在行的键（`${targetType}-${targetId}`）；用于高亮当前处置目标 */
-  activeKey?: string | null
-}>()
+const props = defineProps<
+  TableStateProps<AdminQueueItem> & {
+    /** 键盘行焦点所在行的键（`${targetType}-${targetId}`）；用于高亮当前处置目标 */
+    activeKey?: string | null
+  }
+>()
 
 const emit = defineEmits<{ select: [item: AdminQueueItem] }>()
 

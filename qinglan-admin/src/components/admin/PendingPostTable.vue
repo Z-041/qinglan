@@ -2,16 +2,16 @@
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import DataTable from '@/components/admin/DataTable.vue'
+import type { TableStateProps } from '@/components/admin/tableProps'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminPendingPostItem } from '@/types/review'
 
-const props = defineProps<{
-  items: AdminPendingPostItem[]
-  loading?: boolean
-  failed?: boolean
-  /** 键盘行焦点所在行的键（postId 字符串）；用于高亮当前处置目标 */
-  activeKey?: string | null
-}>()
+const props = defineProps<
+  TableStateProps<AdminPendingPostItem> & {
+    /** 键盘行焦点所在行的键（postId 字符串）；用于高亮当前处置目标 */
+    activeKey?: string | null
+  }
+>()
 
 const emit = defineEmits<{ select: [item: AdminPendingPostItem] }>()
 

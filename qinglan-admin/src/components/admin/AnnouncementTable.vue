@@ -2,24 +2,23 @@
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import DataTable from '@/components/admin/DataTable.vue'
+import type { TableStateProps } from '@/components/admin/tableProps'
 import { formatAbsoluteTime } from '@shared/composables/useRelativeTime'
 import type { AdminAnnouncementItem, AnnouncementLevel, AnnouncementStatus } from '@/types/admin'
 
 const props = withDefaults(
-  defineProps<{
-    items: AdminAnnouncementItem[]
-    loading?: boolean
-    /**
-     * 当前用户是否可执行发布/撤回。
-     * 两者后端都只放行 `SUPER_ADMIN`（P4 决策 D8），故共用一个开关；
-     * 普通管理员只能建草稿，按钮置灰并由页面给出说明。
-     */
-    canOperate?: boolean
-    /** 首屏是否失败过。用于把「加载失败」与「还没有公告」分成两屏 */
-    failed?: boolean
-    /** 发布/撤回请求在途：期间禁用行内按钮，避免连点发出两次请求 */
-    submitting?: boolean
-  }>(),
+  defineProps<
+    TableStateProps<AdminAnnouncementItem> & {
+      /**
+       * 当前用户是否可执行发布/撤回。
+       * 两者后端都只放行 `SUPER_ADMIN`（P4 决策 D8），故共用一个开关；
+       * 普通管理员只能建草稿，按钮置灰并由页面给出说明。
+       */
+      canOperate?: boolean
+      /** 发布/撤回请求在途：期间禁用行内按钮，避免连点发出两次请求 */
+      submitting?: boolean
+    }
+  >(),
   { loading: false, canOperate: false, failed: false, submitting: false },
 )
 

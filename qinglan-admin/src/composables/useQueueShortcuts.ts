@@ -13,6 +13,9 @@ export interface QueueShortcut<A extends string> {
   permission: AdminPermission
 }
 
+/** 提示条所需的最小信息（键 + 文案）；队列视图、WorkbenchList、QueueShortcutHints 共用同一形状 */
+export type ShortcutHint = Pick<QueueShortcut<string>, 'key' | 'label'>
+
 /**
  * 队列一键处置快捷键：把「可用动作」按权限点过滤成一份绑定表，
  * 提示条渲染与按键查找**共用同一份**，避免「按钮灰了但按键还能按」这类自相矛盾。

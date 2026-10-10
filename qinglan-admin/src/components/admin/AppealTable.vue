@@ -2,21 +2,21 @@
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import DataTable from '@/components/admin/DataTable.vue'
+import type { TableStateProps } from '@/components/admin/tableProps'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { AdminAppealItem } from '@/types/review'
 
-const props = defineProps<{
-  items: AdminAppealItem[]
-  loading?: boolean
-  failed?: boolean
-  /** 键盘行焦点所在行的键（appealId 字符串）；用于高亮当前处置目标 */
-  activeKey?: string | null
-  /**
-   * 是否可发起复审（`APPEAL_REVIEW`）。不传即视为无权限——**默认安全**：
-   * 漏传时表现为「按钮不出现」，而不是「任何人都能点」。真正的防线仍是后端注解。
-   */
-  canReview?: boolean
-}>()
+const props = defineProps<
+  TableStateProps<AdminAppealItem> & {
+    /** 键盘行焦点所在行的键（appealId 字符串）；用于高亮当前处置目标 */
+    activeKey?: string | null
+    /**
+     * 是否可发起复审（`APPEAL_REVIEW`）。不传即视为无权限——**默认安全**：
+     * 漏传时表现为「按钮不出现」，而不是「任何人都能点」。真正的防线仍是后端注解。
+     */
+    canReview?: boolean
+  }
+>()
 
 const emit = defineEmits<{ review: [item: AdminAppealItem] }>()
 

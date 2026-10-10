@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import type { ShortcutHint } from '@/composables/useQueueShortcuts'
+
 /**
  * 一键处置快捷键提示条。只展示当前账号有权限、且当前动作集里可用的绑定
  * （绑定已由 `useQueueShortcuts` 过滤），因此不会提示出按不动的键。
  */
-defineProps<{ bindings: readonly { key: string; label: string }[] }>()
+defineProps<{ bindings: readonly ShortcutHint[] }>()
 </script>
 
 <template>

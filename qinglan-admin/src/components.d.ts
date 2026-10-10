@@ -36,6 +36,7 @@ declare module 'vue' {
     ElSwitch: typeof import('element-plus/es')['ElSwitch']
     ElTabPane: typeof import('element-plus/es')['ElTabPane']
     ElTabs: typeof import('element-plus/es')['ElTabs']
+    InlineState: typeof import('./components/admin/InlineState.vue')['default']
     PageHeader: typeof import('./components/admin/PageHeader.vue')['default']
     PendingPostTable: typeof import('./components/admin/PendingPostTable.vue')['default']
     ProposalReasonDialog: typeof import('./components/admin/ProposalReasonDialog.vue')['default']
