@@ -4,7 +4,19 @@
 ![Java](https://img.shields.io/badge/Java-21-2E8B7A)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-2E8B7A)
 ![Vue](https://img.shields.io/badge/Vue-3.5-2E8B7A)
-![License](https://img.shields.io/badge/license-未指定-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
+<p align="center">
+  <b>青栏 Qinglan</b> · 校园匿名社区<br />
+  <sub>合规先于功能 · 约束先于便利 · 权力必须被记录与复审</sub>
+</p>
+
+---
+
+<p align="center">
+  <sub>开发署名 · 本项目由 AI 编码助手 <b>TraeCode</b> 协助完成（人机协作：需求与决策由人拍板，实现与核验由 AI 执行）</sub>
+</p>
+
 
 **青栏**是一个面向高校的**校园匿名社区（校园墙）**：学生用**校园邮箱**完成认证后，在**匿名**前提下
 发帖、评论、点赞、举报；治理侧由独立的管理后台承担审核队列、处置表决、申诉复审、公告强读、
@@ -1243,13 +1255,3 @@ curl -fsS http://localhost/       # 冒烟
 
 ---
 
-<p align="center">
-  <b>青栏 Qinglan</b> · 校园匿名社区<br />
-  <sub>合规先于功能 · 约束先于便利 · 权力必须被记录与复审</sub>
-</p>
-
----
-
-<p align="center">
-  <sub>开发署名 · 本项目由 AI 编码助手 <b>TraeCode</b> 协助完成（人机协作：需求与决策由人拍板，实现与核验由 AI 执行）</sub>
-</p>
