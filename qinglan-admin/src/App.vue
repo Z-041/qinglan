@@ -1,21 +1,19 @@
 <script setup lang="ts">
-import zhCn from 'element-plus/es/locale/lang/zh-cn'
-
 import ToastHost from '@shared/components/ToastHost.vue'
+import MessageBoxHost from '@/components/base/MessageBoxHost.vue'
 
 /**
  * 管理端根组件。
  *
- * `el-config-provider` 放在这里而不是 `AdminLayout` 里：`/admin/login` 是与 AdminLayout
- * **同级**的路由、不经过它，放在 layout 里登录页就拿不到中文语言包（原单应用形态下的遗留问题）。
+ * 命令式确认 / 输入弹窗（替代 ElMessageBox）由常驻的 MessageBoxHost 渲染，用 ModalShell 做外壳，
+ * 与全站其它弹层的遮罩 / ESC / 焦点口径一致。
  *
  * 管理端不挂 `AnnouncementModal`、不渲染学生端头部/页脚——拆分后这些分支判断已无必要。
  */
 </script>
 
 <template>
-  <el-config-provider :locale="zhCn">
-    <RouterView />
-    <ToastHost />
-  </el-config-provider>
+  <RouterView />
+  <MessageBoxHost />
+  <ToastHost />
 </template>

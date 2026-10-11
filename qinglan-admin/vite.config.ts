@@ -2,9 +2,6 @@ import { fileURLToPath, URL } from 'node:url'
 
 import vue from '@vitejs/plugin-vue'
 import UnoCSS from 'unocss/vite'
-import AutoImport from 'unplugin-auto-import/vite'
-import Components from 'unplugin-vue-components/vite'
-import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { defineConfig } from 'vitest/config'
 
 // 配置文件由 Vite 自行加载、不经自定义 resolve.alias，故对 shared 只能用相对路径
@@ -15,22 +12,7 @@ export default defineConfig({
   // 维持 AGENTS.md 第七章「一个浏览器 = 一个账号 = 一份会话」的约定）。
   // 必须与 router 的 createWebHistory('/admin/') 一致，否则 /admin 下会白屏或刷新 404。
   base: '/admin/',
-  plugins: [
-    UnoCSS(),
-    vue(),
-    // Element Plus 按需自动导入：只有本应用实际用到的组件与样式会进产物。
-    // dts 必须落在 src/ 下，才能被 tsconfig 的 include 覆盖；
-    // 落到项目根目录会让 vue-tsc 找不到 ElMessage / ElMessageBox 这些自动导入符号。
-    AutoImport({
-      resolvers: [ElementPlusResolver()],
-      dts: 'src/auto-imports.d.ts',
-    }),
-    Components({
-      resolvers: [ElementPlusResolver()],
-      dts: 'src/components.d.ts',
-    }),
-    contentSecurityPolicy(),
-  ],
+  plugins: [UnoCSS(), vue(), contentSecurityPolicy()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -58,13 +40,5 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['src/**/*.spec.ts'],
-    // element-plus 组件（如 el-dialog）经 unplugin-vue-components 自动导入时会连带注入样式入口，
-    // 而 Vitest 默认把 node_modules 依赖外置交给 Node 加载，Node 解析不了 .css，会在收集阶段
-    // 直接抛 Unknown file extension ".css"。把 element-plus 交给 Vite 处理即可正常解析样式。
-    server: {
-      deps: {
-        inline: ['element-plus'],
-      },
-    },
   },
 })

@@ -6,6 +6,8 @@ withDefaults(
     autocomplete?: string
     inputmode?: 'text' | 'numeric' | 'email'
     maxlength?: number
+    /** 必填：交给原生表单校验（配合 form 的 submit 事件在空值时拦截提交） */
+    required?: boolean
     /** 校验失败态：红框 + aria-invalid；通常与外层 FormField 的 error 同步传入 */
     invalid?: boolean
     /** 表单字段名：浏览器自动填充 / 密码管理器 / 表单语义都依赖它 */
@@ -30,6 +32,7 @@ const model = defineModel<string>({ default: '' })
     :autocomplete="autocomplete"
     :inputmode="inputmode"
     :maxlength="maxlength"
+    :required="required"
     :aria-label="ariaLabel"
     :spellcheck="spellcheck"
     class="ql-field"

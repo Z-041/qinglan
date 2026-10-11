@@ -1,24 +1,10 @@
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import { nextTick } from 'vue'
 
 import ArbitrationDialog from '@/components/admin/ArbitrationDialog.vue'
 
-/**
- * el-dialog 走 Teleport 且懒渲染，单测里换成桩；桩要保留 `modelValue` / `update:modelValue`
- * 这条唯一通道，否则会出现「单测全绿、浏览器里弹窗关不掉」的盲区。
- */
-const ElDialogStub = {
-  props: ['modelValue'],
-  emits: ['update:modelValue'],
-  template: '<div><slot /><slot name="footer" /></div>',
-}
-
 function mountDialog() {
-  return mount(ArbitrationDialog, {
-    props: { open: true },
-    global: { stubs: { ElDialog: ElDialogStub } },
-  })
+  return mount(ArbitrationDialog, { props: { open: true } })
 }
 
 function buttonByText(wrapper: VueWrapper, text: string): DOMWrapper<HTMLButtonElement> {
@@ -79,14 +65,10 @@ describe('ArbitrationDialog', () => {
     expect(wrapper.text()).not.toContain('请填写裁决理由')
   })
 
-  it('把 open 透传给 el-dialog，并响应它抛出的关闭事件', async () => {
+  it('点取消抛出 close', async () => {
     const wrapper = mountDialog()
-    const dialog = wrapper.findComponent(ElDialogStub)
 
-    expect(dialog.props('modelValue')).toBe(true)
-
-    dialog.vm.$emit('update:modelValue', false)
-    await nextTick()
+    await buttonByText(wrapper, '取消').trigger('click')
 
     expect(wrapper.emitted('close')).toHaveLength(1)
   })

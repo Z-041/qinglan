@@ -8,7 +8,7 @@
  */
 withDefaults(
   defineProps<{
-    name: 'heart' | 'comment' | 'bell' | 'plus' | 'mail' | 'shield-check'
+    name: 'heart' | 'comment' | 'bell' | 'plus' | 'mail' | 'shield-check' | 'close'
     /** 填充态（目前仅 heart 使用：已赞为实心）；其余图标恒为描边 */
     filled?: boolean
   }>(),
@@ -43,6 +43,9 @@ withDefaults(
     <template v-else-if="name === 'shield-check'">
       <path d="M12 3 4 6.5v5c0 4.4 3.2 8.4 8 9.5 4.8-1.1 8-5.1 8-9.5v-5Z" />
       <path d="m9 12 2 2 4-4" />
+    </template>
+    <template v-else-if="name === 'close'">
+      <path d="M6 6 18 18M18 6 6 18" />
     </template>
     <template v-else>
       <path d="M12 6v12M6 12h12" />

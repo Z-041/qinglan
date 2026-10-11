@@ -44,8 +44,10 @@ describe('ModalShell', () => {
     expect(wrapper.emitted('close')).toBeUndefined()
   })
 
-  it('panelClass 覆盖面板宽度', () => {
-    const wrapper = mountShell({ panelClass: 'max-w-sm' })
-    expect(wrapper.get('[role="dialog"] > div').classes()).toContain('max-w-sm')
+  it('panelClass 覆盖面板宽度，panelExtraClass 追加', () => {
+    const wrapper = mountShell({ panelClass: 'max-w-sm', panelExtraClass: 'max-w-[720px]' })
+    const panel = wrapper.get('[role="dialog"] > div')
+    expect(panel.classes()).toContain('max-w-sm')
+    expect(panel.classes()).toContain('max-w-[720px]')
   })
 })

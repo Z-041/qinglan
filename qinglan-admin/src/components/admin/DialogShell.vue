@@ -1,22 +1,25 @@
 <script setup lang="ts">
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import ModalShell from '@shared/components/ModalShell.vue'
 
 /**
- * 管理端弹窗的统一外壳：el-dialog 面板 + 标准「取消 / 确认」footer + Enter 提交。
+ * 管理端弹窗的统一外壳：ModalShell 面板 + 标题 + 标准「取消 / 确认」footer + Enter 提交。
  *
  * 八个弹窗（申诉复审 / 驳回举报 / 处置提案 / 超管裁决 / 调分 / 封禁 / 新建公告 / 强读预览）
  * 共用同一套骨架。本组件只管这些**固定骨架**，字段（理由框 / 数字 / 选择器 / 表单）与载荷构造
  * 由调用方经默认插槽和 @confirm 保留，差异不外泄。footer 需要多按钮时用 #footer 覆盖，
  * 完全不需要 footer 时传 hideFooter。
  *
- * Enter 规则：TEXTAREA 内的 Enter 是换行，必须放行；其余元素按 Enter 等同点确认。
- * 有多个提交目标（如裁决的同意/驳回）或不走「单确认」流程（如公告表单）时传 enter-to-confirm=false。
+ * Enter 规则：有**原生语义**的元素（textarea 换行、下拉展开、日期/数字提交、勾选、按钮自带点击）
+ * 放行，其余元素按 Enter 等同点确认。有多个提交目标（如裁决的同意/驳回）或不走「单确认」流程
+ * （如公告表单）时传 enter-to-confirm=false。
  */
 const props = withDefaults(
   defineProps<{
     open: boolean
     title: string
-    width?: string
+    /** 面板宽度类；常规表单 480px，宽内容（强读预览）720px */
+    panelClass?: string
     submitting?: boolean
     confirmText?: string
     cancelText?: string
@@ -30,7 +33,7 @@ const props = withDefaults(
     hideFooter?: boolean
   }>(),
   {
-    width: '480px',
+    panelClass: 'max-w-[480px]',
     submitting: false,
     confirmText: '确认',
     cancelText: '取消',
@@ -43,11 +46,6 @@ const props = withDefaults(
 
 const emit = defineEmits<{ close: []; confirm: [] }>()
 
-/**
- * 这些元素上按 Enter 有**原生语义**（textarea 换行、下拉展开、日期/数字提交、勾选、按钮自带点击），
- * 不能当成「确认」——否则 Enter 会同时触发控件行为与提交（此前只放行了 TEXTAREA，
- * 含下拉/日期控件的弹窗需要各自显式关掉 enterToConfirm 才能避免冲突）。
- */
 const ENTER_NATIVE_TAGS = new Set(['TEXTAREA', 'SELECT', 'BUTTON', 'A'])
 const ENTER_NATIVE_INPUT_TYPES = new Set(['date', 'datetime-local', 'number', 'checkbox', 'radio', 'file'])
 
@@ -71,34 +69,34 @@ function handleEnter(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <el-dialog
-    :model-value="open"
-    :title="title"
-    :width="width"
-    @update:model-value="emit('close')"
+  <ModalShell
+    :open="props.open"
+    :label="props.title"
+    :dismissible="!props.submitting"
+    :panel-class="props.panelClass"
+    @close="emit('close')"
   >
-    <div @keydown.enter="handleEnter">
+    <h2 class="text-sm font-semibold text-ink">{{ props.title }}</h2>
+
+    <div class="mt-4" @keydown.enter="handleEnter">
       <slot />
     </div>
 
-    <template v-if="!hideFooter && $slots.footer" #footer>
-      <slot name="footer" />
-    </template>
-    <template v-else-if="!hideFooter" #footer>
-      <div class="flex justify-end gap-2">
-        <BaseButton variant="ghost" size="sm" :disabled="submitting" @click="emit('close')">
-          {{ cancelText }}
+    <div v-if="!props.hideFooter" class="mt-5 flex justify-end gap-2">
+      <slot name="footer">
+        <BaseButton variant="ghost" size="sm" :disabled="props.submitting" @click="emit('close')">
+          {{ props.cancelText }}
         </BaseButton>
         <BaseButton
-          :variant="confirmVariant"
+          :variant="props.confirmVariant"
           size="sm"
-          :loading="submitting"
-          :disabled="confirmDisabled"
+          :loading="props.submitting"
+          :disabled="props.confirmDisabled"
           @click="emit('confirm')"
         >
-          {{ confirmText }}
+          {{ props.confirmText }}
         </BaseButton>
-      </div>
-    </template>
-  </el-dialog>
+      </slot>
+    </div>
+  </ModalShell>
 </template>

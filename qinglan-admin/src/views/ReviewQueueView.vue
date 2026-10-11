@@ -8,6 +8,9 @@ import QueueTable from '@/components/admin/QueueTable.vue'
 import ReviewActionBar from '@/components/admin/ReviewActionBar.vue'
 import ReviewContextPanel from '@/components/admin/ReviewContextPanel.vue'
 import WorkbenchList from '@/components/admin/WorkbenchList.vue'
+import BaseMultiSelect from '@/components/base/BaseMultiSelect.vue'
+import BaseSelect from '@/components/base/BaseSelect.vue'
+import BaseSwitch from '@/components/base/BaseSwitch.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
@@ -22,7 +25,7 @@ import { useReviewActions } from '@/composables/useReviewActions'
 import { useReviewContext } from '@/composables/useReviewContext'
 import { useReviewQueue } from '@/composables/useReviewQueue'
 import { useRowKeyboardNav } from '@/composables/useRowKeyboardNav'
-import type { ReviewTargetType } from '@shared/types/review-common'
+import type { ReportReason, ReviewTargetType } from '@shared/types/review-common'
 import {
   createQueueFilters,
   REPORT_REASONS,
@@ -81,6 +84,31 @@ const targetTypeFilter = computed<string>({
 const SORT_OPTIONS: { value: ReviewQueueSort; label: string }[] = [
   { value: 'REPORT_COUNT_DESC', label: '举报数优先' },
   { value: 'FIRST_REPORTED_ASC', label: '等得最久优先' },
+]
+
+/** 下拉 / 分段控件用字符串，与联合类型互转集中在此，模板不各转一遍 */
+const sortModel = computed<string>({
+  get: () => filters.value.sort,
+  set: (value) => {
+    filters.value.sort = value as ReviewQueueSort
+  },
+})
+const reasonFilter = computed<string[]>({
+  get: () => filters.value.reasons,
+  set: (value) => {
+    filters.value.reasons = value as ReportReason[]
+  },
+})
+
+/** 选项：文案走 useUserLabels 的统一中文映射，不在模板里散落 */
+const REASON_OPTIONS = REPORT_REASONS.map((reason) => ({
+  value: reason,
+  label: reportReasonLabel(reason),
+}))
+const TARGET_TYPE_OPTIONS = [
+  { value: '', label: '全部类型' },
+  { value: 'POST', label: targetTypeLabel('POST') },
+  { value: 'COMMENT', label: targetTypeLabel('COMMENT') },
 ]
 
 /** 重置筛选并重查（回到第一页）；watch 会接管刷新，这里直接改表单值即可 */
@@ -342,46 +370,33 @@ async function handleDismiss(reason: string): Promise<void> {
          本页仍是「改动即重查」（见下方 watch），故只放「重置」不放「查询」 -->
     <form class="ql-card flex flex-wrap items-end gap-3 p-4" @submit.prevent="refresh">
       <FormField label="举报理由">
-        <el-select
-          v-model="filters.reasons"
-          multiple
-          collapse-tags
+        <BaseMultiSelect
+          v-model="reasonFilter"
           class="w-[280px]"
+          :options="REASON_OPTIONS"
           placeholder="全部理由"
-        >
-          <el-option
-            v-for="reason in REPORT_REASONS"
-            :key="reason"
-            :label="reportReasonLabel(reason)"
-            :value="reason"
-          />
-        </el-select>
+          aria-label="举报理由筛选"
+        />
       </FormField>
 
       <FormField label="目标类型">
-        <el-select v-model="targetTypeFilter" class="w-[160px]" placeholder="全部">
-          <el-option label="全部类型" value="" />
-          <el-option :label="targetTypeLabel('POST')" value="POST" />
-          <el-option :label="targetTypeLabel('COMMENT')" value="COMMENT" />
-        </el-select>
+        <BaseSelect
+          v-model="targetTypeFilter"
+          class="w-[160px]"
+          :options="TARGET_TYPE_OPTIONS"
+          aria-label="目标类型筛选"
+        />
       </FormField>
 
       <FormField label="排序">
-        <el-select v-model="filters.sort" class="w-[160px]">
-          <el-option
-            v-for="option in SORT_OPTIONS"
-            :key="option.value"
-            :label="option.label"
-            :value="option.value"
-          />
-        </el-select>
+        <BaseSelect v-model="sortModel" class="w-[160px]" :options="SORT_OPTIONS" aria-label="排序方式" />
       </FormField>
 
-      <!-- 与控件同高（h-8）后按 items-end 对齐，取代原先靠 pb-* 硬凑基线 -->
-      <label class="flex h-8 items-center gap-2">
-        <el-switch v-model="filters.overdueOnly" />
+      <!-- 与控件同高（h-8）后按 items-end 对齐 -->
+      <div class="flex h-8 items-center gap-2">
+        <BaseSwitch v-model="filters.overdueOnly" aria-label="只看超时" />
         <span class="text-sm text-ink">只看超时</span>
-      </label>
+      </div>
 
       <BaseButton variant="ghost" size="sm" @click="resetFilters">重置</BaseButton>
     </form>

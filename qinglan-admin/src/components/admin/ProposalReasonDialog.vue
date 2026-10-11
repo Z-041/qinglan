@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
+import BaseSelect from '@/components/base/BaseSelect.vue'
+import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { ReportReason } from '@shared/types/review-common'
@@ -38,6 +40,17 @@ const { reportReasonLabel } = useUserLabels()
 const reasonCode = ref<ReportReason>('ABUSE')
 const detail = ref('')
 
+/** 下拉控件用字符串；ReportReason 是字符串字面量联合，进出各转一次，集中在此 */
+const reasonModel = computed<string>({
+  get: () => reasonCode.value,
+  set: (value) => {
+    reasonCode.value = value as ReportReason
+  },
+})
+
+/** 选项：文案走统一的中文映射（useUserLabels），不在模板里散落 */
+const REASON_OPTIONS = REASONS.map((reason) => ({ value: reason, label: reportReasonLabel(reason) }))
+
 // 每次打开都回到初始态，避免上一轮的选择残留到下一次提案
 watch(
   () => props.open,
@@ -70,18 +83,11 @@ function handleSubmit(): void {
   >
     <div class="flex flex-col gap-4">
       <FormField label="违规类型">
-        <el-select v-model="reasonCode" class="w-full">
-          <el-option
-            v-for="reason in REASONS"
-            :key="reason"
-            :label="reportReasonLabel(reason)"
-            :value="reason"
-          />
-        </el-select>
+        <BaseSelect v-model="reasonModel" :options="REASON_OPTIONS" />
       </FormField>
 
       <FormField label="补充说明" hint="可选，会随理由展示给作者">
-        <el-input v-model="detail" type="textarea" :rows="3" :maxlength="400" placeholder="说明处置依据" />
+        <BaseTextarea v-model="detail" :rows="3" :maxlength="400" placeholder="说明处置依据" />
       </FormField>
     </div>
   </DialogShell>

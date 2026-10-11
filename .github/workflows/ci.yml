@@ -106,8 +106,6 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Lint
         run: pnpm lint
-      # 用各包自己的 typecheck 脚本（qinglan-admin 的 ElMessageBox 等自动导入声明已入库，
-      # 否则新克隆的仓库首次 typecheck 会报 TS2304）
       - name: Type check
         run: pnpm typecheck
       - name: Unit tests

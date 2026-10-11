@@ -37,7 +37,5 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['src/**/*.spec.ts'],
-    // 拆分后学生端不再依赖 Element Plus，原先为解析其 .css 而设的
-    // `server.deps.inline: ['element-plus']` 已删除（element-plus 由 qinglan-admin 安装）
   },
 })

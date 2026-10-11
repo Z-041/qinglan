@@ -3,6 +3,7 @@ import { computed } from 'vue'
 
 import CountBadge from '@shared/components/base/CountBadge.vue'
 import BaseIcon from '@shared/components/base/BaseIcon.vue'
+import BasePopover from '@/components/base/BasePopover.vue'
 import type { TodoGroup } from '@/composables/useTodoCounts'
 
 const props = defineProps<{
@@ -17,15 +18,17 @@ const total = computed(() => props.groups.reduce((sum, group) => sum + group.cou
 </script>
 
 <template>
-  <el-popover trigger="click" placement="bottom-end" :width="210">
-    <!-- 轮询会让总数变化：视觉隐藏的 live region 负责把变化播报给屏幕阅读器；
-         按钮自身的 aria-label 也带数量，保证聚焦时读到的是完整语义 -->
-    <span class="sr-only" aria-live="polite">{{ total > 0 ? `待办提醒，${total} 项待处理` : '' }}</span>
-    <template #reference>
+  <BasePopover :width="210">
+    <template #trigger="{ toggle }">
+      <!-- 轮询会让总数变化：视觉隐藏的 live region 负责把变化播报给屏幕阅读器；
+           按钮自身的 aria-label 也带数量，保证聚焦时读到的是完整语义。
+           live region 放在常驻的触发器内（而非弹出内容里），弹层未打开时也能播报 -->
+      <span class="sr-only" aria-live="polite">{{ total > 0 ? `待办提醒，${total} 项待处理` : '' }}</span>
       <button
         type="button"
         class="relative flex cursor-pointer items-center rounded-lg px-2 py-1.5 text-muted transition hover:bg-primary-tint hover:text-ink"
         :aria-label="total > 0 ? `待办提醒，${total} 项待处理` : '待办提醒，暂无待办'"
+        @click="toggle"
       >
         <!-- 铃铛图标与角标统一走 shared BaseIcon / CountBadge（currentColor 着色，不硬编码色值） -->
         <BaseIcon name="bell" class="size-5" />
@@ -51,5 +54,5 @@ const total = computed(() => props.groups.reduce((sum, group) => sum + group.cou
         </button>
       </li>
     </ul>
-  </el-popover>
+  </BasePopover>
 </template>

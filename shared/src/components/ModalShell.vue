@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-import { useFocusTrap } from '@/composables/useFocusTrap'
+import { useFocusTrap } from '@shared/composables/useFocusTrap'
 
 /**
- * 学生端自绘弹层的统一外壳：全屏遮罩 + 居中面板 + ESC / 遮罩关闭 + 焦点陷阱。
+ * 自绘弹层的统一外壳：全屏遮罩 + 居中面板 + ESC / 遮罩关闭 + 焦点陷阱。双端共用
+ * （学生端 ReportDialog / ConfirmDialog、管理端各处置弹窗）。
  *
- * 举报弹窗与删除评论确认此前各写一份同样的遮罩/ESC/焦点代码（AGENTS.md 要求超过 3 处
- * 重复即抽；这是第 2、3 处，提前收口避免继续漂移）。公告弹窗不走这里——它是强读单例，
- * 遮罩 / ESC / 返回键都不关闭，语义不同。
+ * 学生端的举报弹窗与删除评论确认此前各写一份同样的遮罩/ESC/焦点代码（AGENTS.md 要求超过 3 处
+ * 重复即抽）；公告弹窗不走这里——它是强读单例，遮罩 / ESC / 返回键都不关闭，语义不同。
  *
  * z 轴分层：页头 z-header < 本弹层 z-overlay < 公告 z-announcement < 全局提示 z-toast
- * （完整口径见 shared/uno.config.ts）。窄屏贴底（max-sm:items-end）是学生端的既有习惯。
+ * （完整口径见 shared/uno.base.ts）。窄屏贴底（max-sm:items-end）是学生端的既有习惯，
+ * 管理端仅支持 PC，不受影响。
  */
 const props = withDefaults(
   defineProps<{
@@ -25,8 +26,10 @@ const props = withDefaults(
     dismissible?: boolean
     /** 面板宽度类（默认 max-w-md）；窄确认框传 max-w-sm */
     panelClass?: string
+    /** 面板附加类（如管理端的固定宽度 / 高度上限） */
+    panelExtraClass?: string
   }>(),
-  { dismissible: true, panelClass: 'max-w-md' },
+  { dismissible: true, panelClass: 'max-w-md', panelExtraClass: '' },
 )
 
 const emit = defineEmits<{ close: [] }>()
@@ -49,7 +52,10 @@ useFocusTrap(dialogRef, () => props.open)
     @click.self="props.dismissible && emit('close')"
     @keydown.escape="props.dismissible && emit('close')"
   >
-    <div class="w-full rounded-xl border border-line bg-surface p-4 shadow-xl" :class="props.panelClass">
+    <div
+      class="w-full rounded-xl border border-line bg-surface p-4 shadow-xl"
+      :class="[props.panelClass, props.panelExtraClass]"
+    >
       <slot />
     </div>
   </div>

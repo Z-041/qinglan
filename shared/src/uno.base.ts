@@ -38,12 +38,11 @@ export const theme = {
   },
   /**
    * z 轴分层：全站唯一口径，优先级从低到高
-   *   页头 header 50 < 学生端弹层 overlay 900 < 强制阅读公告 announcement 950
-   *   < **Element Plus 弹层与遮罩 2000+** < 全局提示 toast 3000
+   *   页头 header 50 < 弹层 overlay 900 < 强制阅读公告 announcement 950 < 全局提示 toast 3000
    *
-   * Element Plus 的 `defaultInitialZIndex` 是 2000（每开一个新弹层递增），所以全局提示
-   * **必须高于 2000**：否则管理端在 el-dialog 里发起请求失败时，错误提示会被遮罩压在下面
-   * ——既看不清也点不掉，而按 AGENTS.md 第七章的错误唯一出口约定，页面不会内联渲染这段文案。
+   * 双端的弹层（学生端 / 管理端的 ModalShell、管理端 BaseDrawer）都走 z-overlay，
+   * 全局提示**必须高于它**：否则弹层里发起请求失败时，错误提示会被遮罩压在下面——既看不清也
+   * 点不掉，而按 AGENTS.md 第七章的错误唯一出口约定，页面不会内联渲染这段文案。3000 留足余量。
    */
   zIndex: {
     header: '50',

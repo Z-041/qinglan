@@ -4,12 +4,6 @@ import { describe, expect, it } from 'vitest'
 import ReviewContextPanel from '@/components/admin/ReviewContextPanel.vue'
 import type { AdminReviewContext, AdminReviewHistory } from '@/types/review'
 
-/** 抽屉走 Teleport，单测换成直接渲染内容的桩 */
-const ElDrawerStub = {
-  props: ['modelValue', 'title'],
-  template: '<div v-if="modelValue"><slot /></div>',
-}
-
 function context(): AdminReviewContext {
   return {
     targetType: 'POST',
@@ -37,7 +31,6 @@ function history(): AdminReviewHistory {
 function mountPanel(props: Record<string, unknown>) {
   return mount(ReviewContextPanel, {
     props: { open: true, context: context(), history: history(), ...props },
-    global: { stubs: { ElDrawer: ElDrawerStub } },
   })
 }
 
@@ -80,5 +73,9 @@ describe('ReviewContextPanel', () => {
 
     expect(wrapper.text()).toContain('暂无近期动态')
     expect(wrapper.text()).toContain('暂无处置记录')
+  })
+
+  it('open 为 false 时抽屉不渲染', () => {
+    expect(mountPanel({ open: false }).find('[role="dialog"]').exists()).toBe(false)
   })
 })

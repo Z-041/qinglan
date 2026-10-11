@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
-import ModalShell from '@/components/ModalShell.vue'
+import ModalShell from '@shared/components/ModalShell.vue'
 import TextButton from '@/components/TextButton.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
 import type { ReportReason } from '@shared/types/review-common'

@@ -1,24 +1,10 @@
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import { nextTick } from 'vue'
 
 import AppealReviewDialog from '@/components/admin/AppealReviewDialog.vue'
 
-/**
- * el-dialog 走 Teleport 且懒渲染，单测里换成桩。桩**必须保留 modelValue / update:modelValue**
- * 这条唯一通道：整体 stub 掉而丢掉它，就会出现「测试全绿、线上弹窗关不掉」的盲区。
- */
-const ElDialogStub = {
-  props: ['modelValue'],
-  emits: ['update:modelValue'],
-  template: '<div><slot /><slot name="footer" /></div>',
-}
-
 function mountDialog() {
-  return mount(AppealReviewDialog, {
-    props: { open: true },
-    global: { stubs: { ElDialog: ElDialogStub } },
-  })
+  return mount(AppealReviewDialog, { props: { open: true } })
 }
 
 function buttonByText(wrapper: VueWrapper, text: string): DOMWrapper<HTMLButtonElement> {
@@ -79,14 +65,10 @@ describe('AppealReviewDialog', () => {
     expect(wrapper.emitted('submit')?.[0]).toEqual([false, '维持原判'])
   })
 
-  it('把 open 透传给 el-dialog，并响应它抛出的关闭事件', async () => {
+  it('点取消抛出 close', async () => {
     const wrapper = mountDialog()
-    const dialog = wrapper.findComponent(ElDialogStub)
 
-    expect(dialog.props('modelValue')).toBe(true)
-
-    dialog.vm.$emit('update:modelValue', false)
-    await nextTick()
+    await buttonByText(wrapper, '取消').trigger('click')
 
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
@@ -94,7 +76,6 @@ describe('AppealReviewDialog', () => {
   it('打开时按 initialApproved 预置结论（快捷键 2 = 维持原判）', async () => {
     const wrapper = mount(AppealReviewDialog, {
       props: { open: false, initialApproved: false },
-      global: { stubs: { ElDialog: ElDialogStub } },
     })
     await wrapper.setProps({ open: true })
     await wrapper.get('textarea').setValue('依据不足')

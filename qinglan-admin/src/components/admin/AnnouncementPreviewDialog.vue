@@ -70,7 +70,7 @@ const closeLabel = computed(() =>
   <DialogShell
     :open="props.open"
     title="学生视角强读预览"
-    width="720px"
+    panel-class="max-w-[720px]"
     hide-footer
     :enter-to-confirm="false"
     @close="emit('close')"

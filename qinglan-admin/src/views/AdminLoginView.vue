@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
 import BaseIcon from '@shared/components/base/BaseIcon.vue'
+import BaseInput from '@shared/components/base/BaseInput.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import { useAuth } from '@shared/composables/useAuth'
 import { useCodeCooldown } from '@shared/composables/useCodeCooldown'
@@ -88,7 +89,7 @@ async function handleVerify(): Promise<void> {
 
       <form v-if="step === 'email'" class="mt-6 flex flex-col gap-4" @submit.prevent="handleSendCode">
         <FormField label="校园邮箱" hint="使用管理员账号绑定的校园邮箱">
-          <el-input
+          <BaseInput
             v-model="email"
             name="email"
             type="email"
@@ -112,7 +113,7 @@ async function handleVerify(): Promise<void> {
           本地联调验证码：<span class="font-semibold tracking-wide">{{ devCode }}</span>
         </p>
         <FormField label="验证码">
-          <el-input
+          <BaseInput
             v-model="code"
             name="code"
             inputmode="numeric"

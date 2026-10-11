@@ -1,9 +1,9 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { ElMessageBox } from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { fetchAdminMe } from '@/api/admin'
 import { approvePost, fetchAdminPendingPosts, fetchAdminReviewContext, rejectPost } from '@/api/review'
+import { resolveMessageBox } from '@/composables/useMessageBox'
 import { usePermissions } from '@/composables/usePermissions'
 import PendingPostQueueView from '@/views/PendingPostQueueView.vue'
 import type { AdminPermission } from '@/types/permission'
@@ -22,17 +22,6 @@ const mockedFetchAdminPendingPosts = vi.mocked(fetchAdminPendingPosts)
 const mockedFetchAdminReviewContext = vi.mocked(fetchAdminReviewContext)
 const mockedApprovePost = vi.mocked(approvePost)
 const mockedRejectPost = vi.mocked(rejectPost)
-
-const ElDialogStub = {
-  props: ['modelValue', 'title'],
-  emits: ['update:modelValue'],
-  template: '<div v-if="modelValue" class="el-dialog-stub"><slot /><slot name="footer" /></div>',
-}
-const ElDrawerStub = {
-  props: ['modelValue'],
-  emits: ['update:modelValue'],
-  template: '<div v-if="modelValue" class="el-drawer-stub"><slot /></div>',
-}
 
 function pendingPost(overrides: Partial<AdminPendingPostItem> = {}): AdminPendingPostItem {
   return {
@@ -64,9 +53,7 @@ async function mountView(permissions: AdminPermission[] = ['MODERATION_VIEW', 'P
   mockedFetchAdminMe.mockResolvedValue({ userId: 1, role: 'REVIEWER', permissions })
   await usePermissions().load()
 
-  const wrapper = mount(PendingPostQueueView, {
-    global: { stubs: { ElDialog: ElDialogStub, ElDrawer: ElDrawerStub } },
-  })
+  const wrapper = mount(PendingPostQueueView)
   await flushPromises()
   return wrapper
 }
@@ -94,8 +81,8 @@ describe('PendingPostQueueView 键盘与快捷键', () => {
   afterEach(() => {
     wrapper?.unmount()
     wrapper = undefined
-    // 清掉可能残留的理由弹窗
-    ElMessageBox.close()
+    // 清掉可能残留的理由弹窗（单例状态），避免泄漏到下一条用例
+    resolveMessageBox(false)
   })
 
   it('行焦点：↑ 聚焦首行后面板自动加载', async () => {
@@ -104,7 +91,7 @@ describe('PendingPostQueueView 键盘与快捷键', () => {
     await focusFirstRow(wrapper)
 
     expect(mockedFetchAdminReviewContext).toHaveBeenCalledWith('POST', 5)
-    expect(wrapper.find('.el-drawer-stub').exists()).toBe(true)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
   })
 
   it('快捷键按键随本页动作集渲染：只有 1 通过 / 2 驳回', async () => {

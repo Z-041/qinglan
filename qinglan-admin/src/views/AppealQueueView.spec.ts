@@ -21,12 +21,6 @@ const mockedFetchAdminAppeals = vi.mocked(fetchAdminAppeals)
 const mockedAcceptAppeal = vi.mocked(acceptAppeal)
 const mockedRejectAppeal = vi.mocked(rejectAppeal)
 
-const ElDialogStub = {
-  props: ['modelValue', 'title'],
-  emits: ['update:modelValue'],
-  template: '<div v-if="modelValue" class="el-dialog-stub"><slot /><slot name="footer" /></div>',
-}
-
 function appeal(overrides: Partial<AdminAppealItem> = {}): AdminAppealItem {
   return {
     appealId: 11,
@@ -45,9 +39,7 @@ async function mountView(permissions: AdminPermission[] = ['MODERATION_VIEW', 'A
   mockedFetchAdminMe.mockResolvedValue({ userId: 1, role: 'REVIEWER', permissions })
   await usePermissions().load()
 
-  const wrapper = mount(AppealQueueView, {
-    global: { stubs: { ElDialog: ElDialogStub } },
-  })
+  const wrapper = mount(AppealQueueView)
   await flushPromises()
   return wrapper
 }
@@ -92,7 +84,7 @@ describe('AppealQueueView 键盘与快捷键', () => {
     await section.trigger('keydown', { key: '1' })
     await flushPromises()
 
-    expect(wrapper.find('.el-dialog-stub').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
   })
 
   it('「1 通过申诉」先打开弹窗并预置「通过」，不直接执行', async () => {
@@ -126,7 +118,7 @@ describe('AppealQueueView 键盘与快捷键', () => {
     await section.trigger('keydown', { key: '1' })
     await flushPromises()
 
-    expect(wrapper.find('.el-dialog-stub').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
   })
 
   it('弹窗提交后按结论调用接口并刷新队列（连续处置：焦点留待下一条）', async () => {
@@ -139,7 +131,7 @@ describe('AppealQueueView 键盘与快捷键', () => {
     await flushPromises()
 
     expect(mockedRejectAppeal).toHaveBeenCalledWith(11, { reason: '依据不足' })
-    expect(wrapper.find('.el-dialog-stub').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     expect(mockedFetchAdminAppeals).toHaveBeenCalledTimes(2)
   })
 })

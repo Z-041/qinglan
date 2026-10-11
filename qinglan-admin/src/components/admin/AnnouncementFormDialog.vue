@@ -3,8 +3,13 @@ import { computed, ref, watch } from 'vue'
 
 import AnnouncementPreviewDialog from '@/components/admin/AnnouncementPreviewDialog.vue'
 import DialogShell from '@/components/admin/DialogShell.vue'
+import BaseCheckbox from '@/components/base/BaseCheckbox.vue'
+import BaseDateTimeInput from '@/components/base/BaseDateTimeInput.vue'
+import BaseSelect from '@/components/base/BaseSelect.vue'
 import { toInstantOrNull } from '@/composables/datetime'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import BaseInput from '@shared/components/base/BaseInput.vue'
+import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import type { AnnouncementLevel, CreateAnnouncementPayload } from '@/types/admin'
 import { ANNOUNCEMENT_LEVEL_LABELS } from '@/types/admin'
@@ -24,13 +29,14 @@ const MAX_READ_SECONDS = 60
 const DEFAULT_MIN_READ_SECONDS = 5
 
 const LEVELS: AnnouncementLevel[] = ['URGENT', 'NORMAL', 'ACTIVITY']
+const LEVEL_OPTIONS = LEVELS.map((value) => ({ value, label: ANNOUNCEMENT_LEVEL_LABELS[value] }))
 
 const title = ref('')
 const content = ref('')
 const level = ref<AnnouncementLevel>('NORMAL')
-/** el-date-picker 清空时置 null，故类型含 null（toInstantOrNull 已容忍） */
-const startAt = ref<string | null>(null)
-const endAt = ref<string | null>(null)
+/** 原生 datetime-local 的值（本地时间，形如 2026-10-01T08:00），空串表示未填 */
+const startAt = ref('')
+const endAt = ref('')
 const minReadSeconds = ref('')
 const requireScrollToEnd = ref(false)
 const requireConfirm = ref(false)
@@ -44,8 +50,8 @@ watch(
       title.value = ''
       content.value = ''
       level.value = 'NORMAL'
-      startAt.value = null
-      endAt.value = null
+      startAt.value = ''
+      endAt.value = ''
       minReadSeconds.value = ''
       requireScrollToEnd.value = false
       requireConfirm.value = false
@@ -55,9 +61,8 @@ watch(
 )
 
 /**
- * 秒数用 el-input（v-model 天然给字符串）；时间用 el-date-picker（v-model 给字符串或 null）。
- * 原先为绕过原生 type="number" / datetime-local 的 v-model 类型漂移而写的
- * `:value + @input` 收敛函数已不需要，随之删除。
+ * 秒数用 BaseInput（v-model 天然给字符串）；时间用 BaseDateTimeInput（原生 datetime-local，值形如
+ * 2026-10-01T08:00 的本地时间串，空串表示未填）。
  */
 const minReadValue = computed(() => Number(minReadSeconds.value))
 /** 留空表示用后端默认，视为合法；填了必须是 0–60 的整数 */
@@ -82,11 +87,19 @@ const periodValid = computed(() => {
   return new Date(end).getTime() > new Date(start).getTime()
 })
 
+/** 下拉控件用字符串；AnnouncementLevel 是字符串字面量联合，进出各转一次 */
+const levelModel = computed<string>({
+  get: () => level.value,
+  set: (value) => {
+    level.value = value as AnnouncementLevel
+  },
+})
+
 const canSubmit = computed(
   () =>
     title.value.trim().length > 0 &&
     content.value.trim().length > 0 &&
-    startAt.value !== null &&
+    startAt.value.trim().length > 0 &&
     minReadValid.value &&
     periodValid.value,
 )
@@ -131,53 +144,27 @@ function handleSubmit(): void {
   >
     <div class="flex flex-col gap-4">
       <FormField label="标题">
-        <el-input v-model="title" :maxlength="100" placeholder="一句话说明这条公告" />
+        <BaseInput v-model="title" :maxlength="100" placeholder="一句话说明这条公告" />
       </FormField>
 
       <FormField label="正文">
-        <el-input
-          v-model="content"
-          type="textarea"
-          :rows="5"
-          :maxlength="5000"
-          placeholder="公告正文"
-        />
+        <BaseTextarea v-model="content" :rows="5" :maxlength="5000" placeholder="公告正文" />
       </FormField>
 
       <FormField label="等级">
-        <el-select v-model="level" class="w-full">
-          <el-option
-            v-for="value in LEVELS"
-            :key="value"
-            :label="ANNOUNCEMENT_LEVEL_LABELS[value]"
-            :value="value"
-          />
-        </el-select>
+        <BaseSelect v-model="levelModel" :options="LEVEL_OPTIONS" />
       </FormField>
 
       <div class="grid grid-cols-2 gap-3">
         <FormField label="生效开始">
-          <el-date-picker
-            v-model="startAt"
-            type="datetime"
-            class="w-full"
-            value-format="YYYY-MM-DD[T]HH:mm:ss"
-            placeholder="选择生效时间"
-          />
+          <BaseDateTimeInput v-model="startAt" aria-label="生效开始时间" />
         </FormField>
         <FormField
           label="生效结束"
           :hint="periodValid ? '留空表示长期有效' : ''"
           :error="periodValid ? '' : '结束时间必须晚于开始时间'"
         >
-          <el-date-picker
-            v-model="endAt"
-            type="datetime"
-            class="w-full"
-            :class="{ 'ql-field-error': !periodValid }"
-            value-format="YYYY-MM-DD[T]HH:mm:ss"
-            placeholder="留空表示长期有效"
-          />
+          <BaseDateTimeInput v-model="endAt" :invalid="!periodValid" aria-label="生效结束时间" />
         </FormField>
       </div>
 
@@ -186,9 +173,9 @@ function handleSubmit(): void {
         :hint="minReadValid ? `留空使用后端默认；填写须为 ${MIN_READ_SECONDS}–${MAX_READ_SECONDS} 的整数` : ''"
         :error="minReadValid ? '' : `请输入 ${MIN_READ_SECONDS}–${MAX_READ_SECONDS} 的整数`"
       >
-        <el-input
+        <BaseInput
           v-model="minReadSeconds"
-          :class="{ 'ql-field-error': !minReadValid }"
+          :invalid="!minReadValid"
           inputmode="numeric"
           placeholder="留空使用后端默认"
         />
@@ -197,8 +184,8 @@ function handleSubmit(): void {
       <!-- 分组用 fieldset/legend（与申诉复审弹窗同口径），不用裸 span 当组标题 -->
       <fieldset class="flex flex-col gap-2">
         <legend class="ql-label">强制方式</legend>
-        <el-checkbox v-model="requireScrollToEnd">需滚动到底</el-checkbox>
-        <el-checkbox v-model="requireConfirm">需勾选「已了解」</el-checkbox>
+        <BaseCheckbox v-model="requireScrollToEnd">需滚动到底</BaseCheckbox>
+        <BaseCheckbox v-model="requireConfirm">需勾选「已了解」</BaseCheckbox>
       </fieldset>
     </div>
 

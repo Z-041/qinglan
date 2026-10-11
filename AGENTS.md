@@ -39,14 +39,15 @@ qinglan-web/             学生端 Vue 3 + TS + Vite + UnoCSS
     ├── styles/          学生端专属样式（全局变量在 shared）
     └── types/           接口类型（仅学生端）
 
-qinglan-admin/           管理端 Vue 3 + TS + Vite + UnoCSS + Element Plus（仅 PC）
+qinglan-admin/           管理端 Vue 3 + TS + Vite + UnoCSS（仅 PC；组件全自研，不引第三方组件库）
   src/
     ├── api/             管理端接口封装（admin.ts、review.ts、proposals.ts 的管理端部分）
-    ├── components/admin/ 管理端组件
+    ├── components/admin/ 管理端业务组件
+    ├── components/base/  管理端自研基础控件（Checkbox/Switch/Select/Segmented/Tabs/Drawer/Popover/DateTimeInput/MultiSelect/MessageBoxHost）
     ├── composables/     管理端业务逻辑复用（含纯逻辑模块 reviewActionFlow / reviewActionSet / rolePolicy）
     ├── router/          路由与「菜单→权限点」映射（navItems.ts）
     ├── views/           后台页面（AdminLayout / 登录 / 看板 / 队列 / 申诉 / 用户 / 公告 / 权限 / 审计）
-    ├── styles/          Element Plus 主题变量映射
+    ├── styles/          管理端专属样式（全局变量在 shared）
     └── types/           管理端类型（admin.ts、review.ts、proposal.ts、permission.ts）
 
 shared/                  两端共享（以源码形式经 `@shared/*` 别名引入，不产出构建产物）
@@ -122,7 +123,7 @@ Controller  →  Service  →  Repository  →  DB
 - `stores/` 只存用户态、未读计数、草稿箱；**不得**写业务规则
 - 可复用逻辑抽 `composables/`，命名 `useXxx`；**纯逻辑（无响应式）也放 `composables/`**（如 `reviewActionFlow.ts`、`rolePolicy.ts`、`reviewActionSet.ts`），超过 3 处重复的 UI 抽组件
 - 基础 UI 组件放 `shared/src/components/base/`：只管外观与交互（props down / events up），不含业务语义，学生端与管理端共用
-- 管理端页面（P3 起）放 `qinglan-admin/src/views/`，使用 Element Plus，仅面向 PC，不做移动适配
+- 管理端页面（P3 起）放 `qinglan-admin/src/views/`，仅面向 PC，不做移动适配；控件一律取自 `qinglan-admin/src/components/base/` 的自研基础件（或 `shared/src/components/base/`），不引第三方组件库
 - **判断某个文件归谁，按「谁在用」而不是「原来在哪个文件」**：双端都用的进 `shared`（如 `useUserLabels` 依赖的 `ReportReason` / `ReviewTargetType`），只有单端用的留在该应用（如 `ReasonPayload` 只被管理端使用）
 
 ### 前后端接口边界
@@ -186,7 +187,7 @@ Skill 由**全局安装**提供（仓库内不再保留 `coding-skills/` 副本�
 - **派生用 `computed`**，副作用放 `watch`；`computed` getter 内禁止修改状态、发请求
 - **列表**：`v-for` 必带稳定 `:key`（用 id，不用 index）；禁止 `v-if` 与 `v-for` 同元素
 - **样式**：一律用 **UnoCSS** 原子类（`presetWind3`）；主题语义色（`primary`/`surface`/`line`/`ink`/`muted`/`danger`…）在 `uno.config.ts` 映射到 `styles/main.css` 的 CSS 变量，禁止硬编码色值。`<style>` 仅用于原子类难以表达的少量逻辑（过渡动画、`@keyframes`），且必须 `scoped`、用 class 选择器
-- **组件库**：学生端一律用 `components/base/` 自研基础组件（PC 为主、兼容移动端）；管理端（P3 起）用 Element Plus + UnoCSS，**仅支持 PC**
+- **组件库**：学生端一律用 `shared/src/components/base/` 自研基础组件（PC 为主、兼容移动端）；管理端（P3 起）用 `qinglan-admin/src/components/base/` 自研基础件 + UnoCSS，**仅支持 PC**，两端都不引第三方组件库
 - **布局**：PC 为主、兼容移动端；**基线样式即 PC 版**（≥1024px），窄屏用 `max-sm:` / `max-lg:` 收窄，不用 `sm:` / `lg:` 逐级增强；首页内容宽 1200px、用 `ql-shell` 限宽居中，其余学生端页面沿用 `ql-container`（720px）；分界断点 `lg:`（1024px）；不写死像素宽度；列表/卡片流用 flex/grid 原子类
 - **全局组件的容器宽度**（顶部导航等）：必须与所在页面的内容容器一致，且由**同一个判断**驱动（见 `App.vue` 的 `fullWidth`）。头部 1200px 而内容 720px 时，1440px 视口下两者左边缘会错开 232px；改这类组件前先确认它影响哪些页面，不能只按当前页面的需要写死
 - **XSS**：禁止 `v-html` 渲染用户输入；必须渲染富文本时先 DOMPurify
@@ -226,7 +227,6 @@ Skill 由**全局安装**提供（仓库内不再保留 `coding-skills/` 副本�
 - 测试用**真实** MySQL/Redis，不 mock 数据库行为：CI 里由 GitHub Actions 的 **service container** 起 `mysql:8.0` 与 `redis:7`（见 `.github/workflows/ci.yml`），本地则用 `application.yml` 指向本机 MySQL（Redis 相关用例由 `QINGLAN_REDIS_TEST` 条件开关，本机无 Redis 时自动跳过）。不用 Testcontainers
 - 禁止为了通过而删测试、放宽断言、加 `@Disabled`
 - **`vi.mock` 的路径按模块标识符拦截**：模块一旦搬到 `shared`，spec 里的 `vi.mock('@/api/xxx')` 必须同步改成 `vi.mock('@shared/api/xxx')`，否则 mock 不命中、测试会去发真请求
-- `qinglan-admin` 的 `src/auto-imports.d.ts` 与 `src/components.d.ts`（unplugin 生成、`ElMessageBox` 等自动导入声明的来源）**必须入库**，否则新克隆的仓库首次 `typecheck` 会报 `TS2304`
 
 ---
 

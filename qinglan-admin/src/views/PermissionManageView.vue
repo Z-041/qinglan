@@ -4,8 +4,10 @@ import { computed, onMounted, ref } from 'vue'
 import { changeUserRole, fetchCommittee } from '@/api/admin'
 import DataTable from '@/components/admin/DataTable.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
+import BaseSelect from '@/components/base/BaseSelect.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
+import BaseInput from '@shared/components/base/BaseInput.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import RelativeTime from '@shared/components/RelativeTime.vue'
 import { pushToast } from '@shared/composables/useToast'
@@ -32,6 +34,14 @@ const { promptReason } = useReasonPrompt()
 
 const targetUserId = ref('')
 const targetRole = ref<AssignableRole>('REVIEWER')
+
+/** 原生 <select> 只认字符串；AssignableRole 是联合类型，进出各转一次 */
+const targetRoleModel = computed<string>({
+  get: () => targetRole.value,
+  set: (value) => {
+    targetRole.value = value as AssignableRole
+  },
+})
 
 /** 在册人数由后端名单长度决定，不在前端另算——两边各算一次必然漂移 */
 const used = computed(() => members.value.filter((member) => isCommitteeRole(member.role)).length)
@@ -100,7 +110,7 @@ async function revoke(member: UserProfile): Promise<void> {
       </p>
       <div class="mt-3 flex flex-wrap items-end gap-3">
         <FormField label="目标用户 ID">
-          <el-input
+          <BaseInput
             v-model="targetUserId"
             class="w-[180px]"
             placeholder="如 1024"
@@ -109,14 +119,12 @@ async function revoke(member: UserProfile): Promise<void> {
           />
         </FormField>
         <FormField label="要授予的角色">
-          <el-select v-model="targetRole" class="w-[180px]" aria-label="要授予的角色">
-            <el-option
-              v-for="option in ASSIGNABLE_ROLE_OPTIONS"
-              :key="option.value"
-              :label="option.label"
-              :value="option.value"
-            />
-          </el-select>
+          <BaseSelect
+            v-model="targetRoleModel"
+            class="w-[180px]"
+            :options="ASSIGNABLE_ROLE_OPTIONS"
+            aria-label="要授予的角色"
+          />
         </FormField>
         <BaseButton variant="primary" size="sm" :disabled="submitting || full" @click="grant">
           授予

@@ -5,7 +5,10 @@ import BanUserDialog from '@/components/admin/BanUserDialog.vue'
 import CreditAdjustDialog from '@/components/admin/CreditAdjustDialog.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
 import UserTable from '@/components/admin/UserTable.vue'
+import BaseDateTimeInput from '@/components/base/BaseDateTimeInput.vue'
+import BaseSelect from '@/components/base/BaseSelect.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
+import BaseInput from '@shared/components/base/BaseInput.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
@@ -14,7 +17,7 @@ import { useCsvExport } from '@/composables/useCsvExport'
 import { useReasonPrompt } from '@/composables/useReasonPrompt'
 import { toQuery, useUserManage } from '@/composables/useUserManage'
 import type { AdminUserItem } from '@/types/admin'
-import { ALL_ROLES, type UserStatus } from '@shared/types/user'
+import { ALL_ROLES, type UserRole, type UserStatus } from '@shared/types/user'
 
 const {
   filters,
@@ -39,6 +42,30 @@ const { promptReason } = useReasonPrompt()
 
 const STATUSES: UserStatus[] = ['ACTIVE', 'BANNED', 'BLACKLISTED']
 const ROLES = ALL_ROLES
+
+/** 下拉选项：首项为「不限」（value=''），文案走 useUserLabels 的统一中文映射 */
+const STATUS_OPTIONS = [
+  { value: '', label: '不限' },
+  ...STATUSES.map((status) => ({ value: status, label: statusLabel(status) })),
+]
+const ROLE_OPTIONS = [
+  { value: '', label: '不限' },
+  ...ROLES.map((role) => ({ value: role, label: roleLabel(role) })),
+]
+
+/** 原生 <select> 只认字符串；UserStatus/UserRole 是联合类型，进出各转一次 */
+const statusFilter = computed<string>({
+  get: () => filters.value.status,
+  set: (value) => {
+    filters.value.status = value as UserStatus | ''
+  },
+})
+const roleFilter = computed<string>({
+  get: () => filters.value.role,
+  set: (value) => {
+    filters.value.role = value as UserRole | ''
+  },
+})
 
 /** 当前被操作的行；对话框/确认框只认它，不额外存 id */
 const selected = ref<AdminUserItem | null>(null)
@@ -135,27 +162,21 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
 
     <form class="ql-card flex flex-wrap items-end gap-3 p-4" @submit.prevent="search">
       <FormField label="状态">
-        <el-select v-model="filters.status" class="w-[140px]" placeholder="不限">
-          <el-option label="不限" value="" />
-          <el-option v-for="status in STATUSES" :key="status" :label="statusLabel(status)" :value="status" />
-        </el-select>
+        <BaseSelect v-model="statusFilter" class="w-[140px]" :options="STATUS_OPTIONS" aria-label="状态筛选" />
       </FormField>
 
       <FormField label="角色">
-        <el-select v-model="filters.role" class="w-[170px]" placeholder="不限">
-          <el-option label="不限" value="" />
-          <el-option v-for="role in ROLES" :key="role" :label="roleLabel(role)" :value="role" />
-        </el-select>
+        <BaseSelect v-model="roleFilter" class="w-[170px]" :options="ROLE_OPTIONS" aria-label="角色筛选" />
       </FormField>
 
       <FormField
         label="信用分下界"
         :error="creditBoundInvalid(filters.minCredit) ? '须为 0-100 的整数' : ''"
       >
-        <el-input
+        <BaseInput
           v-model="filters.minCredit"
           class="w-[110px]"
-          :class="{ 'ql-field-error': creditBoundInvalid(filters.minCredit) }"
+          :invalid="creditBoundInvalid(filters.minCredit)"
           placeholder="含"
           inputmode="numeric"
         />
@@ -165,35 +186,21 @@ async function handleUnban(row: AdminUserItem): Promise<void> {
         label="信用分上界"
         :error="creditBoundInvalid(filters.maxCredit) ? '须为 0-100 的整数' : ''"
       >
-        <el-input
+        <BaseInput
           v-model="filters.maxCredit"
           class="w-[110px]"
-          :class="{ 'ql-field-error': creditBoundInvalid(filters.maxCredit) }"
+          :invalid="creditBoundInvalid(filters.maxCredit)"
           placeholder="含"
           inputmode="numeric"
         />
       </FormField>
 
       <FormField label="注册时间起">
-        <el-date-picker
-          v-model="filters.createdFrom"
-          type="datetime"
-          class="w-[210px]"
-          value-format="YYYY-MM-DD[T]HH:mm:ss"
-          placeholder="起始时间"
-          clearable
-        />
+        <BaseDateTimeInput v-model="filters.createdFrom" class="w-[210px]" aria-label="注册时间起" />
       </FormField>
 
       <FormField label="注册时间止">
-        <el-date-picker
-          v-model="filters.createdTo"
-          type="datetime"
-          class="w-[210px]"
-          value-format="YYYY-MM-DD[T]HH:mm:ss"
-          placeholder="结束时间"
-          clearable
-        />
+        <BaseDateTimeInput v-model="filters.createdTo" class="w-[210px]" aria-label="注册时间止" />
       </FormField>
 
       <div class="flex gap-2">

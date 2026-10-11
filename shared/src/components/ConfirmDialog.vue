@@ -2,10 +2,10 @@
 import { computed } from 'vue'
 
 import BaseButton from '@shared/components/base/BaseButton.vue'
-import ModalShell from '@/components/ModalShell.vue'
+import ModalShell from '@shared/components/ModalShell.vue'
 
 /**
- * 学生端二次确认弹层（自绘，替代原生 confirm）。文案与按钮均可配；
+ * 二次确认弹层（自绘，替代原生 confirm 与第三方弹窗）。文案与按钮均可配；
  * 面板窄（max-w-sm）、危险操作把确认按钮切到实心危险色。
  * 标题是问句（「确定删除…吗？」），作可访问名不够凝练，故 aria-label 默认另取 label。
  */

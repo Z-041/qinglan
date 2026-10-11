@@ -37,25 +37,7 @@ const mockedFetchAdminReviewContext = vi.mocked(fetchAdminReviewContext)
 const mockedFetchAdminReviewHistory = vi.mocked(fetchAdminReviewHistory)
 const mockedTakeDownPost = vi.mocked(takeDownPost)
 
-/** 弹窗 / 抽屉走 Teleport，单测换成仅在 open 时渲染内容的桩，据此断言「弹窗是否打开」 */
-const ElDialogStub = {
-  props: ['modelValue', 'title'],
-  emits: ['update:modelValue'],
-  template:
-    '<div v-if="modelValue" class="el-dialog-stub" :data-title="title"><slot /><slot name="footer" /></div>',
-}
-const ElDrawerStub = {
-  props: ['modelValue'],
-  emits: ['update:modelValue'],
-  template: '<div v-if="modelValue" class="el-drawer-stub"><slot /></div>',
-}
-/** el-switch 换成可点的桩，测试据此切换「只看超时」 */
-const ElSwitchStub = {
-  props: ['modelValue'],
-  emits: ['update:modelValue'],
-  template: '<button class="el-switch-stub" @click="$emit(\'update:modelValue\', !modelValue)" />',
-}
-
+/** 弹窗 / 抽屉都渲染 role="dialog"；断言「是否打开」即查它 */
 const ALL_PERMISSIONS: AdminPermission[] = ['MODERATION_VIEW', 'POST_REVIEW', 'PROPOSAL_CREATE', 'REPORT_DISMISS']
 
 function queueItem(overrides: Partial<AdminQueueItem> = {}): AdminQueueItem {
@@ -100,9 +82,7 @@ async function mountView(permissions: AdminPermission[] = ALL_PERMISSIONS): Prom
   mockedFetchAdminMe.mockResolvedValue({ userId: 1, role: 'REVIEWER', permissions })
   await usePermissions().load()
 
-  const wrapper = mount(ReviewQueueView, {
-    global: { stubs: { ElDialog: ElDialogStub, ElDrawer: ElDrawerStub, ElSwitch: ElSwitchStub } },
-  })
+  const wrapper = mount(ReviewQueueView)
   await flushPromises()
   return wrapper
 }
@@ -136,12 +116,12 @@ describe('ReviewQueueView 键盘与快捷键', () => {
   it('行焦点：↑ 聚焦首行后上下文面板自动加载，不必先点行', async () => {
     wrapper = await mountView()
 
-    expect(wrapper.find('.el-drawer-stub').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
 
     await focusFirstRow(wrapper)
 
     expect(mockedFetchAdminReviewContext).toHaveBeenCalledWith('POST', 5)
-    expect(wrapper.find('.el-drawer-stub').exists()).toBe(true)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
   })
 
   it('快捷键只为有权限的动作渲染按键：无权限时一个键都不提示', async () => {
@@ -171,7 +151,7 @@ describe('ReviewQueueView 键盘与快捷键', () => {
     await section.trigger('keydown', { key: '3' })
     await flushPromises()
 
-    expect(wrapper.find('.el-dialog-stub').attributes('data-title')).toBe('发起下架提案')
+    expect(wrapper.find('[aria-label="发起下架提案"]').exists()).toBe(true)
     // 关键：只是打开确认弹窗，未提交
     expect(mockedTakeDownPost).not.toHaveBeenCalled()
   })
@@ -183,7 +163,7 @@ describe('ReviewQueueView 键盘与快捷键', () => {
     await section.trigger('keydown', { key: '3' })
     await flushPromises()
 
-    expect(wrapper.find('.el-dialog-stub').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="发起下架提案"]').exists()).toBe(false)
     expect(mockedTakeDownPost).not.toHaveBeenCalled()
   })
 })
@@ -217,7 +197,7 @@ describe('ReviewQueueView 筛选', () => {
     wrapper = await mountView()
     mockedFetchAdminReviewQueue.mockClear()
 
-    await wrapper.find('.el-switch-stub').trigger('click')
+    await wrapper.find('[role="switch"]').trigger('click')
     await flushPromises()
 
     expect(mockedFetchAdminReviewQueue).toHaveBeenCalledWith({
@@ -232,12 +212,12 @@ describe('ReviewQueueView 筛选', () => {
   it('筛选变化时同步重置行焦点与上下文面板', async () => {
     wrapper = await mountView()
     await focusFirstRow(wrapper)
-    expect(wrapper.find('.el-drawer-stub').exists()).toBe(true)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
 
-    await wrapper.find('.el-switch-stub').trigger('click')
+    await wrapper.find('[role="switch"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.el-drawer-stub').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
   })
 })
 

@@ -4,6 +4,8 @@ import { onMounted, ref } from 'vue'
 import { exportAuditLogs, fetchAuditLogs } from '@/api/admin'
 import DataTable from '@/components/admin/DataTable.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
+import BaseDateTimeInput from '@/components/base/BaseDateTimeInput.vue'
+import BaseSelect from '@/components/base/BaseSelect.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
@@ -22,15 +24,21 @@ const { reviewReasonText } = useUserLabels()
 const { exporting, download } = useCsvExport()
 
 const actionFilter = ref('')
-/** el-date-picker 清空时置 null，故类型含 null（toInstantOrNull 已容忍） */
-const fromFilter = ref<string | null>(null)
-const toFilter = ref<string | null>(null)
+/** 原生 datetime-local 的值（本地时间，形如 2026-10-01T08:00），空串 = 不限 */
+const fromFilter = ref('')
+const toFilter = ref('')
+
+/** 下拉选项：首项「全部动作」（value=''），其余走审计动作中文映射 */
+const ACTION_OPTIONS = [
+  { value: '', label: '全部动作' },
+  ...Object.entries(ACTION_LABELS).map(([value, label]) => ({ value, label })),
+]
 
 /** 清空筛选并回到第一页 */
 async function resetFilters(): Promise<void> {
   actionFilter.value = ''
-  fromFilter.value = null
-  toFilter.value = null
+  fromFilter.value = ''
+  toFilter.value = ''
   await refresh()
 }
 
@@ -85,31 +93,15 @@ onMounted(() => {
 
     <form class="ql-card flex flex-wrap items-end gap-3 p-4" @submit.prevent="refresh">
       <FormField label="动作">
-        <el-select v-model="actionFilter" class="w-[200px]" placeholder="全部动作" clearable>
-          <el-option v-for="(label, action) in ACTION_LABELS" :key="action" :label="label" :value="action" />
-        </el-select>
+        <BaseSelect v-model="actionFilter" class="w-[200px]" :options="ACTION_OPTIONS" aria-label="审计动作" />
       </FormField>
 
       <FormField label="起始时间">
-        <el-date-picker
-          v-model="fromFilter"
-          type="datetime"
-          class="w-[210px]"
-          value-format="YYYY-MM-DD[T]HH:mm:ss"
-          placeholder="起始时间"
-          clearable
-        />
+        <BaseDateTimeInput v-model="fromFilter" class="w-[210px]" aria-label="起始时间" />
       </FormField>
 
       <FormField label="结束时间">
-        <el-date-picker
-          v-model="toFilter"
-          type="datetime"
-          class="w-[210px]"
-          value-format="YYYY-MM-DD[T]HH:mm:ss"
-          placeholder="结束时间"
-          clearable
-        />
+        <BaseDateTimeInput v-model="toFilter" class="w-[210px]" aria-label="结束时间" />
       </FormField>
 
       <div class="flex gap-2">

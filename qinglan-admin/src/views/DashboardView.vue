@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import ChartCard from '@/components/admin/ChartCard.vue'
 import EChart from '@/components/admin/EChart.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
+import BaseSegmented from '@/components/base/BaseSegmented.vue'
 import BaseCard from '@shared/components/base/BaseCard.vue'
 import StatePanel from '@shared/components/StatePanel.vue'
 import { useUserLabels } from '@shared/composables/useUserLabels'
@@ -69,6 +70,18 @@ const sections = computed<MetricSection[]>(() => {
 /** 趋势图范围切换；默认近 7 日 */
 const trendRange = ref<TrendRange>('7d')
 
+/** 分段控件用字符串；TrendRange 是字符串字面量联合，进出各转一次 */
+const TREND_OPTIONS: { value: TrendRange; label: string }[] = [
+  { value: '7d', label: '近 7 日' },
+  { value: '30d', label: '近 30 日' },
+]
+const trendRangeModel = computed<string>({
+  get: () => trendRange.value,
+  set: (value) => {
+    trendRange.value = value as TrendRange
+  },
+})
+
 const trendData = computed(() => (stats.value ? trendPoints(stats.value.trends, trendRange.value) : []))
 const trendOption = computed(() => handledTrendOption(trendData.value, palette))
 
@@ -123,10 +136,7 @@ onMounted(() => {
       <div class="grid grid-cols-2 gap-5">
         <ChartCard title="处置趋势" :has-data="trendData.length > 0">
           <template #action>
-            <el-radio-group v-model="trendRange" size="small">
-              <el-radio-button value="7d">近 7 日</el-radio-button>
-              <el-radio-button value="30d">近 30 日</el-radio-button>
-            </el-radio-group>
+            <BaseSegmented v-model="trendRangeModel" :options="TREND_OPTIONS" label="趋势时间范围" />
           </template>
           <!-- 图表容器固定高度（EChart 默认 280px），避免布局跳动 -->
           <EChart class="mt-3" :option="trendOption" aria-label="处置趋势图" />

@@ -4,13 +4,6 @@ import { nextTick } from 'vue'
 
 import AnnouncementPreviewDialog from '@/components/admin/AnnouncementPreviewDialog.vue'
 
-/** el-dialog 走 Teleport 且懒渲染，单测里换成仅按 modelValue 渲染插槽的桩 */
-const ElDialogStub = {
-  props: ['modelValue'],
-  emits: ['update:modelValue'],
-  template: '<div v-if="modelValue"><slot /><slot name="footer" /></div>',
-}
-
 type Overrides = Partial<{
   open: boolean
   title: string
@@ -31,7 +24,6 @@ function mountDialog(overrides: Overrides = {}): VueWrapper {
       requireConfirm: false,
       ...overrides,
     },
-    global: { stubs: { ElDialog: ElDialogStub } },
   })
 }
 

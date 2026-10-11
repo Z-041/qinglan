@@ -5,8 +5,6 @@ import '@unocss/reset/tailwind.css'
 import 'virtual:uno.css'
 // 共享的语义色变量与 body 底色
 import '@shared/styles/main.css'
-// 管理端专属：Element Plus 主题映射（学生端不加载 EL，故放在本应用）
-import './styles/element-plus-vars.css'
 
 import App from './App.vue'
 import { setUnauthorizedHandler } from '@shared/api/http'

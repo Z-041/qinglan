@@ -90,7 +90,7 @@ watch(
 <template>
   <!--
     纯呈现骨架：不自带宽度上限 / 边框 / 阴影 / 圆角——尺寸与卡片 chrome 由调用方的外壳决定
-    （学生端弹窗自己是卡片壳；管理端预览的外壳是 el-dialog），避免「卡里卡」与宽度被钉死。
+    （学生端弹窗自己是卡片壳；管理端预览的外壳是 DialogShell→ModalShell），避免「卡里卡」与宽度被钉死。
     高度链 h-full + min-h-0：由外壳给 max-h，正文滚动区才能在框内滚动而不是把框撑高。
   -->
   <div class="flex h-full min-h-0 w-full flex-col bg-surface">

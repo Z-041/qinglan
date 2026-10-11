@@ -1,51 +1,11 @@
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import { nextTick } from 'vue'
 
 import ProposalReasonDialog from '@/components/admin/ProposalReasonDialog.vue'
-
-/**
- * el-dialog / el-select / el-input 换成「可输入的真 DOM + 转发 update:modelValue」的桩；
- * 桩要保留 `modelValue` / `update:modelValue` 这条唯一通道，否则会出现
- * 「单测全绿、浏览器里弹窗关不掉」的盲区。
- */
-const ElDialogStub = {
-  props: ['modelValue'],
-  emits: ['update:modelValue'],
-  template: '<div><slot /><slot name="footer" /></div>',
-}
-
-/** 桩里必须把选项渲染成真 <option>：否则 <select> 无选项、setValue 取不到值 */
-const ElSelectStub = {
-  props: ['modelValue'],
-  emits: ['update:modelValue'],
-  template:
-    '<select class="stub-select" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>',
-}
-
-const ElOptionStub = {
-  props: ['label', 'value'],
-  template: '<option :value="value">{{ label }}</option>',
-}
-
-const ElInputStub = {
-  props: ['modelValue', 'type'],
-  emits: ['update:modelValue'],
-  template:
-    '<div><textarea v-if="type === \'textarea\'" class="stub-textarea" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" /><input v-else class="stub-input" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" /></div>',
-}
 
 function mountDialog(confirmText = '发起下架提案') {
   return mount(ProposalReasonDialog, {
     props: { open: true, title: '发起下架提案', confirmText },
-    global: {
-      stubs: {
-        ElDialog: ElDialogStub,
-        ElSelect: ElSelectStub,
-        ElOption: ElOptionStub,
-        ElInput: ElInputStub,
-      },
-    },
   })
 }
 
@@ -54,7 +14,7 @@ function buttonByText(wrapper: VueWrapper, text: string): DOMWrapper<HTMLButtonE
   if (!button) {
     throw new Error(`找不到按钮：${text}`)
   }
-  return button
+  return button as DOMWrapper<HTMLButtonElement>
 }
 
 describe('ProposalReasonDialog', () => {
@@ -68,8 +28,8 @@ describe('ProposalReasonDialog', () => {
 
   it('选类型并填说明时按 trim 后的值上报', async () => {
     const wrapper = mountDialog()
-    await wrapper.get('select.stub-select').setValue('FRAUD')
-    await wrapper.get('textarea.stub-textarea').setValue('  诈骗  ')
+    await wrapper.get('select').setValue('FRAUD')
+    await wrapper.get('textarea').setValue('  诈骗  ')
 
     await buttonByText(wrapper, '发起下架提案').trigger('click')
 
@@ -78,7 +38,7 @@ describe('ProposalReasonDialog', () => {
 
   it('只填空白视为没填：detail 转 null 而不是空格', async () => {
     const wrapper = mountDialog()
-    await wrapper.get('textarea.stub-textarea').setValue('   ')
+    await wrapper.get('textarea').setValue('   ')
 
     await buttonByText(wrapper, '发起下架提案').trigger('click')
 
@@ -93,40 +53,28 @@ describe('ProposalReasonDialog', () => {
 
   it('重新打开时回到初始态，不残留上一轮的类型与说明', async () => {
     const wrapper = mountDialog()
-    await wrapper.get('select.stub-select').setValue('PRIVACY')
-    await wrapper.get('textarea.stub-textarea').setValue('上一轮的说明')
+    await wrapper.get('select').setValue('PRIVACY')
+    await wrapper.get('textarea').setValue('上一轮的说明')
 
     await wrapper.setProps({ open: false })
     await wrapper.setProps({ open: true })
 
-    expect((wrapper.get('select.stub-select').element as HTMLSelectElement).value).toBe('ABUSE')
-    expect((wrapper.get('textarea.stub-textarea').element as HTMLTextAreaElement).value).toBe('')
+    expect((wrapper.get('select').element as HTMLSelectElement).value).toBe('ABUSE')
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('')
   })
 
   it('提交中时取消按钮禁用，避免提案请求在途时关掉弹窗', () => {
     const wrapper = mount(ProposalReasonDialog, {
       props: { open: true, title: '发起下架提案', confirmText: '发起下架提案', submitting: true },
-      global: {
-        stubs: {
-          ElDialog: ElDialogStub,
-          ElSelect: ElSelectStub,
-          ElOption: ElOptionStub,
-          ElInput: ElInputStub,
-        },
-      },
     })
 
     expect(buttonByText(wrapper, '取消').element.disabled).toBe(true)
   })
 
-  it('把 open 透传给 el-dialog，并响应它抛出的关闭事件', async () => {
+  it('点取消抛出 close', async () => {
     const wrapper = mountDialog()
-    const dialog = wrapper.findComponent(ElDialogStub)
 
-    expect(dialog.props('modelValue')).toBe(true)
-
-    dialog.vm.$emit('update:modelValue', false)
-    await nextTick()
+    await buttonByText(wrapper, '取消').trigger('click')
 
     expect(wrapper.emitted('close')).toHaveLength(1)
   })

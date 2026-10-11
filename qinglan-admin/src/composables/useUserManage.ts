@@ -21,8 +21,8 @@ export function createEmptyFilters(): UserFilterState {
     role: '',
     minCredit: '',
     maxCredit: '',
-    createdFrom: null,
-    createdTo: null,
+    createdFrom: '',
+    createdTo: '',
   }
 }
 

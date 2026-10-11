@@ -220,9 +220,9 @@ export interface UserFilterState {
   /** 空串 = 不限；输入为字符串，提交时转数字 */
   minCredit: string
   maxCredit: string
-  /** el-date-picker 的值（本地时间，形如 2026-10-01T08:00），null = 不限 */
-  createdFrom: string | null
-  createdTo: string | null
+  /** 原生 datetime-local 的值（本地时间，形如 2026-10-01T08:00），空串 = 不限 */
+  createdFrom: string
+  createdTo: string
 }
 
 /** 与后端 announcement/entity/AnnouncementStatus 一致（P4 决策 D7：撤回后不可再发布） */

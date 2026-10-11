@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
+import BaseInput from '@shared/components/base/BaseInput.vue'
+import BaseTextarea from '@shared/components/base/BaseTextarea.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import DialogShell from './DialogShell.vue'
 
@@ -61,15 +63,15 @@ function handleSubmit(): void {
         :hint="`正数加分、负数扣分，单次范围 ${MIN_DELTA} ~ ${MAX_DELTA}`"
         :error="deltaValid || !delta.trim() ? '' : '请输入范围内非 0 的整数'"
       >
-        <el-input
+        <BaseInput
           v-model="delta"
-          :class="{ 'ql-field-error': !deltaValid && delta.trim() !== '' }"
+          :invalid="!deltaValid && delta.trim() !== ''"
           inputmode="numeric"
         />
       </FormField>
 
       <FormField label="调整理由" hint="会写入审计日志">
-        <el-input v-model="reason" type="textarea" :rows="3" :maxlength="500" placeholder="说明调整依据" />
+        <BaseTextarea v-model="reason" :rows="3" :maxlength="500" placeholder="说明调整依据" />
       </FormField>
     </div>
   </DialogShell>

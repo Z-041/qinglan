@@ -17,6 +17,98 @@
 
 
 --------------------------------------------------------------------------------
+R-62 Element Plus 全面移除 · 第②③波：逐页替换与依赖拆除
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：口径反转 / 依赖拆除  状态：已交付；三包 lint/typecheck/vitest/build 真跑全绿
+来源：承接 R-61 第①波（建自研件）。本波先把管理端所有 el-* 换成自研件（第②波），
+      再拆掉 EP 依赖与工程配置（第③波），至此管理端不再有任何第三方组件库。
+
+一、第②波：逐页替换（admin）
+  - DialogShell：el-dialog → ModalShell；新增 `panelClass`（默认 max-w-[480px]）取代原 `width`，
+    强读预览传 max-w-[720px]。Enter 放行规则与 footer 骨架不变。
+  - 八个弹窗：el-input/textarea → shared BaseInput / BaseTextarea（校验由 `:invalid` 驱动红框，
+    不再需要 element-plus-vars.css 的 `.ql-field-error` 内部类覆盖）；el-select → BaseSelect；
+    el-checkbox → BaseCheckbox；el-date-picker → BaseDateTimeInput（原生 datetime-local）。
+  - 视图：Dashboard 的 el-radio-group → BaseSegmented；AdminLogin 的 el-input → BaseInput；
+    UserManage 2×select + 2×input + 2×datetime；ReviewQueue 3×select（含多选）+ el-switch
+    （多选改 BaseMultiSelect，下拉里放复选框；开关改 BaseSwitch）；Proposal 的 select+checkbox；
+    Permission 的 input+select；AuditLog 的 select+2×datetime。
+  - ReviewContextPanel：el-drawer → BaseDrawer、el-tabs/el-tab-pane → BaseTabs（面板由调用方
+    v-show 切换），`v-model:open` 契约保持不变；TodoBell：el-popover → BasePopover。
+  - App.vue：去掉 el-config-provider，挂 MessageBoxHost（命令式弹窗宿主）。
+  - 命令式弹窗：useReasonPrompt 改为委托 useMessageBox（promptOpen 由单例状态派生）；
+    删除 useConfirm，AnnouncementManageView 直接用 useMessageBox().confirm。
+  - 类型回退：UserFilterState.createdFrom/To 由 `string | null` 改回 `string`（原生输入框空值为空串），
+    createEmptyFilters 相应改 ''；AuditLogView 两个筛选时间同理。
+  - 新增 BaseInput.required 入参（登录表单靠它做空值拦截）。
+
+二、第③波：拆依赖与工程配置
+  - 删除 qinglan-admin/src/styles/element-plus-vars.css 与 main.ts 的引入。
+  - 删除 src/auto-imports.d.ts、src/components.d.ts 及 unplugin-auto-import / unplugin-vue-components
+    两个插件与其 resolver（EP 移除后无任何自动导入声明）。
+  - vite.config.ts：去掉 ElementPlusResolver 与 test.server.deps.inline: ['element-plus']。
+  - package.json：移除 element-plus 与两个 unplugin 开发依赖；根 lockfile 重算（-34 包）。
+  - 文档同步：AGENTS.md（第一章结构 + 第三章组件库一条 + 删除「auto-imports.d.ts 必须入库」那条）、
+    设计方案第 309 行、ci.yml 注释、qinglan-web/vite.config.ts 注释，以及 shared 的 uno.base.ts /
+    ToastHost / AnnouncementReader / main.css 中提及 EP 的注释。
+
+三、规格
+  - 全部 EP 桩从 spec 移除；断言改为真 DOM（role="dialog" / role="switch" / 原生 input/select/textarea）；
+    新组件与对话框的新交互各有用例；消息框相关用例改走 useMessageBox。
+
+验证（真跑，三包）
+- lint / typecheck：三包通过。
+- vitest：shared 111 例、qinglan-web 199 例、qinglan-admin 316 例，全绿。
+- build：三包产物成功；admin 打包模块数由 2459 降至 849（EP 与两个 unplugin 彻底出包）。
+- 全仓源码已无 `<el-*` / element-plus / unplugin 引用（仅历史修复记录保留旧记述）。
+
+
+--------------------------------------------------------------------------------
+R-61 Element Plus 全面移除 · 第①波：建自研件（shared 弹层下沉 + 后台基础件）
+--------------------------------------------------------------------------------
+[2026-10-11]  类型：口径反转 / 组件重构  状态：第①波已交付；三包 lint/typecheck/vitest/build 真跑全绿
+来源：用户决定「后台也使用自编写组件，全面移除 ep」——口径由 R-59「管理端统一用 Element Plus」
+      反转。经确认按 3 波推进：① 建自研件 → ② 逐页把 el-* 换成自研 → ③ 拆 EP 依赖与工程配置。
+      本波只建件、不接线（admin 仍走 EP），故为可编译、可回归的中间态。
+
+一、共享弹层下沉到 shared（双端共用）
+  - ModalShell.vue：由 qinglan-web 上移到 shared，新增 `panelExtraClass` 入参（管理端固定宽度 /
+    高度上限的白名单外挂类）；注释去掉「学生端」限定，明确双端共用。
+  - ConfirmDialog.vue：同样上移，内部 import 改 `@shared/components/ModalShell.vue`。
+  - useFocusTrap.ts：由 qinglan-web/src/composables 上移到 shared/src/composables（管理端弹层复用）。
+  - 删除 web 侧旧文件 ModalShell.vue / ConfirmDialog.vue / 两个 spec / useFocusTrap.ts；
+    更新 web 三处引用：ReportDialog.vue、PostDetailView.vue、AnnouncementModal.vue 改 `@shared/*`。
+  - BaseIcon 增 `close` 图标（抽屉关闭按钮用；描边风格与既有图标一致）。
+  - ModalShell / ConfirmDialog 的两个 spec 随代码落到 shared。
+
+二、管理端基础件（qinglan-admin/src/components/base/，仅管理端使用，按「谁在用」留本应用）
+  - BaseCheckbox.vue：原生 checkbox + accent-color 着色，替代 el-checkbox。
+  - BaseSwitch.vue：`<button role="switch">` + aria-checked，替代 el-switch。
+  - BaseSegmented.vue：`role="radiogroup"` 分段条，替代 el-radio-group/el-radio-button（看板时间范围）。
+  - BaseTabs.vue：只做 `role="tablist"` 页签条，面板由调用方 v-show 切换（单一调用点，不托管面板）。
+  - BaseSelect.vue：原生 `<select>` + ql-field，替代 el-select/el-option；「不限 / 全部」作为
+    value='' 的一项由调用方塞进 options。
+  - BaseDrawer.vue：右侧抽屉（遮罩 + 右贴边 + ESC/遮罩关闭 + 焦点陷阱），替代 el-drawer。
+  - BasePopover.vue：点击弹出、点外部/ESC 关闭，`#trigger` / 默认插槽两个作用域插槽，替代 el-popover。
+  - MessageBoxHost.vue：命令式弹窗宿主（单例，挂 App.vue），用 ModalShell 做外壳，Enter 提交规则
+    与 DialogShell 同口径（有原生语义的元素不放行）。
+
+三、命令式弹窗 API（替代 ElMessageBox）
+  - qinglan-admin/src/composables/useMessageBox.ts：模块级单例状态 `messageBoxState` +
+    `resolveMessageBox`，暴露 `useMessageBox()` 的 `confirm`（真/假）与 `promptReason`（去空格理由 /
+    null）。取消与关闭都解析为 null（不抛异常），非空校验内建。
+
+四、规格
+  上述 9 个新文件各配 spec；ModalShell / ConfirmDialog spec 落在 shared。合计新增 11 个 spec 文件。
+
+验证（真跑，三包）
+- shared：lint / typecheck / vitest 全过，21 文件 111 例全绿。
+- qinglan-web：lint / typecheck / vitest / build 全过，34 文件 199 例全绿。
+- qinglan-admin：lint / typecheck / vitest / build 全过，58 文件 317 例全绿。
+- 本波为中间态：admin 页面仍用 el-*，EP 依赖与工程配置留待第③波拆除。
+
+
+--------------------------------------------------------------------------------
 R-60 管理端布局与样式收口：校验红框 / 卡片间距 / 弹窗宽度 / 表格失败态
 --------------------------------------------------------------------------------
 [2026-10-11]  类型：样式与布局收口  状态：已交付；管理端 lint/typecheck/vitest/build 真跑全绿

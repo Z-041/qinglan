@@ -3,19 +3,10 @@ import { describe, expect, it } from 'vitest'
 
 import DialogShell from './DialogShell.vue'
 
-/** el-dialog 走 Teleport 且懒渲染，单测桩成仅按 modelValue 渲染插槽与 footer */
-const ElDialogStub = {
-  props: ['modelValue', 'title', 'width'],
-  emits: ['update:modelValue'],
-  template:
-    '<div v-if="modelValue" :data-title="title"><slot /><slot name="footer" /></div>',
-}
-
 function mountShell(props: Record<string, unknown> = {}, slots: Record<string, unknown> = {}) {
   return mount(DialogShell, {
     props: { open: true, title: '测试弹窗', ...props },
     slots: { default: '<p>字段区</p>', ...slots },
-    global: { stubs: { ElDialog: ElDialogStub } },
   })
 }
 
@@ -23,9 +14,14 @@ describe('DialogShell', () => {
   it('渲染标题与默认插槽，footer 默认为取消 + 确认双按钮', () => {
     const wrapper = mountShell()
     expect(wrapper.text()).toContain('字段区')
-    expect(wrapper.find('div[data-title="测试弹窗"]').exists()).toBe(true)
+    expect(wrapper.get('[role="dialog"]').attributes('aria-label')).toBe('测试弹窗')
+    expect(wrapper.text()).toContain('测试弹窗')
     expect(wrapper.findAll('button').some((b) => b.text() === '取消')).toBe(true)
     expect(wrapper.findAll('button').some((b) => b.text() === '确认')).toBe(true)
+  })
+
+  it('未打开时不渲染', () => {
+    expect(mountShell({ open: false }).find('[role="dialog"]').exists()).toBe(false)
   })
 
   it('按钮文案与变体可覆盖，确认禁用 / 在途态透传', () => {

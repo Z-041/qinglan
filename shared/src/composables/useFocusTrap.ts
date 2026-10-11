@@ -12,6 +12,8 @@ const FOCUSABLE_SELECTOR =
  * 仍由调用方自行处理，本组合不拦截。收口 ModalShell（举报 / 删除确认）与 AnnouncementModal
  * （强读）两处此前一强一弱的焦点处理。</p>
  *
+ * <p>双端共用（学生端 ModalShell / AnnouncementModal、管理端弹层外壳都走它）。</p>
+ *
  * @param root   弹层根元素（需带 tabindex="-1"，作为无内层可聚焦元素时的落点）
  * @param active 是否激活（弹层是否打开）；变化时自动启停
  */

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 
 import DataTable from '@/components/admin/DataTable.vue'
 import PageHeader from '@/components/admin/PageHeader.vue'
+import BaseCheckbox from '@/components/base/BaseCheckbox.vue'
+import BaseSelect from '@/components/base/BaseSelect.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import FormField from '@shared/components/base/FormField.vue'
 import LoadMoreButton from '@shared/components/LoadMoreButton.vue'
@@ -25,6 +27,14 @@ const STATUS_OPTIONS: { value: ProposalStatus; label: string }[] = [
 
 const { items, loading, loadingMore, hasMore, failed, submitting, status, mine, refresh, loadMore, vote } =
   useProposalList()
+
+/** 原生 <select> 只认字符串；ProposalStatus 是联合类型，进出各转一次 */
+const statusModel = computed<string>({
+  get: () => status.value,
+  set: (value) => {
+    status.value = value as ProposalStatus
+  },
+})
 
 onMounted(() => {
   void refresh()
@@ -53,18 +63,11 @@ async function handleVote(row: ProposalSummary, decision: VoteDecision): Promise
     <!-- 筛选栏容器与其它列表页统一：独立 ql-card + FormField 标签 + items-end；改动即重查（见 useProposalList） -->
     <form class="ql-card flex flex-wrap items-end gap-4 p-4" @submit.prevent="refresh">
       <FormField label="状态">
-        <el-select v-model="status" class="w-[160px]">
-          <el-option
-            v-for="option in STATUS_OPTIONS"
-            :key="option.value"
-            :label="option.label"
-            :value="option.value"
-          />
-        </el-select>
+        <BaseSelect v-model="statusModel" class="w-[160px]" :options="STATUS_OPTIONS" aria-label="提案状态" />
       </FormField>
 
       <div class="flex h-8 items-center">
-        <el-checkbox v-model="mine">只看我发起的</el-checkbox>
+        <BaseCheckbox v-model="mine">只看我发起的</BaseCheckbox>
       </div>
 
       <BaseButton html-type="submit" size="sm" :loading="loading">查询</BaseButton>

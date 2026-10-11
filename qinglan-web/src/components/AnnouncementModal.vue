@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import AnnouncementReader from '@shared/components/AnnouncementReader.vue'
 import BaseButton from '@shared/components/base/BaseButton.vue'
 import { useAnnouncement } from '@/composables/useAnnouncement'
-import { useFocusTrap } from '@/composables/useFocusTrap'
+import { useFocusTrap } from '@shared/composables/useFocusTrap'
 
 /**
  * 全局公告弹窗（强制阅读的体验层，设计方案 5.3）。

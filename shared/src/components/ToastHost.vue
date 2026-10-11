@@ -5,8 +5,8 @@ const { toasts, dismissToast } = useToast()
 </script>
 
 <template>
-  <!-- z-toast 取 3000，必须高于 Element Plus 的弹层（其 defaultInitialZIndex 为 2000）：
-       管理端弹窗内的请求失败提示只有压在弹层之上才看得见、点得掉。分层口径见 uno.config.ts -->
+  <!-- z-toast 取 3000，必须高于双端弹层（z-overlay 900 / 强制阅读公告 950）：
+       弹窗内的请求失败提示只有压在弹层之上才看得见、点得掉。分层口径见 uno.base.ts -->
   <div class="pointer-events-none fixed inset-x-0 top-4 z-toast flex flex-col items-center gap-2 px-4">
     <TransitionGroup name="toast">
       <button
