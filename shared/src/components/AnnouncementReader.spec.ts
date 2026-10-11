@@ -6,8 +6,6 @@ import AnnouncementReader from '@shared/components/AnnouncementReader.vue'
 type Overrides = Partial<{
   title: string
   content: string
-  minReadSeconds: number
-  remainingSeconds: number
   requireScrollToEnd: boolean
   requireConfirm: boolean
   confirmed: boolean
@@ -19,8 +17,6 @@ function mountReader(overrides: Overrides = {}): VueWrapper {
     props: {
       title: '停水通知',
       content: '正文内容',
-      minReadSeconds: 10,
-      remainingSeconds: 10,
       requireScrollToEnd: false,
       requireConfirm: false,
       confirmed: false,
@@ -31,13 +27,18 @@ function mountReader(overrides: Overrides = {}): VueWrapper {
 }
 
 describe('AnnouncementReader', () => {
-  it('渲染标题与正文，进度条按剩余秒数推进', () => {
-    // minRead 10、剩 4 → 60%
-    const wrapper = mountReader({ remainingSeconds: 4 })
+  it('渲染标题与正文', () => {
+    const wrapper = mountReader()
 
     expect(wrapper.text()).toContain('停水通知')
     expect(wrapper.text()).toContain('正文内容')
-    expect(wrapper.find('[style*="width"]').attributes('style')).toContain('60%')
+  })
+
+  it('不渲染进度条：倒计时只由调用方以文字读秒（写在按钮文案里）呈现', () => {
+    const wrapper = mountReader()
+
+    // 原进度条是子树里唯一带内联 width 的元素；移除后不应再有任何内联样式
+    expect(wrapper.find('[style]').exists()).toBe(false)
   })
 
   it('需勾选时渲染「我已了解」，勾选抛出 update:confirmed', async () => {

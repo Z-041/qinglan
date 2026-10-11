@@ -9,7 +9,7 @@ import { useFocusTrap } from '@shared/composables/useFocusTrap'
 /**
  * 全局公告弹窗（强制阅读的体验层，设计方案 5.3）。
  *
- * 弹窗外壳（遮罩 / 焦点锁 / 防返回）与业务状态留在本组件；标题 / 进度条 / 正文滚动 / 勾选
+ * 弹窗外壳（遮罩 / 焦点锁 / 防返回）与业务状态留在本组件；标题 / 正文滚动 / 勾选
  * 等**呈现部分**由 `@shared/components/AnnouncementReader` 提供——管理端「发布前预览」也用它，
  * 两端共用一份，杜绝排版漂移。
  *
@@ -106,7 +106,7 @@ onBeforeUnmount(() => {
 <template>
   <!-- z 轴分层：举报弹层 z-overlay < 公告 z-announcement < 全局提示 z-toast。
        低于提示是刻意的：标记已读失败的错误提示要能盖在公告之上。
-       完整口径（含 Element Plus 的 2000+ 一档）见 uno.config.ts。 -->
+       完整口径见 shared/uno.base.ts。 -->
   <Teleport to="body">
     <div
       v-if="current"
@@ -117,17 +117,16 @@ onBeforeUnmount(() => {
       :aria-label="current.title"
       tabindex="-1"
     >
-      <!-- 卡片壳在弹窗侧：宽度上限 720px（与正文阅读宽一致），短内容贴合、长文展宽，
-           超高在 Reader 正文区内滚动；chrome 不再由 shared Reader 自带 -->
+      <!-- 卡片壳在弹窗侧：宽度上限 960px（长文公告按整屏阅读宽展示），短内容贴合、长文展宽，
+           超高在 Reader 正文区内滚动；chrome 不再由 shared Reader 自带。
+           管理端「学生视角预览」用同一个宽度类（改这里要同步改 AnnouncementPreviewDialog） -->
       <div
-        class="flex max-h-[85vh] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-line shadow-xl"
+        class="flex max-h-[85vh] w-full max-w-[960px] flex-col overflow-hidden rounded-xl border border-line shadow-xl"
       >
         <AnnouncementReader
           class="min-h-0 flex-1"
           :title="current.title"
           :content="current.content"
-          :min-read-seconds="current.minReadSeconds"
-          :remaining-seconds="remainingSeconds"
           :require-scroll-to-end="current.requireScrollToEnd"
           :require-confirm="current.requireConfirm"
           :confirmed="confirmed"

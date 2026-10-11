@@ -70,7 +70,7 @@ const closeLabel = computed(() =>
   <DialogShell
     :open="props.open"
     title="学生视角强读预览"
-    panel-class="max-w-[720px]"
+    panel-class="max-w-[960px]"
     hide-footer
     :enter-to-confirm="false"
     @close="emit('close')"
@@ -81,15 +81,14 @@ const closeLabel = computed(() =>
     </p>
 
     <!-- 与学生端弹窗同一高度口径：限高 + flex 链，长文在 Reader 正文区内滚动；
-         Reader 已无卡片 chrome，el-dialog 自身就是唯一面板，不再「卡里卡」 -->
+         Reader 已无卡片 chrome，ModalShell 自身就是唯一面板，不再「卡里卡」。
+         面板宽度 max-w-[960px] 必须与学生端 AnnouncementModal 的卡片壳一致，否则「预览」不再可信 -->
     <div class="flex max-h-[68vh] flex-col">
       <AnnouncementReader
         :key="sessionKey"
         class="min-h-0 flex-1"
         :title="props.title"
         :content="props.content"
-        :min-read-seconds="props.minReadSeconds"
-        :remaining-seconds="gate.remainingSeconds.value"
         :require-scroll-to-end="props.requireScrollToEnd"
         :require-confirm="props.requireConfirm"
         :confirmed="gate.confirmed.value"
